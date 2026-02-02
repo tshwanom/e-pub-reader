@@ -2,10 +2,12 @@
   "name": "epub-reader-platform",
   "version": "0.1.0",
   "private": true,
+  "main": "server.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "NODE_ENV=production node server.js",
+    "start:custom": "node server.js",
     "lint": "next lint",
     "type-check": "tsc --noEmit"
   },
