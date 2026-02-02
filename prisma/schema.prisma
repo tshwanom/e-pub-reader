@@ -1,0 +1,210 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  password      String?
+  role          UserRole  @default(READER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  readingProgress ReadingProgress[]
+  bookmarks       Bookmark[]
+  highlights      Highlight[]
+  notes           Note[]
+  donations       Donation[]
+  accounts        Account[]
+  sessions        Session[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Book {
+  id              String     @id @default(cuid())
+  title           String
+  author          String
+  description     String     @db.Text
+  coverUrl        String
+  slug            String     @unique
+  status          BookStatus @default(DRAFT)
+  publishedAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  
+  epubFile        BookFile?
+  audioFiles      AudioFile[]
+  printLinks      PrintLink[]
+  categories      Category[]
+  readingProgress ReadingProgress[]
+  bookmarks       Bookmark[]
+  highlights      Highlight[]
+  notes           Note[]
+  donations       Donation[]
+}
+
+model BookFile {
+  id        String   @id @default(cuid())
+  bookId    String   @unique
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  fileUrl   String
+  fileSize  Int
+  mimeType  String
+  createdAt DateTime @default(now())
+}
+
+model AudioFile {
+  id        String   @id @default(cuid())
+  bookId    String
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  title     String
+  fileUrl   String
+  duration  Int?     // seconds
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model PrintLink {
+  id        String      @id @default(cuid())
+  bookId    String
+  book      Book        @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  provider  String      // "Amazon KDP", "IngramSpark", "Lulu"
+  format    PrintFormat // PAPERBACK, HARDCOVER
+  url       String
+  createdAt DateTime    @default(now())
+}
+
+model Category {
+  id    String @id @default(cuid())
+  name  String @unique
+  slug  String @unique
+  books Book[]
+}
+
+model ReadingProgress {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookId     String
+  book       Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  cfi        String   // ePub CFI (Canonical Fragment Identifier)
+  progress   Float    // 0-100 percentage
+  updatedAt  DateTime @updatedAt
+  
+  @@unique([userId, bookId])
+}
+
+model Bookmark {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookId    String
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  cfi       String
+  chapter   String?
+  createdAt DateTime @default(now())
+}
+
+model Highlight {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookId    String
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  cfi       String
+  text      String   @db.Text
+  color     String   @default("#FFEB3B")
+  createdAt DateTime @default(now())
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookId    String
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  cfi       String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Donation {
+  id        String         @id @default(cuid())
+  userId    String?
+  user      User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  bookId    String?
+  book      Book?          @relation(fields: [bookId], references: [id], onDelete: SetNull)
+  amount    Decimal        @db.Decimal(10, 2)
+  currency  String         @default("USD")
+  paypalId  String         @unique
+  status    DonationStatus
+  createdAt DateTime       @default(now())
+}
+
+enum UserRole {
+  READER
+  EDITOR
+  ADMIN
+}
+
+enum BookStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum PrintFormat {
+  PAPERBACK
+  HARDCOVER
+}
+
+enum DonationStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
