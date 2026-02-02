@@ -9,7 +9,7 @@ const auth = (req: Request) => ({ id: "fakeId" }); // TODO: Replace with NextAut
 // FileRouter for your app, can contain multiple FileRoutes
 export const ourFileRouter = {
   // ePub file uploader
-  epubUploader: f({ "application/epub+zip": { maxFileSize: "50MB", maxFileCount: 1 } })
+  epubUploader: f({ "application/epub+zip": { maxFileSize: "32MB", maxFileCount: 1 } })
     .middleware(async ({ req }) => {
       // This code runs on your server before upload
       const user = await auth(req);
