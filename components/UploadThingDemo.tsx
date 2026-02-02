@@ -8,7 +8,7 @@ export function UploadThingDemo() {
     <div className="flex flex-col gap-4">
       <div>
         <h3 className="text-sm font-medium mb-2">Upload ePub File</h3>
-        <UploadButton<OurFileRouter>
+        <UploadButton<OurFileRouter, "epubUploader">
           endpoint="epubUploader"
           onClientUploadComplete={(res) => {
             console.log("Files: ", res);
@@ -22,7 +22,7 @@ export function UploadThingDemo() {
 
       <div>
         <h3 className="text-sm font-medium mb-2">Upload Cover Image</h3>
-        <UploadButton<OurFileRouter>
+        <UploadButton<OurFileRouter, "coverImageUploader">
           endpoint="coverImageUploader"
           onClientUploadComplete={(res) => {
             console.log("Files: ", res);
@@ -36,7 +36,7 @@ export function UploadThingDemo() {
 
       <div>
         <h3 className="text-sm font-medium mb-2">Upload Audiobook</h3>
-        <UploadButton<OurFileRouter>
+        <UploadButton<OurFileRouter, "audioUploader">
           endpoint="audioUploader"
           onClientUploadComplete={(res) => {
             console.log("Files: ", res);
