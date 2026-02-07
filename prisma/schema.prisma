@@ -11,21 +11,23 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  name          String?
-  password      String?
-  role          UserRole  @default(READER)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String?
+  role      UserRole @default(READER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   readingProgress ReadingProgress[]
   bookmarks       Bookmark[]
   highlights      Highlight[]
   notes           Note[]
   donations       Donation[]
+  audiobook       Audiobook?        @relation(fields: [audiobookId], references: [id])
   accounts        Account[]
   sessions        Session[]
+  audiobookId     String?
 }
 
 model Account {
@@ -64,17 +66,30 @@ model VerificationToken {
 }
 
 model Book {
-  id              String     @id @default(cuid())
-  title           String
-  author          String
-  description     String     @db.Text
-  coverUrl        String
-  slug            String     @unique
-  status          BookStatus @default(DRAFT)
-  publishedAt     DateTime?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
-  
+  id          String     @id @default(cuid())
+  title       String
+  author      String
+  description String     @db.Text
+  coverUrl    String
+  slug        String     @unique
+  status      BookStatus @default(DRAFT)
+  publishedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Monetization
+  donationEnabled Boolean  @default(false)
+  donationMessage String?  @db.Text
+  donationGoal    Decimal? @db.Decimal(10, 2)
+  amazonKdpUrl    String?
+
+  // EPUB Metadata
+  publisher String?
+  language  String?  @default("en")
+  isbn      String?
+  coverIsbn String? // ISBN from cover image metadata
+  subjects  String[] // Categories/tags from EPUB
+
   epubFile        BookFile?
   audioFiles      AudioFile[]
   printLinks      PrintLink[]
@@ -84,6 +99,7 @@ model Book {
   highlights      Highlight[]
   notes           Note[]
   donations       Donation[]
+  audiobook       Audiobook?
 }
 
 model BookFile {
@@ -102,7 +118,7 @@ model AudioFile {
   book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
   title     String
   fileUrl   String
-  duration  Int?     // seconds
+  duration  Int? // seconds
   order     Int      @default(0)
   createdAt DateTime @default(now())
 }
@@ -111,7 +127,7 @@ model PrintLink {
   id        String      @id @default(cuid())
   bookId    String
   book      Book        @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  provider  String      // "Amazon KDP", "IngramSpark", "Lulu"
+  provider  String // "Amazon KDP", "IngramSpark", "Lulu"
   format    PrintFormat // PAPERBACK, HARDCOVER
   url       String
   createdAt DateTime    @default(now())
@@ -125,15 +141,15 @@ model Category {
 }
 
 model ReadingProgress {
-  id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bookId     String
-  book       Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  cfi        String   // ePub CFI (Canonical Fragment Identifier)
-  progress   Float    // 0-100 percentage
-  updatedAt  DateTime @updatedAt
-  
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookId    String
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  cfi       String // ePub CFI (Canonical Fragment Identifier)
+  progress  Float // 0-100 percentage
+  updatedAt DateTime @updatedAt
+
   @@unique([userId, bookId])
 }
 
@@ -195,6 +211,19 @@ enum BookStatus {
   DRAFT
   PUBLISHED
   ARCHIVED
+}
+
+model Audiobook {
+  id        String   @id @default(cuid())
+  bookId    String   @unique
+  fileUrl   String
+  duration  Int // Duration in seconds
+  fileSize  Int
+  mimeType  String
+  createdAt DateTime @default(now())
+
+  book  Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  users User[]
 }
 
 enum PrintFormat {
