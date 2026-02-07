@@ -218,7 +218,7 @@ export default async function BookDetailsPage({
                 bookId={book.id}
                 bookTitle={book.title}
                 message={book.donationMessage}
-                goal={book.donationGoal}
+                goal={book.donationGoal ? Number(book.donationGoal) : undefined}
               />
             )}
           </div>

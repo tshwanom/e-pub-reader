@@ -50,6 +50,17 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Landing page custom colors
+        landing: {
+          bg: "#fdfcfb",
+          "bg-secondary": "#f8f6f3",
+          text: "#1a1a1a",
+          "text-muted": "#6e6e6e",
+          accent: "#6366f1",
+          "accent-secondary": "#8b5cf6",
+          highlight: "#f59e0b",
+          border: "#e5e5e5",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -65,10 +76,20 @@ module.exports = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "fade-in": {
+          from: { opacity: "0", transform: "translateY(10px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        "fade-in-up": {
+          from: { opacity: "0", transform: "translateY(20px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "fade-in": "fade-in 0.8s ease-out",
+        "fade-in-up": "fade-in-up 0.6s ease-out",
       },
     },
   },

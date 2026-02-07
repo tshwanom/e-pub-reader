@@ -1,13 +1,24 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Playfair_Display, Crimson_Pro } from "next/font/google";
 import "./globals.css";
 import "@uploadthing/react/styles.css";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const playfair = Playfair_Display({ 
+  subsets: ["latin"], 
+  variable: "--font-playfair",
+  weight: ["600", "700"]
+});
+const crimson = Crimson_Pro({ 
+  subsets: ["latin"], 
+  variable: "--font-crimson",
+  weight: ["400"],
+  style: ["italic"]
+});
 
 export const metadata: Metadata = {
-  title: "ePub Reader Platform",
-  description: "Independent digital library and reader platform",
+  title: "One Man Revolution | A Quiet Rebellion",
+  description: "A quiet rebellion against systems that dehumanize, silence, and fracture the human spirit. Free books on spiritual awakening and inner sovereignty.",
 };
 
 export default function RootLayout({
@@ -17,7 +28,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body className={`${inter.variable} ${playfair.variable} ${crimson.variable} ${inter.className}`}>
+        {children}
+      </body>
     </html>
   );
 }

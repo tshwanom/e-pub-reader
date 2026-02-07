@@ -237,3 +237,9 @@ enum DonationStatus {
   FAILED
   REFUNDED
 }
+
+model SiteSettings {
+  id          String   @id @default(cuid())
+  socialLinks Json? // { twitter: "url", facebook: "url", etc. }
+  updatedAt   DateTime @updatedAt
+}

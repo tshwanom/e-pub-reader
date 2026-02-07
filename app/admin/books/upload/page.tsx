@@ -23,35 +23,27 @@ export default function UploadBookPage() {
     formData.append("file", file);
 
     try {
-      // 1. Upload File
-      const res = await fetch("/api/upload", {
+      // Upload file and create book record in one step
+      const res = await fetch("/api/books", {
         method: "POST",
         body: formData,
       });
-      const data = await res.json();
-      
-      if (!res.ok) throw new Error(data.error);
 
-      // 2. Create Book Record
-      const createRes = await fetch("/api/books", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filename: data.filename,
-          fileUrl: data.url
-        }),
-      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        console.error("Upload error details:", errorData);
+        throw new Error(errorData.details || errorData.error || "Failed to upload book");
+      }
 
-      if (!createRes.ok) throw new Error("Failed to create book record");
-
-      const book = await createRes.json();
+      const book = await res.json();
       alert(`Book created: ${book.title}`);
       
       router.push("/admin/books");
 
     } catch (error) {
-      console.error(error);
-      alert("Upload failed or Book Creation failed");
+      console.error("Full error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Upload failed";
+      alert(`Upload failed: ${errorMessage}`);
     } finally {
       setUploading(false);
     }
