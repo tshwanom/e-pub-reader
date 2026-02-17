@@ -11,6 +11,15 @@ interface PrintLink {
   format: string;
 }
 
+interface SupplementaryContent {
+  id?: string;
+  type: 'VIDEO' | 'ARTICLE' | 'POEM' | 'QUOTE';
+  title: string;
+  content?: string;
+  url?: string;
+  author?: string;
+}
+
 interface BookForm {
   title: string;
   author: string;
@@ -21,6 +30,7 @@ interface BookForm {
   donationGoal?: number;
   amazonKdpUrl?: string;
   printLinks: PrintLink[];
+  supplementaryContents: SupplementaryContent[];
 }
 
 export default function EditBookPage({ params }: { params: Promise<{ bookId: string }> }) {
@@ -31,15 +41,21 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
   const [coverUrl, setCoverUrl] = useState<string>('');
   const [extractingCover, setExtractingCover] = useState(false);
   
-  const { register, handleSubmit, reset, control } = useForm<BookForm>({
+  const { register, handleSubmit, reset, control, watch } = useForm<BookForm>({
     defaultValues: {
       printLinks: [],
+      supplementaryContents: [],
     },
   });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields: printLinkFields, append: appendPrintLink, remove: removePrintLink } = useFieldArray({
     control,
     name: 'printLinks',
+  });
+
+  const { fields: contentFields, append: appendContent, remove: removeContent } = useFieldArray({
+    control,
+    name: 'supplementaryContents',
   });
 
   useEffect(() => {
@@ -51,7 +67,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
 
   const fetchBook = async (id: string) => {
     try {
-      const res = await fetch(`/api/books/${id}?include=printLinks`);
+      const res = await fetch(`/api/books/${id}?include=printLinks,supplementaryContents`);
       if (!res.ok) throw new Error('Failed to fetch book');
       const data = await res.json();
       reset({
@@ -64,6 +80,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
         donationGoal: data.donationGoal ? Number(data.donationGoal) : undefined,
         amazonKdpUrl: data.amazonKdpUrl || '',
         printLinks: data.printLinks || [],
+        supplementaryContents: data.supplementaryContents || [],
       });
       setCoverUrl(data.coverUrl);
     } catch (err) {
@@ -280,14 +297,14 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
               </label>
               <button
                 type="button"
-                onClick={() => append({ provider: '', url: '', format: 'PAPERBACK' })}
+                onClick={() => appendPrintLink({ provider: '', url: '', format: 'PAPERBACK' })}
                 className="text-sm bg-indigo-100 text-indigo-700 px-3 py-1 rounded hover:bg-indigo-200"
               >
                 + Add Provider
               </button>
             </div>
 
-            {fields.map((field, index) => (
+            {printLinkFields.map((field, index) => (
               <div key={field.id} className="flex gap-3 mb-3 p-3 bg-gray-50 rounded">
                 <div className="flex-1">
                   <input
@@ -314,7 +331,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
                 </div>
                 <button
                   type="button"
-                  onClick={() => remove(index)}
+                  onClick={() => removePrintLink(index)}
                   className="text-red-600 hover:text-red-800 px-2"
                 >
                   ✕
@@ -322,7 +339,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
               </div>
             ))}
 
-            {fields.length === 0 && (
+            {printLinkFields.length === 0 && (
               <p className="text-sm text-gray-500 italic">
                 No additional print providers configured
               </p>

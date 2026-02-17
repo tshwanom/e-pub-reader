@@ -90,16 +90,17 @@ model Book {
   coverIsbn String? // ISBN from cover image metadata
   subjects  String[] // Categories/tags from EPUB
 
-  epubFile        BookFile?
-  audioFiles      AudioFile[]
-  printLinks      PrintLink[]
-  categories      Category[]
-  readingProgress ReadingProgress[]
-  bookmarks       Bookmark[]
-  highlights      Highlight[]
-  notes           Note[]
-  donations       Donation[]
-  audiobook       Audiobook?
+  epubFile              BookFile?
+  audioFiles            AudioFile[]
+  printLinks            PrintLink[]
+  categories            Category[]
+  readingProgress       ReadingProgress[]
+  bookmarks             Bookmark[]
+  highlights            Highlight[]
+  notes                 Note[]
+  donations             Donation[]
+  audiobook             Audiobook?
+  supplementaryContents SupplementaryContent[]
 }
 
 model BookFile {
@@ -173,6 +174,7 @@ model Highlight {
   cfi       String
   text      String   @db.Text
   color     String   @default("#FFEB3B")
+  note      String?  @db.Text
   createdAt DateTime @default(now())
 }
 
@@ -242,4 +244,25 @@ model SiteSettings {
   id          String   @id @default(cuid())
   socialLinks Json? // { twitter: "url", facebook: "url", etc. }
   updatedAt   DateTime @updatedAt
+}
+
+model SupplementaryContent {
+  id        String      @id @default(cuid())
+  bookId    String
+  book      Book        @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  type      ContentType
+  title     String
+  content   String?     @db.Text // For POEM, QUOTE, ARTICLE (text body)
+  url       String? // For VIDEO, ARTICLE (external link)
+  author    String? // For QUOTE or POEM attribution
+  order     Int         @default(0)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+enum ContentType {
+  VIDEO
+  ARTICLE
+  POEM
+  QUOTE
 }

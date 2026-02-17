@@ -21,6 +21,24 @@ export default async function Header() {
           >
             Library
           </Link>
+          <Link
+            href="/blog"
+            className="font-inter text-sm text-landing-text hover:text-landing-accent transition-colors"
+          >
+            Blog
+          </Link>
+          <Link
+            href="/videos"
+            className="font-inter text-sm text-landing-text hover:text-landing-accent transition-colors"
+          >
+            Videos
+          </Link>
+          <Link
+            href="/poems"
+            className="font-inter text-sm text-landing-text hover:text-landing-accent transition-colors"
+          >
+            Poems
+          </Link>
 
           {session?.user?.role === 'ADMIN' && (
             <Link

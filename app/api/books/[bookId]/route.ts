@@ -9,11 +9,15 @@ export async function GET(
 ) {
   const { bookId } = await params;
   const { searchParams } = new URL(req.url);
-  const includePrintLinks = searchParams.get('include') === 'printLinks';
+  const includePrintLinks = searchParams.get('include')?.includes('printLinks');
+  const includeSupplementary = searchParams.get('include')?.includes('supplementaryContents');
 
   const book = await prisma.book.findUnique({
     where: { id: bookId },
-    include: includePrintLinks ? { printLinks: true } : undefined,
+    include: {
+      printLinks: includePrintLinks,
+      supplementaryContents: includeSupplementary,
+    },
   });
 
   if (!book) return NextResponse.json({ error: 'Book not found' }, { status: 404 });
@@ -34,11 +38,11 @@ export async function PATCH(
   const data = await req.json();
 
   try {
-    // Handle print links separately
-    const { printLinks, ...bookData } = data;
+    // Handle print links and supplementary content separately
+    const { printLinks, supplementaryContents, ...bookData } = data;
 
     // Update book
-    const updatedBook = await prisma.book.update({
+    await prisma.book.update({
       where: { id: bookId },
       data: {
         ...bookData,
@@ -67,13 +71,39 @@ export async function PATCH(
       }
     }
 
-    // Return updated book with print links
-    const bookWithLinks = await prisma.book.findUnique({
+    // Update supplementary content if provided
+    if (supplementaryContents) {
+      // Delete existing content
+      await prisma.supplementaryContent.deleteMany({
+        where: { bookId },
+      });
+
+      // Create new content
+      if (supplementaryContents.length > 0) {
+        await prisma.supplementaryContent.createMany({
+          data: supplementaryContents.map((item: any, index: number) => ({
+            bookId,
+            type: item.type,
+            title: item.title,
+            content: item.content,
+            url: item.url,
+            author: item.author,
+            order: index,
+          })),
+        });
+      }
+    }
+
+    // Return updated book with relations
+    const bookWithRelations = await prisma.book.findUnique({
       where: { id: bookId },
-      include: { printLinks: true },
+      include: { 
+        printLinks: true,
+        supplementaryContents: true 
+      },
     });
 
-    return NextResponse.json(bookWithLinks);
+    return NextResponse.json(bookWithRelations);
   } catch (error) {
     console.error('Book update error:', error);
     return NextResponse.json(

@@ -20,6 +20,9 @@ export default async function BookDetailsPage({
       epubFile: true,
       audiobook: true,
       printLinks: true,
+      supplementaryContents: {
+        orderBy: { order: 'asc' }
+      },
       readingProgress: session?.user?.id
         ? {
             where: { userId: session.user.id },
@@ -220,6 +223,81 @@ export default async function BookDetailsPage({
                 message={book.donationMessage}
                 goal={book.donationGoal ? Number(book.donationGoal) : undefined}
               />
+            )}
+
+            {/* Supplementary Content */}
+            {book.supplementaryContents && book.supplementaryContents.length > 0 && (
+              <div className="border-t pt-8 mt-8">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Explore More</h2>
+                <div className="grid gap-6">
+                  {book.supplementaryContents.map((item) => (
+                    <div key={item.id} className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+                      {item.type === 'VIDEO' && (
+                        <div>
+                          <h3 className="text-lg font-semibold mb-3">{item.title}</h3>
+                          {item.url && (
+                             <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
+                                {item.url.includes('youtube.com') || item.url.includes('youtu.be') ? (
+                                   <iframe 
+                                     src={item.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/')}
+                                     className="w-full h-full"
+                                     allowFullScreen
+                                   />
+                                ) : (
+                                   <a href={item.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center h-full text-blue-600 hover:underline">
+                                     Watch Video ↗
+                                   </a>
+                                )}
+                             </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {item.type === 'ARTICLE' && (
+                        <div>
+                          <h3 className="text-lg font-semibold mb-2">{item.title}</h3>
+                          {item.content && (
+                            <div className="prose prose-sm text-gray-600 mb-3 whitespace-pre-wrap">
+                              {item.content.length > 300 ? `${item.content.slice(0, 300)}...` : item.content}
+                            </div>
+                          )}
+                          {item.url && (
+                            <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 font-medium hover:underline">
+                              Read Full Article ↗
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      {item.type === 'POEM' && (
+                        <div className="text-center bg-gray-50 p-6 rounded-lg italic font-serif">
+                          <h3 className="text-xl font-semibold mb-4 not-italic font-sans">{item.title}</h3>
+                          <div className="whitespace-pre-wrap text-gray-800 leading-relaxed max-w-lg mx-auto">
+                            {item.content}
+                          </div>
+                          {item.author && (
+                            <p className="mt-4 text-gray-500 not-italic">— {item.author}</p>
+                          )}
+                        </div>
+                      )}
+
+                      {item.type === 'QUOTE' && (
+                        <div className="border-l-4 border-indigo-500 pl-6 py-2 my-2">
+                           <blockquote className="text-xl font-medium italic text-gray-900 mb-2">
+                             "{item.content}"
+                           </blockquote>
+                           {item.author && (
+                             <cite className="text-sm text-gray-500 font-medium not-italic">
+                               — {item.author}
+                             </cite>
+                           )}
+                           {item.title && <p className="text-xs text-gray-400 mt-1">{item.title}</p>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </div>
