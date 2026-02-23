@@ -177,11 +177,15 @@ const server = http.createServer((req, res) => {
 
 server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
-        console.error(`\n❌ Port ${PORT} is already in use.`);
-        console.error(`   The DB Manager may already be running at http://localhost:${PORT}`);
-        console.error(`   If not, kill the process using that port and try again.`);
-        console.error(`   On Linux: kill $(lsof -t -i:${PORT})\n`);
-        process.exit(1);
+        const { execSync } = require('child_process');
+        console.log(`⚠️  Port ${PORT} in use. Killing old process and restarting...`);
+        try {
+            execSync(`fuser -k ${PORT}/tcp`);
+            setTimeout(() => server.listen(PORT), 1000);
+        } catch (e) {
+            console.error(`❌ Could not free port ${PORT}. Kill it manually: fuser -k ${PORT}/tcp`);
+            process.exit(1);
+        }
     } else {
         throw err;
     }
