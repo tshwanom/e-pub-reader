@@ -175,6 +175,18 @@ const server = http.createServer((req, res) => {
     res.end('Not found');
 });
 
+server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+        console.error(`\n❌ Port ${PORT} is already in use.`);
+        console.error(`   The DB Manager may already be running at http://localhost:${PORT}`);
+        console.error(`   If not, kill the process using that port and try again.`);
+        console.error(`   On Linux: kill $(lsof -t -i:${PORT})\n`);
+        process.exit(1);
+    } else {
+        throw err;
+    }
+});
+
 server.listen(PORT, () => {
-    console.log(`DB Manager running at http://localhost:${PORT}`);
+    console.log(`✅ DB Manager running at http://localhost:${PORT}`);
 });
