@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { Metadata } from 'next';
+import Header from '@/components/landing/Header';
+import Footer from '@/components/landing/Footer';
 
 export const metadata: Metadata = {
   title: 'Blog | One Man Revolution',
@@ -27,20 +29,22 @@ export default async function BlogPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-24 pb-12">
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4 font-playfair">Latest Articles</h1>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+    <main className="page-shell">
+      <Header />
+
+      <div className="page-container py-14 sm:py-16">
+        <div className="mb-12 max-w-3xl">
+          <h1 className="font-playfair text-4xl font-semibold text-landing-text md:text-5xl">Latest Articles</h1>
+          <p className="mt-4 text-lg leading-relaxed text-landing-text-muted">
             Explore articles, essays, and supplementary readings from our book collection.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           {articles.map((article) => (
-            <article key={article.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col hover:shadow-md transition-shadow duration-300">
-               <div className="p-6 flex-1">
-                  <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
+            <article key={article.id} className="surface-card flex flex-col overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
+               <div className="flex-1 p-6">
+                  <div className="mb-3 flex items-center gap-2 text-xs text-landing-text-muted">
                     <span>{new Date(article.createdAt).toLocaleDateString()}</span>
                     {article.author && (
                       <>
@@ -50,9 +54,9 @@ export default async function BlogPage() {
                     )}
                   </div>
                   
-                  <h2 className="text-xl font-bold text-gray-900 mb-3 font-playfair">
+                  <h2 className="mb-3 font-playfair text-2xl font-semibold text-landing-text">
                     {article.url ? (
-                      <a href={article.url} target="_blank" rel="noopener noreferrer" className="hover:text-landing-accent">
+                      <a href={article.url} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-landing-accent">
                         {article.title} ↗
                       </a>
                     ) : (
@@ -61,26 +65,26 @@ export default async function BlogPage() {
                   </h2>
 
                   {article.content && (
-                    <p className="text-gray-600 mb-4 line-clamp-3 text-sm leading-relaxed">
+                    <p className="mb-4 line-clamp-3 text-sm leading-relaxed text-landing-text-muted">
                       {article.content}
                     </p>
                   )}
                   
                   {article.url && (
-                    <a href={article.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1 mb-4">
+                    <a href={article.url} target="_blank" rel="noopener noreferrer" className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-landing-accent hover:text-landing-accent-secondary">
                       Read full article <span aria-hidden="true">&rarr;</span>
                     </a>
                   )}
                </div>
 
-               <div className="bg-gray-50 px-6 py-3 border-t border-gray-100 mt-auto">
-                 <Link href={`/books/${article.book.slug || article.bookId}`} className="flex items-center gap-3 group">
+               <div className="mt-auto border-t border-landing-border bg-landing-surface-muted px-6 py-4">
+                 <Link href={`/books/${article.book.slug || article.bookId}`} className="group flex items-center gap-3">
                     {article.book.coverUrl && (
-                      <img src={article.book.coverUrl} alt="" className="w-8 h-10 object-cover rounded shadow-sm group-hover:opacity-90 transition-opacity" />
+                      <img src={article.book.coverUrl} alt="" className="h-10 w-8 rounded object-cover shadow-sm transition-opacity group-hover:opacity-90" />
                     )}
                     <div className="flex-1">
-                       <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">From the book</p>
-                       <p className="text-sm font-semibold text-gray-900 group-hover:text-landing-accent transition-colors truncate">
+                       <p className="text-xs font-medium uppercase tracking-wider text-landing-text-muted">From the book</p>
+                       <p className="truncate text-sm font-semibold text-landing-text transition-colors group-hover:text-landing-accent">
                          {article.book.title}
                        </p>
                     </div>
@@ -91,11 +95,13 @@ export default async function BlogPage() {
         </div>
 
         {articles.length === 0 && (
-          <div className="text-center py-20">
-            <p className="text-gray-500 text-lg">No articles found.</p>
+          <div className="surface-card py-20 text-center">
+            <p className="text-lg text-landing-text-muted">No articles found.</p>
           </div>
         )}
       </div>
-    </div>
+
+      <Footer />
+    </main>
   );
 }

@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { Metadata } from 'next';
+import Header from '@/components/landing/Header';
+import Footer from '@/components/landing/Footer';
 
 export const metadata: Metadata = {
   title: 'Videos | One Man Revolution',
@@ -27,53 +29,55 @@ export default async function VideosPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-900 pt-24 pb-12">
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-white mb-4 font-playfair">Video Library</h1>
-          <p className="text-lg text-gray-400 max-w-2xl mx-auto">
+    <main className="page-shell">
+      <Header />
+
+      <div className="page-container py-14 sm:py-16">
+        <div className="mb-12 max-w-3xl">
+          <h1 className="font-playfair text-4xl font-semibold text-landing-text md:text-5xl">Video Library</h1>
+          <p className="mt-4 text-lg leading-relaxed text-landing-text-muted">
             Watch supplementary videos, interviews, and documentaries related to our books.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           {videos.map((video) => (
-            <div key={video.id} className="bg-gray-800 rounded-xl overflow-hidden shadow-lg border border-gray-700 flex flex-col">
+            <div key={video.id} className="surface-card flex flex-col overflow-hidden">
                {/* Video Embed/Link */}
-               <div className="aspect-video bg-black relative">
+               <div className="relative aspect-video border-b border-landing-border bg-landing-surface-muted">
                   {video.url && (video.url.includes('youtube.com') || video.url.includes('youtu.be')) ? (
                       <iframe 
                         src={video.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/')}
-                        className="w-full h-full"
+                        className="h-full w-full"
                         allowFullScreen
                         title={video.title}
                       />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-800">
-                       <a href={video.url || '#'} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-2 text-landing-accent hover:text-white transition-colors">
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12">
+                    <div className="flex h-full w-full items-center justify-center">
+                       <a href={video.url || '#'} target="_blank" rel="noopener noreferrer" className="group flex flex-col items-center gap-2 text-landing-accent transition-colors hover:text-landing-accent-secondary">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-12 w-12 transition-transform group-hover:scale-105">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15.91 11.672a.375.375 0 0 1 0 .656l-5.603 3.113a.375.375 0 0 1-.557-.328V8.887c0-.286.307-.466.557-.327l5.603 3.112Z" />
                           </svg>
-                          <span className="font-medium">Watch Externally</span>
+                          <span className="text-sm font-medium">Watch Externally</span>
                        </a>
                     </div>
                   )}
                </div>
 
-               <div className="p-5 flex-1 flex flex-col">
-                  <h2 className="text-lg font-bold text-white mb-2 font-playfair line-clamp-2">
+               <div className="flex flex-1 flex-col p-5">
+                  <h2 className="line-clamp-2 font-playfair text-2xl font-semibold text-landing-text">
                     {video.title}
                   </h2>
                   
-                  <div className="mt-auto pt-4 border-t border-gray-700">
-                    <Link href={`/books/${video.book.slug || video.bookId}`} className="flex items-center gap-3 group">
+                  <div className="mt-auto border-t border-landing-border pt-4">
+                    <Link href={`/books/${video.book.slug || video.bookId}`} className="group flex items-center gap-3">
                         {video.book.coverUrl && (
-                          <img src={video.book.coverUrl} alt="" className="w-8 h-10 object-cover rounded shadow-sm group-hover:opacity-80 transition-opacity" />
+                          <img src={video.book.coverUrl} alt="" className="h-10 w-8 rounded object-cover shadow-sm transition-opacity group-hover:opacity-80" />
                         )}
                         <div className="flex-1 overflow-hidden">
-                          <p className="text-xs text-gray-400 uppercase tracking-wider font-medium">Related Book</p>
-                          <p className="text-sm font-semibold text-gray-300 group-hover:text-white transition-colors truncate">
+                          <p className="text-xs font-medium uppercase tracking-wider text-landing-text-muted">Related Book</p>
+                          <p className="truncate text-sm font-semibold text-landing-text transition-colors group-hover:text-landing-accent">
                             {video.book.title}
                           </p>
                         </div>
@@ -85,11 +89,13 @@ export default async function VideosPage() {
         </div>
 
         {videos.length === 0 && (
-          <div className="text-center py-20">
-            <p className="text-gray-500 text-lg">No videos available yet.</p>
+          <div className="surface-card py-20 text-center">
+            <p className="text-lg text-landing-text-muted">No videos available yet.</p>
           </div>
         )}
       </div>
-    </div>
+
+      <Footer />
+    </main>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import ePub from 'epubjs';
-import type { Book, Rendition, Contents } from 'epubjs';
+import type { Book, Rendition } from 'epubjs';
 
 interface ReaderProps {
   url: string;
@@ -33,7 +33,6 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
   const [showToc, setShowToc] = useState(false);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [selectedText, setSelectedText] = useState<{cfi: string; text: string} | null>(null);
-  const [currentCfi, setCurrentCfi] = useState<string | null>(null);
   
   const locationTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -124,7 +123,6 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
       
       const currentLocation = location.start.index || 0;
       setCurrentPage(currentLocation + 1);
-      setCurrentCfi(location.start.cfi);
       
       if (location.end && location.end.index) {
         setTotalPages(location.end.index + 1);
@@ -155,10 +153,6 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
         }, 'hl-' + h.color, { fill: h.color, 'fill-opacity': '0.3' });
     });
   }, [highlights]);
-
-  // Navigation
-  const prevPage = () => renditionRef.current?.prev();
-  const nextPage = () => renditionRef.current?.next();
 
   // Theme switching
   const changeTheme = useCallback((newTheme: Theme) => {
@@ -208,29 +202,28 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
   };
 
   return (
-    <div className="relative w-full h-screen bg-gray-100">
+    <div className="relative h-screen w-full bg-landing-bg text-landing-text">
       {/* Table of Contents Sidebar */}
       <div
-        className={`fixed top-0 left-0 h-full w-80 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${
+        className={`fixed top-0 left-0 z-50 h-full w-80 transform border-r border-landing-border bg-white/95 shadow-2xl backdrop-blur-xl transition-transform duration-300 ease-in-out ${
           showToc ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="h-full flex flex-col">
-          {/* TOC Header */}
-          <div className="flex items-center justify-between p-4 border-b">
-            <h2 className="text-lg font-semibold">Table of Contents</h2>
+        <div className="flex h-full flex-col">
+          <div className="flex items-center justify-between border-b border-landing-border px-4 py-4">
+            <h2 className="text-base font-semibold text-landing-text">Table of Contents</h2>
             <button
               onClick={() => setShowToc(false)}
-              className="p-2 hover:bg-gray-100 rounded-full transition"
+              className="rounded-full p-2 text-landing-text-muted transition-colors hover:bg-landing-surface-muted hover:text-landing-text"
+              aria-label="Close table of contents"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
 
-          {/* TOC Content */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 space-y-1 overflow-y-auto p-4">
             {bookRef.current?.navigation?.toc?.map((item: any, index: number) => (
               <button
                 key={index}
@@ -238,149 +231,155 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
                   renditionRef.current?.display(item.href);
                   setShowToc(false);
                 }}
-                className="block w-full text-left px-3 py-2 hover:bg-indigo-50 rounded transition text-sm mb-1"
+                className="block w-full rounded-lg px-3 py-2 text-left text-sm text-landing-text-muted transition-colors hover:bg-landing-accent/10 hover:text-landing-accent"
               >
-                <span className="text-indigo-600 font-medium">{item.label}</span>
+                {item.label}
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Overlay */}
       {showToc && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40"
+          className="fixed inset-0 z-40 bg-black/40"
           onClick={() => setShowToc(false)}
         />
       )}
 
       {/* Top Controls */}
-      <div className="absolute top-0 left-0 right-0 bg-white shadow-md z-30 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => window.history.back()}
-            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded transition flex items-center gap-2"
-            title="Back to book details"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Back
-          </button>
-          
-          <button
-            onClick={() => setShowToc(!showToc)}
-            className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition"
-          >
-            Contents
-          </button>
-          
-          <div className="flex items-center gap-2 bg-gray-100 rounded px-3 py-2">
+      <div className="absolute left-0 right-0 top-0 z-30 border-b border-landing-border bg-white/90 px-4 py-3 backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-[1320px] items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={() => changeTheme('light')}
-              className={`px-3 py-1 rounded transition ${theme === 'light' ? 'bg-white shadow' : 'hover:bg-gray-200'}`}
-              title="Light"
+              onClick={() => window.history.back()}
+              className="inline-flex items-center gap-2 rounded-xl border border-landing-border bg-white px-4 py-2 text-sm font-medium text-landing-text transition-colors hover:border-landing-accent/40 hover:text-landing-accent"
+              title="Back to book details"
             >
-              ☀️
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Back
             </button>
+            
             <button
-              onClick={() => changeTheme('dark')}
-              className={`px-3 py-1 rounded transition ${theme === 'dark' ? 'bg-white shadow' : 'hover:bg-gray-200'}`}
-              title="Dark"
+              onClick={() => setShowToc(!showToc)}
+              className="rounded-xl bg-landing-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-landing-accent-secondary"
             >
-              🌙
+              Contents
             </button>
-            <button
-              onClick={() => changeTheme('sepia')}
-              className={`px-3 py-1 rounded transition ${theme === 'sepia' ? 'bg-white shadow' : 'hover:bg-gray-200'}`}
-              title="Sepia"
-            >
-              📄
-            </button>
+            
+            <div className="flex items-center gap-1 rounded-xl border border-landing-border bg-landing-surface-muted p-1">
+              <button
+                onClick={() => changeTheme('light')}
+                className={`rounded-lg px-3 py-1 text-sm transition ${theme === 'light' ? 'bg-white text-landing-accent shadow-sm' : 'text-landing-text-muted hover:text-landing-text'}`}
+                title="Light"
+              >
+                ☀️
+              </button>
+              <button
+                onClick={() => changeTheme('dark')}
+                className={`rounded-lg px-3 py-1 text-sm transition ${theme === 'dark' ? 'bg-white text-landing-accent shadow-sm' : 'text-landing-text-muted hover:text-landing-text'}`}
+                title="Dark"
+              >
+                🌙
+              </button>
+              <button
+                onClick={() => changeTheme('sepia')}
+                className={`rounded-lg px-3 py-1 text-sm transition ${theme === 'sepia' ? 'bg-white text-landing-accent shadow-sm' : 'text-landing-text-muted hover:text-landing-text'}`}
+                title="Sepia"
+              >
+                📄
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 rounded-xl border border-landing-border bg-landing-surface-muted px-3 py-2">
+              <button
+                onClick={() => changeFontSize(-10)}
+                className="rounded px-2 py-1 text-sm font-semibold text-landing-text-muted transition hover:bg-white hover:text-landing-text"
+                title="Decrease font size"
+              >
+                A-
+              </button>
+              <span className="text-sm text-landing-text-muted">{fontSize}%</span>
+              <button
+                onClick={() => changeFontSize(10)}
+                className="rounded px-2 py-1 text-sm font-semibold text-landing-text-muted transition hover:bg-white hover:text-landing-text"
+                title="Increase font size"
+              >
+                A+
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 bg-gray-100 rounded px-3 py-2">
-            <button
-              onClick={() => changeFontSize(-10)}
-              className="px-2 py-1 hover:bg-gray-200 rounded transition font-semibold"
-              title="Decrease font size"
-            >
-              A-
-            </button>
-            <span className="text-sm text-gray-600">{fontSize}%</span>
-            <button
-              onClick={() => changeFontSize(10)}
-              className="px-2 py-1 hover:bg-gray-200 rounded transition font-semibold"
-              title="Increase font size"
-            >
-              A+
-            </button>
+          <div className="text-sm text-landing-text-muted">
+            Page {currentPage} of {totalPages || '--'}
           </div>
-        </div>
-
-        <div className="text-sm text-gray-600">
-          Page {currentPage} of {totalPages}
         </div>
       </div>
 
       {/* Viewer */}
-      <div className="absolute top-16 left-0 right-0 bottom-16 bg-gray-100 flex items-center justify-center">
-        <div ref={viewerRef} className="w-full h-full max-w-5xl bg-white shadow-lg" />
+      <div className="absolute bottom-[78px] left-0 right-0 top-[74px] flex items-center justify-center bg-landing-bg px-3 py-3 sm:px-6 sm:py-5">
+        <div ref={viewerRef} className="h-full w-full max-w-6xl overflow-hidden rounded-2xl border border-landing-border bg-white shadow-sm" />
       </div>
 
       {/* Bottom Navigation */}
-      <div className="absolute bottom-0 left-0 right-0 bg-white shadow-md z-30 px-4 py-3 flex items-center justify-between">
-        <button
-          onClick={() => renditionRef.current?.prev()}
-          disabled={!isReady}
-          className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          ← Previous
-        </button>
+      <div className="absolute bottom-0 left-0 right-0 z-30 border-t border-landing-border bg-white/90 px-4 py-3 backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-[1320px] items-center gap-3 sm:gap-4">
+          <button
+            onClick={() => renditionRef.current?.prev()}
+            disabled={!isReady}
+            className="rounded-xl border border-landing-border bg-white px-5 py-2 text-sm text-landing-text transition-colors hover:border-landing-accent/40 hover:text-landing-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            ← Previous
+          </button>
 
-        <div className="flex-1 mx-4">
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-indigo-600 h-2 rounded-full transition-all"
-              style={{ width: `${(currentPage / totalPages) * 100}%` }}
-            />
+          <div className="flex-1">
+            <div className="h-2 w-full rounded-full bg-landing-surface-muted">
+              <div
+                className="h-2 rounded-full bg-landing-accent transition-all"
+                style={{ width: `${totalPages ? (currentPage / totalPages) * 100 : 0}%` }}
+              />
+            </div>
           </div>
-        </div>
 
-        <button
-          onClick={() => renditionRef.current?.next()}
-          disabled={!isReady}
-          className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Next →
-        </button>
+          <button
+            onClick={() => renditionRef.current?.next()}
+            disabled={!isReady}
+            className="rounded-xl bg-landing-accent px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-landing-accent-secondary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Next →
+          </button>
+        </div>
       </div>
 
       {/* Highlight Menu */}
       {selectedText && (
-        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-2xl p-4 z-50">
-          <p className="text-sm text-gray-600 mb-3">Highlight this text:</p>
-          <div className="flex gap-2 mb-3">
+        <div className="fixed left-1/2 top-1/2 z-50 w-[280px] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-landing-border bg-white p-4 shadow-2xl">
+          <p className="mb-3 text-sm text-landing-text-muted">Highlight this text:</p>
+          <div className="mb-3 flex gap-2">
             <button
               onClick={() => addHighlight('yellow')}
-              className="w-10 h-10 rounded-full bg-yellow-300 hover:bg-yellow-400 transition"
+              className="h-10 w-10 rounded-full border border-black/10 transition hover:scale-105"
+              style={{ backgroundColor: '#f8e16f' }}
               title="Yellow"
             />
             <button
               onClick={() => addHighlight('green')}
-              className="w-10 h-10 rounded-full bg-green-300 hover:bg-green-400 transition"
+              className="h-10 w-10 rounded-full border border-black/10 transition hover:scale-105"
+              style={{ backgroundColor: '#99d98c' }}
               title="Green"
             />
             <button
               onClick={() => addHighlight('blue')}
-              className="w-10 h-10 rounded-full bg-blue-300 hover:bg-blue-400 transition"
+              className="h-10 w-10 rounded-full border border-black/10 transition hover:scale-105"
+              style={{ backgroundColor: '#90caf9' }}
               title="Blue"
             />
           </div>
           <button
             onClick={() => setSelectedText(null)}
-            className="w-full px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded transition text-sm"
+            className="w-full rounded-xl border border-landing-border bg-landing-surface-muted px-4 py-2 text-sm text-landing-text-muted transition-colors hover:text-landing-text"
           >
             Cancel
           </button>

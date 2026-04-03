@@ -14,68 +14,95 @@ export default async function LandingPage() {
   });
 
   return (
-    <main className="min-h-screen bg-landing-bg">
+    <main className="page-shell">
       {/* Header */}
       <Header />
       {/* Hero Section */}
       <HeroSection />
 
-      {/* What Is Section */}
-      <section className="max-w-4xl mx-auto px-6 py-20">
-        <h2 className="font-playfair text-4xl md:text-5xl font-bold text-landing-text mb-8">
-          What Is the One Man Revolution?
-        </h2>
-        <div className="space-y-6 font-inter text-lg text-landing-text leading-relaxed">
-          <p>
-            The One Man Revolution is not about overthrowing governments or
-            building followings.
+      {/* Core Narrative Section */}
+      <section className="page-container py-14 sm:py-20">
+        <div className="mx-auto mb-10 max-w-3xl text-center sm:mb-14">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-landing-accent">
+            The Foundation
           </p>
-          <p>
-            It is about dismantling the invisible systems that program
-            obedience, medicalize awakening, and turn human beings into
-            compliant units.
-          </p>
-          <p>
-            This revolution begins in one place only:
-            <br />
-            <strong>the inner sovereignty of a single human being.</strong>
-          </p>
-          <p className="text-landing-text-muted italic">
-            No leaders. No hierarchy. No permission required.
+          <h2 className="mt-4 font-playfair text-4xl font-semibold text-landing-text md:text-5xl">
+            What it is. Why it exists.
+          </h2>
+          <p className="mt-4 text-base leading-relaxed text-landing-text-muted sm:text-lg">
+            Two truths that frame the project: inner sovereignty first, and
+            deprogramming over ideology.
           </p>
         </div>
-      </section>
 
-      {/* Why Section */}
-      <section className="max-w-4xl mx-auto px-6 py-20">
-        <h2 className="font-playfair text-4xl md:text-5xl font-bold text-landing-text mb-8">
-          Why This Exists
-        </h2>
-        <div className="space-y-6 font-inter text-lg text-landing-text leading-relaxed">
-          <p>
-            The world does not suffer from lack of information. It suffers from
-            the suppression of inner truth.
-          </p>
-          <p>
-            This work exists to expose spiritual warfare disguised as progress,
-            reclaim human purpose beyond systems, and awaken remembrance — not
-            belief.
-          </p>
-          <p className="text-landing-text-muted italic">
-            This is not ideology.
-            <br />
-            It is deprogramming.
-          </p>
+        <div className="relative grid gap-5 lg:grid-cols-2 lg:gap-6">
+          <div className="pointer-events-none absolute bottom-8 left-1/2 top-8 hidden w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-landing-accent/30 to-transparent lg:block" />
+
+          <article className="surface-card h-full p-8 sm:p-10">
+            <span className="inline-flex rounded-full bg-landing-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-landing-accent">
+              01 · What Is
+            </span>
+            <h3 className="mt-5 font-playfair text-3xl font-semibold text-landing-text sm:text-4xl">
+              What Is the One Man Revolution?
+            </h3>
+
+            <div className="mt-6 space-y-5 text-base leading-relaxed text-landing-text sm:text-lg">
+              <p>
+                It is not about overthrowing governments or building followings.
+              </p>
+              <p>
+                It is about dismantling the invisible systems that program
+                obedience, medicalize awakening, and turn human beings into
+                compliant units.
+              </p>
+              <p>
+                This revolution begins in one place only:
+                <br />
+                <strong>the inner sovereignty of a single human being.</strong>
+              </p>
+            </div>
+
+            <p className="mt-7 border-l-2 border-landing-accent/40 pl-4 text-sm italic text-landing-text-muted sm:text-base">
+              No leaders. No hierarchy. No permission required.
+            </p>
+          </article>
+
+          <article className="surface-muted h-full p-8 sm:p-10">
+            <span className="inline-flex rounded-full bg-landing-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-landing-accent">
+              02 · Why This Exists
+            </span>
+            <h3 className="mt-5 font-playfair text-3xl font-semibold text-landing-text sm:text-4xl">
+              Why This Exists
+            </h3>
+
+            <div className="mt-6 space-y-5 text-base leading-relaxed text-landing-text sm:text-lg">
+              <p>
+                The world does not suffer from lack of information. It suffers
+                from the suppression of inner truth.
+              </p>
+              <p>
+                This work exists to expose spiritual warfare disguised as
+                progress, reclaim human purpose beyond systems, and awaken
+                remembrance — not belief.
+              </p>
+            </div>
+
+            <p className="mt-7 border-l-2 border-landing-accent/40 pl-4 text-sm italic text-landing-text-muted sm:text-base">
+              This is not ideology.
+              <br />
+              It is deprogramming.
+            </p>
+          </article>
         </div>
       </section>
 
       {/* Books Section */}
-      <section className="max-w-7xl mx-auto px-6 py-20">
-        <div className="max-w-4xl mb-12">
-          <h2 className="font-playfair text-4xl md:text-5xl font-bold text-landing-text mb-8">
+      <section className="page-container py-14 sm:py-20">
+        <div className="mb-12 max-w-4xl">
+          <h2 className="font-playfair text-4xl font-semibold text-landing-text md:text-5xl">
             The Writings
           </h2>
-          <div className="space-y-4 font-inter text-lg text-landing-text leading-relaxed">
+          <div className="mt-6 space-y-4 text-lg leading-relaxed text-landing-text-muted">
             <p>These books are free.</p>
             <p>
               Not as a promotion.
@@ -89,7 +116,7 @@ export default async function LandingPage() {
 
         {books.length > 0 ? (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
               {books.map((book) => (
                 <BookCard
                   key={book.id}
@@ -101,13 +128,13 @@ export default async function LandingPage() {
                 />
               ))}
             </div>
-            <p className="font-inter text-landing-text-muted italic text-center">
+            <p className="mt-8 text-center italic text-landing-text-muted">
               No account. No paywall. No obligation.
             </p>
           </>
         ) : (
-          <div className="text-center py-12">
-            <p className="font-inter text-landing-text-muted">
+          <div className="surface-card py-12 text-center">
+            <p className="text-landing-text-muted">
               Books coming soon...
             </p>
           </div>
@@ -117,13 +144,13 @@ export default async function LandingPage() {
       {/* Donation Section */}
       <section
         id="donate"
-        className="max-w-4xl mx-auto px-6 py-20"
+        className="page-container py-16"
       >
-        <div className="bg-gradient-to-br from-landing-bg-secondary to-purple-50/30 border border-landing-border rounded-2xl p-12 text-center">
-          <h2 className="font-playfair text-4xl md:text-5xl font-bold text-landing-text mb-6">
+        <div className="surface-card px-8 py-12 text-center sm:px-12">
+          <h2 className="font-playfair text-4xl font-semibold text-landing-text md:text-5xl">
             Support the Work
           </h2>
-          <div className="space-y-6 font-inter text-lg text-landing-text leading-relaxed max-w-2xl mx-auto mb-8">
+          <div className="mx-auto mb-8 mt-6 max-w-2xl space-y-6 text-lg leading-relaxed text-landing-text-muted">
             <p>This work is offered freely to everyone.</p>
             <p>
               If it resonates, you may choose to support its continuation. Your
@@ -132,11 +159,11 @@ export default async function LandingPage() {
           </div>
           <Link
             href="/library"
-            className="inline-block px-8 py-4 bg-landing-accent text-white font-semibold rounded-lg hover:bg-landing-accent-secondary transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-landing-accent/30"
+            className="brand-button px-8 py-4 text-base"
           >
             Explore the Library
           </Link>
-          <p className="font-inter text-sm text-landing-text-muted italic mt-6">
+          <p className="mt-6 text-sm italic text-landing-text-muted">
             Give only if moved. Never out of obligation.
           </p>
         </div>

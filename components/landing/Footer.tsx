@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import Link from 'next/link';
 
 export default async function Footer() {
   // Fetch social links from database
@@ -6,36 +7,48 @@ export default async function Footer() {
   const socialLinks = settings?.socialLinks as Record<string, string> | null;
 
   return (
-    <footer className="border-t border-landing-border bg-landing-bg">
-      <div className="max-w-7xl mx-auto px-6 py-12 text-center">
-        <p className="font-inter text-landing-text font-semibold mb-2">
-          One Man Revolution
-        </p>
-        <p className="font-inter text-sm text-landing-text-muted mb-6">
-          Truth does not need consensus.
-        </p>
+    <footer className="border-t border-landing-border bg-landing-bg-secondary">
+      <div className="page-container py-7 sm:py-8">
+        <div className="surface-muted px-5 py-4 sm:px-6 sm:py-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <p className="font-playfair text-lg font-semibold text-landing-text sm:text-xl">
+                One Man Revolution
+              </p>
+              <p className="mt-1 text-xs text-landing-text-muted sm:text-sm">
+                A quiet space for long-form truth.
+              </p>
+            </div>
 
-        {/* Social Links */}
-        {socialLinks && Object.keys(socialLinks).length > 0 && (
-          <div className="flex justify-center gap-6 mb-6">
-            {Object.entries(socialLinks).map(([platform, url]) => (
-              <a
-                key={platform}
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-landing-text-muted hover:text-landing-accent transition-colors duration-200"
-                aria-label={platform}
-              >
-                <span className="text-sm capitalize">{platform}</span>
-              </a>
-            ))}
+            <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs sm:text-sm">
+              <Link href="/library" className="text-landing-text-muted transition-colors hover:text-landing-accent">Library</Link>
+              <Link href="/blog" className="text-landing-text-muted transition-colors hover:text-landing-accent">Blog</Link>
+              <Link href="/videos" className="text-landing-text-muted transition-colors hover:text-landing-accent">Videos</Link>
+              <Link href="/poems" className="text-landing-text-muted transition-colors hover:text-landing-accent">Poems</Link>
+            </nav>
           </div>
-        )}
 
-        <p className="font-inter text-xs text-landing-text-muted">
-          © {new Date().getFullYear()} One Man Revolution. All rights reserved.
-        </p>
+          {socialLinks && Object.keys(socialLinks).length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+              {Object.entries(socialLinks).map(([platform, url]) => (
+                <a
+                  key={platform}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="capitalize text-landing-text-muted transition-colors hover:text-landing-accent"
+                  aria-label={platform}
+                >
+                  {platform}
+                </a>
+              ))}
+            </div>
+          )}
+
+          <p className="mt-3 text-[11px] text-landing-text-muted sm:text-xs">
+            © {new Date().getFullYear()} One Man Revolution. All rights reserved.
+          </p>
+        </div>
       </div>
     </footer>
   );

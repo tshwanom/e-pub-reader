@@ -4,26 +4,26 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 210 17% 96%;
+    --foreground: 217 29% 14%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 217 29% 14%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --popover-foreground: 217 29% 14%;
+    --primary: 187 33% 36%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 20% 93%;
+    --secondary-foreground: 217 29% 14%;
+    --muted: 210 19% 92%;
+    --muted-foreground: 215 15% 41%;
+    --accent: 210 19% 92%;
+    --accent-foreground: 217 29% 14%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
+    --border: 210 20% 87%;
+    --input: 210 20% 87%;
+    --ring: 187 33% 36%;
+    --radius: 0.875rem;
   }
 
   .dark {
@@ -53,8 +53,18 @@
   * {
     @apply border-border;
   }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    background-image: radial-gradient(circle at top right, rgba(61, 115, 122, 0.1), transparent 42%);
+  }
+
+  ::selection {
+    background-color: rgba(61, 115, 122, 0.2);
   }
 }
 
@@ -67,11 +77,6 @@
   }
   .font-inter {
     font-family: var(--font-inter), sans-serif;
-  }
-  
-  /* Smooth scroll behavior */
-  html {
-    scroll-behavior: smooth;
   }
   
   /* Fade-in animation utility */
@@ -94,6 +99,32 @@
   
   .fade-in-element:nth-child(4) {
     animation-delay: 0.8s;
+  }
+
+  .page-shell {
+    @apply min-h-screen bg-landing-bg text-landing-text;
+  }
+
+  .page-container {
+    @apply mx-auto w-full max-w-7xl px-5 sm:px-8;
+  }
+
+  .surface-card {
+    @apply rounded-2xl bg-white/70 backdrop-blur-xl ring-1 ring-white/65 shadow-md;
+    background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.58));
+  }
+
+  .surface-muted {
+    @apply rounded-2xl bg-white/55 backdrop-blur-lg ring-1 ring-white/50 shadow-sm;
+    background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.45));
+  }
+
+  .brand-button {
+    @apply inline-flex items-center justify-center rounded-xl bg-landing-accent px-5 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-landing-accent-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2;
+  }
+
+  .ghost-button {
+    @apply inline-flex items-center justify-center rounded-xl border border-landing-border bg-white px-5 py-3 text-sm font-medium text-landing-text transition-colors duration-200 hover:border-landing-accent/40 hover:text-landing-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2;
   }
 }
 

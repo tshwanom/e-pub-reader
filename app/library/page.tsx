@@ -16,37 +16,37 @@ export default async function LibraryPage() {
   });
 
   return (
-    <main className="min-h-screen bg-landing-bg">
+    <main className="page-shell">
       {/* Header */}
       <Header />
 
       {/* Library Content */}
-      <div className="max-w-7xl mx-auto px-6 py-24">
-        <div className="mb-12">
-          <h1 className="font-playfair text-4xl md:text-5xl font-bold text-landing-text mb-4">
+      <div className="page-container py-14 sm:py-16">
+        <div className="mb-12 max-w-3xl">
+          <h1 className="font-playfair text-4xl font-semibold text-landing-text md:text-5xl">
             Library
           </h1>
-          <p className="font-inter text-lg text-landing-text-muted">
-            Browse all available books
+          <p className="mt-4 text-lg leading-relaxed text-landing-text-muted">
+            Browse all available books in one calm, distraction-free reading catalog.
           </p>
         </div>
 
         {books.length === 0 ? (
-          <div className="text-center py-20">
-            <h2 className="font-inter text-xl text-landing-text-muted mb-4">
+          <div className="surface-card py-20 text-center">
+            <h2 className="text-xl text-landing-text-muted mb-4">
               No books available yet.
             </h2>
             {session?.user.role === 'ADMIN' && (
               <Link 
                 href="/admin/books/upload" 
-                className="inline-block px-6 py-3 bg-landing-accent text-white rounded-lg hover:bg-landing-accent-secondary transition-colors"
+                className="brand-button"
               >
                 Upload your first book
               </Link>
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
             {books.map((book) => (
               <BookCard
                 key={book.id}

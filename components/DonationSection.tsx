@@ -17,7 +17,6 @@ export default function DonationSection({
 }: DonationSectionProps) {
   const [amount, setAmount] = useState('10');
   const [loading, setLoading] = useState(false);
-  const [showModal, setShowModal] = useState(false);
 
   const handleDonate = async () => {
     setLoading(true);
@@ -46,20 +45,23 @@ export default function DonationSection({
   };
 
   return (
-    <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg shadow p-6 border border-purple-100">
-      <h2 className="text-2xl font-bold text-gray-900 mb-3">
-        Support This Book
+    <div className="surface-card p-6 sm:p-8">
+      <h2 className="font-playfair text-3xl font-semibold text-landing-text mb-2">
+        Support “{bookTitle}”
       </h2>
+      <p className="text-sm text-landing-text-muted mb-5">
+        Keep this library independent and freely accessible.
+      </p>
 
       {message && (
-        <p className="text-gray-700 mb-4 leading-relaxed whitespace-pre-wrap">
+        <p className="mb-4 whitespace-pre-wrap leading-relaxed text-landing-text-muted">
           {message}
         </p>
       )}
 
       {goal && (
         <div className="mb-4">
-          <div className="flex justify-between text-sm text-gray-600 mb-1">
+          <div className="mb-1 flex justify-between text-sm text-landing-text-muted">
             <span>Funding Goal</span>
             <span>${Number(goal).toFixed(2)}</span>
           </div>
@@ -72,10 +74,10 @@ export default function DonationSection({
           <button
             key={preset}
             onClick={() => setAmount(preset)}
-            className={`flex-1 py-2 rounded-lg font-semibold transition ${
+            className={`flex-1 rounded-xl py-2 text-sm font-semibold transition ${
               amount === preset
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                ? 'bg-landing-accent text-white'
+                : 'border border-landing-border bg-white text-landing-text hover:border-landing-accent/40 hover:text-landing-accent'
             }`}
           >
             ${preset}
@@ -91,20 +93,20 @@ export default function DonationSection({
             onChange={(e) => setAmount(e.target.value)}
             min="1"
             step="1"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className="w-full rounded-xl border border-landing-border bg-white px-4 py-3 text-landing-text focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/30"
             placeholder="Custom amount"
           />
         </div>
         <button
           onClick={handleDonate}
           disabled={loading || !amount || parseFloat(amount) < 1}
-          className="px-8 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          className="brand-button px-8 py-3 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? 'Processing...' : 'Donate'}
         </button>
       </div>
 
-      <p className="text-xs text-gray-500 mt-3 text-center">
+      <p className="mt-3 text-center text-xs text-landing-text-muted">
         Secure payment powered by PayPal
       </p>
     </div>

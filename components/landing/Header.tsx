@@ -4,66 +4,71 @@ import { authOptions } from '@/lib/auth';
 
 export default async function Header() {
   const session = await getServerSession(authOptions);
+  const navLinks = [
+    { href: '/library', label: 'Library' },
+    { href: '/blog', label: 'Blog' },
+    { href: '/videos', label: 'Videos' },
+    { href: '/poems', label: 'Poems' },
+    ...(session?.user?.role === 'ADMIN' ? [{ href: '/admin', label: 'Admin' }] : []),
+  ];
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-landing-bg/80 backdrop-blur-sm border-b border-landing-border">
-      <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-        {/* Logo/Brand */}
-        <Link href="/" className="font-playfair text-xl font-bold text-landing-text hover:text-landing-accent transition-colors">
-          One Man Revolution
+    <header className="sticky top-0 z-50 border-b border-landing-border/90 bg-white/85 backdrop-blur-xl">
+      <div className="page-container flex items-center justify-between gap-4 py-4">
+        <Link
+          href="/"
+          className="group inline-flex items-center gap-3 rounded-xl px-1 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-landing-accent text-xs font-semibold tracking-wide text-white shadow-sm">
+            OMR
+          </span>
+          <span className="font-playfair text-lg font-semibold text-landing-text transition-colors group-hover:text-landing-accent">
+            One Man Revolution
+          </span>
         </Link>
 
-        {/* Navigation */}
-        <nav className="flex items-center gap-6">
-          <Link
-            href="/library"
-            className="font-inter text-sm text-landing-text hover:text-landing-accent transition-colors"
-          >
-            Library
-          </Link>
-          <Link
-            href="/blog"
-            className="font-inter text-sm text-landing-text hover:text-landing-accent transition-colors"
-          >
-            Blog
-          </Link>
-          <Link
-            href="/videos"
-            className="font-inter text-sm text-landing-text hover:text-landing-accent transition-colors"
-          >
-            Videos
-          </Link>
-          <Link
-            href="/poems"
-            className="font-inter text-sm text-landing-text hover:text-landing-accent transition-colors"
-          >
-            Poems
-          </Link>
-
-          {session?.user?.role === 'ADMIN' && (
+        <nav className="hidden items-center rounded-full border border-landing-border bg-landing-bg-secondary p-1 lg:flex">
+          {navLinks.map((link) => (
             <Link
-              href="/admin"
-              className="font-inter text-sm text-landing-text hover:text-landing-accent transition-colors"
+              key={link.href}
+              href={link.href}
+              className="rounded-full px-4 py-2 text-sm text-landing-text-muted transition-colors hover:text-landing-accent"
             >
-              Admin
+              {link.label}
             </Link>
-          )}
+          ))}
+        </nav>
 
+        <div className="flex items-center gap-2">
           {session ? (
             <Link
               href="/api/auth/signout"
-              className="font-inter text-sm text-landing-text-muted hover:text-landing-accent transition-colors"
+              className="ghost-button px-4 py-2"
             >
               Sign Out
             </Link>
           ) : (
             <Link
               href="/api/auth/signin"
-              className="font-inter text-sm px-4 py-2 bg-landing-accent text-white rounded-lg hover:bg-landing-accent-secondary transition-colors"
+              className="brand-button px-4 py-2"
             >
               Sign In
             </Link>
           )}
+        </div>
+      </div>
+
+      <div className="page-container pb-3 lg:hidden">
+        <nav className="flex items-center gap-2 overflow-x-auto">
+          {navLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="whitespace-nowrap rounded-full border border-landing-border bg-white px-4 py-2 text-sm text-landing-text-muted transition-colors hover:border-landing-accent/40 hover:text-landing-accent"
+            >
+              {link.label}
+            </Link>
+          ))}
         </nav>
       </div>
     </header>

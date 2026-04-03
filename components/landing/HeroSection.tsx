@@ -29,38 +29,50 @@ export default function HeroSection() {
   return (
     <section
       ref={heroRef}
-      className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50/30 via-landing-bg to-blue-50/30 px-6 pt-20"
+      className="relative flex min-h-[86vh] items-center justify-center overflow-hidden bg-gradient-to-b from-white to-landing-bg px-6 pt-20"
     >
-      <div className="max-w-4xl mx-auto text-center space-y-8">
-        {/* Main Heading */}
-        <h1 className="fade-in-element font-playfair text-5xl md:text-6xl lg:text-7xl font-bold text-landing-text leading-tight">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[radial-gradient(circle_at_top,rgba(61,115,122,0.12),transparent_65%)]" />
+
+      <div className="mx-auto flex w-full max-w-5xl flex-col items-center space-y-8 text-center">
+        <span className="fade-in-element inline-flex items-center rounded-full border border-landing-border bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-landing-accent">
+          Free EPUB Library
+        </span>
+
+        <h1 className="fade-in-element font-playfair text-5xl font-semibold leading-tight text-landing-text md:text-6xl lg:text-7xl">
           One Man. One Soul.
           <br />
           One Revolution.
         </h1>
 
-        {/* Subtitle */}
-        <p className="fade-in-element font-inter text-xl md:text-2xl text-landing-text max-w-2xl mx-auto leading-relaxed">
+        <p className="fade-in-element mx-auto max-w-3xl text-lg leading-relaxed text-landing-text-muted md:text-2xl md:leading-relaxed">
           A quiet rebellion against systems that dehumanize, silence, and
           fracture the human spirit.
         </p>
 
-        {/* Manifesto */}
-        <p className="fade-in-element font-crimson italic text-lg md:text-xl text-landing-text-muted max-w-xl mx-auto">
+        <p className="fade-in-element mx-auto max-w-2xl font-crimson text-lg italic text-landing-text-muted md:text-xl">
           This is not a movement you join.
           <br />
           It's a truth you remember.
         </p>
 
-        {/* CTA */}
-        <div className="fade-in-element pt-4">
+        <div className="fade-in-element flex flex-wrap items-center justify-center gap-3 pt-3">
+          <Link
+            href="/library"
+            className="brand-button min-w-[10rem]"
+          >
+            Explore Library
+          </Link>
           <Link
             href="#donate"
-            className="inline-block px-8 py-4 bg-landing-accent text-white font-semibold rounded-lg hover:bg-landing-accent-secondary transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-landing-accent/30"
+            className="ghost-button min-w-[10rem]"
           >
             Support the Revolution
           </Link>
         </div>
+
+        <p className="fade-in-element text-sm text-landing-text-muted">
+          No account required. No paywall. Read in peace.
+        </p>
       </div>
     </section>
   );

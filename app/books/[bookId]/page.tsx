@@ -5,6 +5,8 @@ import { authOptions } from '@/lib/auth';
 import Link from 'next/link';
 import Image from 'next/image';
 import DonationSection from '@/components/DonationSection';
+import Header from '@/components/landing/Header';
+import Footer from '@/components/landing/Footer';
 
 export default async function BookDetailsPage({
   params,
@@ -39,22 +41,23 @@ export default async function BookDetailsPage({
   const progress = session?.user?.id && book.readingProgress?.[0];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        {/* Back button */}
+    <main className="page-shell">
+      <Header />
+
+      <div className="page-container py-10 sm:py-14">
         <Link
-          href="/"
-          className="inline-flex items-center text-gray-600 hover:text-gray-900 mb-6"
+          href="/library"
+          className="ghost-button mb-8 px-4 py-2"
         >
           ← Back to Library
         </Link>
 
-        <div className="grid md:grid-cols-3 gap-8">
+        <div className="grid gap-8 lg:grid-cols-3">
           {/* Left column - Cover and actions */}
-          <div className="md:col-span-1">
-            <div className="bg-white rounded-lg shadow-lg p-6 sticky top-8">
+          <div className="lg:col-span-1">
+            <div className="surface-card sticky top-28 p-6">
               {/* Cover */}
-              <div className="relative aspect-[2/3] mb-6 bg-gradient-to-br from-blue-100 to-purple-100 rounded-lg overflow-hidden">
+              <div className="relative mb-6 aspect-[2/3] overflow-hidden rounded-xl bg-gradient-to-br from-landing-accent/10 to-landing-bg">
                 {book.coverUrl && book.coverUrl !== '/placeholder-cover.jpg' ? (
                   <Image
                     src={book.coverUrl}
@@ -65,7 +68,7 @@ export default async function BookDetailsPage({
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <svg
-                      className="w-24 h-24 text-blue-300"
+                      className="h-24 w-24 text-landing-accent/30"
                       fill="currentColor"
                       viewBox="0 0 20 20"
                     >
@@ -75,52 +78,48 @@ export default async function BookDetailsPage({
                 )}
               </div>
 
-              {/* Primary action */}
               <Link
                 href={`/read/${book.id}`}
-                className="block w-full bg-indigo-600 text-white text-center py-3 rounded-lg hover:bg-indigo-700 transition font-semibold mb-3"
+                className="brand-button mb-4 w-full"
               >
                 {progress ? 'Continue Reading' : 'Start Reading'}
               </Link>
 
-              {/* Progress */}
               {progress && (
                 <div className="mb-4">
-                  <div className="flex justify-between text-sm text-gray-600 mb-1">
+                  <div className="mb-1 flex justify-between text-sm text-landing-text-muted">
                     <span>Progress</span>
                     <span>{Math.round(progress.progress)}%</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="h-2 w-full rounded-full bg-landing-surface-muted">
                     <div
-                      className="bg-indigo-600 h-2 rounded-full transition-all"
+                      className="h-2 rounded-full bg-landing-accent transition-all"
                       style={{ width: `${progress.progress}%` }}
                     />
                   </div>
                 </div>
               )}
 
-              {/* Audiobook */}
               {book.audiobook && (
                 <Link
                   href={`/listen/${book.id}`}
-                  className="block w-full bg-green-600 text-white text-center py-3 rounded-lg hover:bg-green-700 transition font-semibold mb-3"
+                  className="mb-4 block w-full rounded-xl border border-landing-border bg-white py-3 text-center font-semibold text-landing-text transition-colors hover:border-landing-accent/40 hover:text-landing-accent"
                 >
                   🎧 Listen to Audiobook
                 </Link>
               )}
 
-              {/* Print-on-Demand Links */}
               {(book.amazonKdpUrl || book.printLinks.length > 0) && (
-                <div className="border-t pt-4 mt-4">
-                  <h3 className="font-semibold text-gray-900 mb-3">
-                    Get Print Edition
+                <div className="mt-6 border-t border-landing-border pt-5">
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-landing-text-muted">
+                    Print Editions
                   </h3>
                   {book.amazonKdpUrl && (
                     <a
                       href={book.amazonKdpUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block w-full bg-yellow-400 text-gray-900 text-center py-2 rounded-lg hover:bg-yellow-500 transition font-medium mb-2"
+                      className="mb-2 block w-full rounded-xl border border-landing-border bg-landing-surface-muted py-2 text-center text-sm font-medium text-landing-text transition-colors hover:border-landing-accent/30 hover:text-landing-accent"
                     >
                       📚 Amazon
                     </a>
@@ -131,7 +130,7 @@ export default async function BookDetailsPage({
                       href={link.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block w-full bg-gray-100 text-gray-900 text-center py-2 rounded-lg hover:bg-gray-200 transition mb-2"
+                      className="mb-2 block w-full rounded-xl border border-landing-border bg-landing-surface-muted py-2 text-center text-sm text-landing-text transition-colors hover:border-landing-accent/30 hover:text-landing-accent"
                     >
                       {link.provider} ({link.format})
                     </a>
@@ -139,11 +138,10 @@ export default async function BookDetailsPage({
                 </div>
               )}
 
-              {/* Admin edit */}
               {session?.user?.role === 'ADMIN' && (
                 <Link
                   href={`/admin/books/${book.id}`}
-                  className="block w-full bg-gray-100 text-gray-700 text-center py-2 rounded-lg hover:bg-gray-200 transition mt-3"
+                  className="mt-3 block w-full rounded-xl border border-landing-border bg-white py-2 text-center text-sm text-landing-text-muted transition-colors hover:border-landing-accent/30 hover:text-landing-accent"
                 >
                   Edit (Admin)
                 </Link>
@@ -152,50 +150,47 @@ export default async function BookDetailsPage({
           </div>
 
           {/* Right column - Details */}
-          <div className="md:col-span-2 space-y-6">
-            {/* Book info */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <div className="space-y-6 lg:col-span-2">
+            <div className="surface-card p-6 sm:p-8">
+              <h1 className="font-playfair text-4xl font-semibold text-landing-text">
                 {book.title}
               </h1>
-              <p className="text-xl text-gray-600 mb-4">{book.author}</p>
+              <p className="mt-2 text-xl text-landing-text-muted">{book.author}</p>
 
-              {/* Rich metadata */}
-              <div className="flex flex-wrap gap-3 mb-6">
-                <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium">
+              <div className="mb-6 mt-5 flex flex-wrap gap-2">
+                <span className="rounded-full bg-landing-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-landing-accent">
                   {book.status}
                 </span>
                 {book.language && book.language !== 'en' && (
-                  <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                  <span className="rounded-full bg-landing-surface-muted px-3 py-1 text-xs text-landing-text-muted">
                     {book.language.toUpperCase()}
                   </span>
                 )}
                 {book.publisher && (
-                  <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
+                  <span className="rounded-full bg-landing-surface-muted px-3 py-1 text-xs text-landing-text-muted">
                     {book.publisher}
                   </span>
                 )}
                 {book.publishedAt && (
-                  <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
+                  <span className="rounded-full bg-landing-surface-muted px-3 py-1 text-xs text-landing-text-muted">
                     {new Date(book.publishedAt).getFullYear()}
                   </span>
                 )}
                 {book.isbn && (
-                  <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-mono">
+                  <span className="rounded-full bg-landing-surface-muted px-3 py-1 font-mono text-xs text-landing-text-muted">
                     ISBN: {book.isbn}
                   </span>
                 )}
               </div>
 
-              {/* Subjects/Tags */}
               {book.subjects && book.subjects.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Categories</h3>
+                  <h3 className="mb-2 text-sm font-semibold text-landing-text-muted">Categories</h3>
                   <div className="flex flex-wrap gap-2">
                     {book.subjects.map((subject, index) => (
                       <span
                         key={index}
-                        className="px-2 py-1 bg-purple-50 text-purple-700 rounded text-xs"
+                        className="rounded-full border border-landing-border bg-white px-3 py-1 text-xs text-landing-text-muted"
                       >
                         {subject}
                       </span>
@@ -204,18 +199,16 @@ export default async function BookDetailsPage({
                 </div>
               )}
 
-              {/* Description */}
               {book.description && (
-                <div className="prose max-w-none">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">About this book</h3>
-                  <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+                <div>
+                  <h3 className="mb-2 text-lg font-semibold text-landing-text">About this book</h3>
+                  <p className="whitespace-pre-wrap leading-relaxed text-landing-text-muted">
                     {book.description}
                   </p>
                 </div>
               )}
             </div>
 
-            {/* Donation section */}
             {book.donationEnabled && (
               <DonationSection
                 bookId={book.id}
@@ -225,26 +218,25 @@ export default async function BookDetailsPage({
               />
             )}
 
-            {/* Supplementary Content */}
             {book.supplementaryContents && book.supplementaryContents.length > 0 && (
-              <div className="border-t pt-8 mt-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Explore More</h2>
-                <div className="grid gap-6">
+              <div className="space-y-4">
+                <h2 className="font-playfair text-3xl font-semibold text-landing-text">Explore More</h2>
+                <div className="grid gap-4">
                   {book.supplementaryContents.map((item) => (
-                    <div key={item.id} className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+                    <div key={item.id} className="surface-card p-6">
                       {item.type === 'VIDEO' && (
                         <div>
-                          <h3 className="text-lg font-semibold mb-3">{item.title}</h3>
+                          <h3 className="mb-3 text-lg font-semibold text-landing-text">{item.title}</h3>
                           {item.url && (
-                             <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
+                             <div className="aspect-video overflow-hidden rounded-xl border border-landing-border bg-landing-surface-muted">
                                 {item.url.includes('youtube.com') || item.url.includes('youtu.be') ? (
                                    <iframe 
                                      src={item.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/')}
-                                     className="w-full h-full"
+                                     className="h-full w-full"
                                      allowFullScreen
                                    />
                                 ) : (
-                                   <a href={item.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center h-full text-blue-600 hover:underline">
+                                   <a href={item.url} target="_blank" rel="noopener noreferrer" className="flex h-full items-center justify-center text-landing-accent hover:underline">
                                      Watch Video ↗
                                    </a>
                                 )}
@@ -255,14 +247,14 @@ export default async function BookDetailsPage({
                       
                       {item.type === 'ARTICLE' && (
                         <div>
-                          <h3 className="text-lg font-semibold mb-2">{item.title}</h3>
+                          <h3 className="mb-2 text-lg font-semibold text-landing-text">{item.title}</h3>
                           {item.content && (
-                            <div className="prose prose-sm text-gray-600 mb-3 whitespace-pre-wrap">
+                            <div className="mb-3 whitespace-pre-wrap text-sm leading-relaxed text-landing-text-muted">
                               {item.content.length > 300 ? `${item.content.slice(0, 300)}...` : item.content}
                             </div>
                           )}
                           {item.url && (
-                            <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 font-medium hover:underline">
+                            <a href={item.url} target="_blank" rel="noopener noreferrer" className="font-medium text-landing-accent hover:text-landing-accent-secondary">
                               Read Full Article ↗
                             </a>
                           )}
@@ -270,28 +262,28 @@ export default async function BookDetailsPage({
                       )}
 
                       {item.type === 'POEM' && (
-                        <div className="text-center bg-gray-50 p-6 rounded-lg italic font-serif">
-                          <h3 className="text-xl font-semibold mb-4 not-italic font-sans">{item.title}</h3>
-                          <div className="whitespace-pre-wrap text-gray-800 leading-relaxed max-w-lg mx-auto">
+                        <div className="surface-muted p-6 text-center font-serif italic">
+                          <h3 className="mb-4 font-playfair text-2xl font-semibold not-italic text-landing-text">{item.title}</h3>
+                          <div className="mx-auto max-w-lg whitespace-pre-wrap leading-relaxed text-landing-text-muted">
                             {item.content}
                           </div>
                           {item.author && (
-                            <p className="mt-4 text-gray-500 not-italic">— {item.author}</p>
+                            <p className="mt-4 text-sm text-landing-text-muted not-italic">— {item.author}</p>
                           )}
                         </div>
                       )}
 
                       {item.type === 'QUOTE' && (
-                        <div className="border-l-4 border-indigo-500 pl-6 py-2 my-2">
-                           <blockquote className="text-xl font-medium italic text-gray-900 mb-2">
+                        <div className="my-2 border-l-4 border-landing-accent pl-6 py-2">
+                           <blockquote className="mb-2 text-xl font-medium italic text-landing-text">
                              "{item.content}"
                            </blockquote>
                            {item.author && (
-                             <cite className="text-sm text-gray-500 font-medium not-italic">
+                             <cite className="text-sm font-medium not-italic text-landing-text-muted">
                                — {item.author}
                              </cite>
                            )}
-                           {item.title && <p className="text-xs text-gray-400 mt-1">{item.title}</p>}
+                           {item.title && <p className="mt-1 text-xs text-landing-text-muted">{item.title}</p>}
                         </div>
                       )}
                     </div>
@@ -302,6 +294,8 @@ export default async function BookDetailsPage({
           </div>
         </div>
       </div>
-    </div>
+
+      <Footer />
+    </main>
   );
 }

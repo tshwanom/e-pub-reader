@@ -1,8 +1,5 @@
-'use client';
-
 import Link from 'next/link';
 import Image from 'next/image';
-import { useState } from 'react';
 
 interface BookCardProps {
   id: string;
@@ -13,30 +10,21 @@ interface BookCardProps {
 }
 
 export default function BookCard({ id, title, author, description, coverUrl }: BookCardProps) {
-  const [isHovered, setIsHovered] = useState(false);
-
   return (
-    <div
-      className="group bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      style={{
-        transform: isHovered ? 'translateY(-8px)' : 'translateY(0)',
-      }}
-    >
+    <article className="group surface-card flex h-full flex-col overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
       {/* Book Cover */}
-      <div className="relative aspect-[2/3] bg-gradient-to-br from-landing-accent/10 to-landing-accent-secondary/10 overflow-hidden">
+      <div className="relative aspect-[2/3] overflow-hidden bg-gradient-to-br from-landing-accent/10 to-landing-bg">
         {coverUrl && coverUrl !== '/placeholder-cover.jpg' ? (
           <Image
             src={coverUrl}
             alt={title}
             fill
-            className="object-cover"
+            className="object-cover transition-transform duration-500 group-hover:scale-[1.02]"
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
             <svg
-              className="w-20 h-20 text-landing-accent/30"
+              className="h-20 w-20 text-landing-accent/30"
               fill="currentColor"
               viewBox="0 0 20 20"
             >
@@ -47,25 +35,25 @@ export default function BookCard({ id, title, author, description, coverUrl }: B
       </div>
 
       {/* Book Info */}
-      <div className="p-6 flex-1 flex flex-col">
-        <h3 className="font-inter text-xl font-semibold text-landing-text mb-2 line-clamp-2">
+      <div className="flex flex-1 flex-col p-6">
+        <h3 className="line-clamp-2 font-inter text-xl font-semibold text-landing-text">
           {title}
         </h3>
-        <p className="font-inter text-sm text-landing-text-muted mb-3">
+        <p className="mt-2 font-inter text-sm text-landing-text-muted">
           {author}
         </p>
-        <p className="font-inter text-sm text-landing-text-muted leading-relaxed line-clamp-3 mb-4 flex-1">
+        <p className="mb-5 mt-3 line-clamp-3 flex-1 text-sm leading-relaxed text-landing-text-muted">
           {description}
         </p>
 
         {/* CTA */}
         <Link
           href={`/books/${id}`}
-          className="inline-flex items-center text-landing-accent hover:text-landing-accent-secondary font-semibold transition-colors duration-200"
+          className="inline-flex items-center text-sm font-semibold text-landing-accent transition-colors duration-200 hover:text-landing-accent-secondary"
         >
           Read Free
           <svg
-            className="w-4 h-4 ml-2 transition-transform duration-200 group-hover:translate-x-1"
+            className="ml-2 h-4 w-4 transition-transform duration-200 group-hover:translate-x-1"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -73,12 +61,12 @@ export default function BookCard({ id, title, author, description, coverUrl }: B
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeWidth={2}
+              strokeWidth={2.2}
               d="M9 5l7 7-7 7"
             />
           </svg>
         </Link>
       </div>
-    </div>
+    </article>
   );
 }
