@@ -1,52 +1,62 @@
-# Deploying Next.js to Plesk
+# One-Command Plesk Deployment
 
-This guide explains how to quickly and reliably deploy your Next.js application to a Plesk server using the custom `pack-for-plesk.js` script.
+You can now deploy with a single command:
 
-## 1. Build and Package Locally
+```bash
+npm run deploy:plesk
+```
 
-Instead of running `npm run build` directly on your server, which is slow and often results in out-of-memory errors, use the custom packing script:
+The command builds the app, uploads it to your Plesk server, extracts it, installs dependencies, runs Prisma steps, and restarts the app.
 
-1. Open your terminal in the project directory.
-2. Run the build command:
-   ```bash
-   npm run build:plesk
-   ```
-3. Once completed, a file named `plesk-deploy.zip` will be generated in your project folder.
+## 1) One-time setup
 
-## 2. Upload to Plesk
+1. Make sure your Plesk app is already created once in **Websites & Domains → Node.js**.
+2. In Plesk Node.js settings, keep:
+   - **Application mode**: `production`
+   - **Application startup file**: `server.js`
+   - **Application root**: your deploy path (usually `httpdocs`)
+3. Keep your production `.env` file on the server in your app root.
+4. Configure local deploy variables in your local `.env` (not committed):
 
-1. Log in to your **Plesk Control Panel**.
-2. Navigate to **Websites & Domains** -> **[Your Domain name]**.
-3. Click on the **File Manager** and open the root directory for your domain (usually `httpdocs` or a custom directory you set).
-4. Click **Upload** and upload the `plesk-deploy.zip` file you generated.
-5. Once uploaded, select the `.zip` file in the File Manager, click **Archive** -> **Extract Files**, and replace the existing content. Keep your `.env` file since it is not included in the zip archive for security reasons.
+```env
+PLESK_SSH_HOST="your.server.com"
+PLESK_SSH_USER="your-ssh-user"
+PLESK_SSH_PORT="22"
+PLESK_REMOTE_PATH="/var/www/vhosts/yourdomain.com/httpdocs"
+PLESK_SSH_KEY="" # optional
+PLESK_RUN_MIGRATIONS="true"
+```
 
-## 3. Configure Node.js Extension in Plesk
+## 2) Deploy
 
-Ensure your domain has Node.js support enabled. In the **Websites & Domains** section for your domain:
+From your project root, run:
 
-1. Click on **Node.js** (or "Node.js App" if already enabled).
-2. Configure the following settings:
-   - **Document Root**: MUST point to the root directory folder you extracted the files in (e.g., `/httpdocs`). **DO NOT** point it to `.next` or `public`.
-   - **Application Mode**: `production`
-   - **Application Root**: The same as the Document Root (e.g., `/httpdocs`).
-   - **Application Startup File**: `server.js` (this is explicit, Next.js uses our custom one)
-3. Under the **Package Management** section in the Node.js panel:
-   - Click the **NPM Install** button. This will quickly install only the production dependencies since you uploaded the `package.json` and `package-lock.json`. This is much faster than uploading `node_modules`.
+```bash
+npm run deploy:plesk
+```
 
-## 4. Run Prisma Migrations (Optional)
+## 3) What this command does
 
-If you made changes to the database schema:
+`npm run deploy:plesk` performs all of this automatically:
 
-1. Access your Plesk via SSH. OR open the Plesk Terminal.
-2. Navigate to your application root folder (e.g., `cd httpdocs`).
-3. Run the migrations:
-   ```bash
-   npx prisma migrate deploy
-   ```
+1. Runs `npm run build:plesk` (build + create `plesk-deploy.zip`)
+2. Uploads the zip to your server with SSH/SCP
+3. Extracts it in `PLESK_REMOTE_PATH`
+4. Runs install command (`npm ci --no-audit --no-fund` by default)
+5. Runs `npx prisma generate`
+6. Runs `npx prisma migrate deploy` (unless disabled)
+7. Restarts app using `mkdir -p tmp && touch tmp/restart.txt` (default)
 
-## 5. Restart Application
+## 4) Optional knobs (all in `.env`)
 
-1. Go back to the **Node.js** section in your Plesk domain dashboard.
-2. Click **Restart App**.
-3. Visit your website to ensure the deployment is successful.
+- `PLESK_RUN_PRISMA_GENERATE="false"` → skip Prisma generate
+- `PLESK_RUN_MIGRATIONS="false"` → skip DB migrations
+- `PLESK_SKIP_BUILD="true"` → skip local build/package
+- `PLESK_INSTALL_COMMAND="npm install --no-audit --no-fund"` → custom install command
+- `PLESK_RESTART_COMMAND="..."` → custom restart command for your server setup
+
+## 5) Notes
+
+- Requires local `ssh` and `scp` commands available in PATH.
+- Keep secrets in `.env` only.
+- If your server does not use Passenger restart behavior, set `PLESK_RESTART_COMMAND` to your real restart command.

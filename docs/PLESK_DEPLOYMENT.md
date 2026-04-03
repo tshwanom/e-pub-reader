@@ -2,6 +2,25 @@
 
 This guide covers deploying the ePub Reader Platform to a Plesk server.
 
+## Quick Start (One Command)
+
+If your Plesk app and SSH access are already configured, deploy with:
+
+```bash
+npm run deploy:plesk
+```
+
+This command builds, uploads, extracts, installs dependencies, runs Prisma steps, and restarts the app automatically.
+
+Set these in your local `.env` first:
+
+```env
+PLESK_SSH_HOST="your.server.com"
+PLESK_SSH_USER="your-ssh-user"
+PLESK_SSH_PORT="22"
+PLESK_REMOTE_PATH="/var/www/vhosts/yourdomain.com/httpdocs"
+```
+
 ## Prerequisites
 
 - Plesk server with Node.js support
