@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const readline = require('readline');
 const dotenv = require('dotenv');
 
 const ROOT_DIR = path.join(__dirname, '..');
@@ -10,14 +11,14 @@ const NPM_CMD = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 dotenv.config({ path: path.join(ROOT_DIR, '.env') });
 dotenv.config({ path: path.join(ROOT_DIR, '.env.local') });
 
-const PLESK_SSH_HOST = (process.env.PLESK_SSH_HOST || '').trim();
-const PLESK_SSH_USER = (process.env.PLESK_SSH_USER || '').trim();
-const PLESK_SSH_PORT = (process.env.PLESK_SSH_PORT || '22').trim();
-const PLESK_REMOTE_PATH = (process.env.PLESK_REMOTE_PATH || '').trim();
-const PLESK_SSH_KEY = (process.env.PLESK_SSH_KEY || '').trim();
-const PLESK_REMOTE_ZIP_NAME = (process.env.PLESK_REMOTE_ZIP_NAME || ZIP_NAME).trim();
-const PLESK_INSTALL_COMMAND = (process.env.PLESK_INSTALL_COMMAND || 'npm ci --no-audit --no-fund').trim();
-const PLESK_RESTART_COMMAND = (process.env.PLESK_RESTART_COMMAND || 'mkdir -p tmp && touch tmp/restart.txt').trim();
+let PLESK_SSH_HOST = (process.env.PLESK_SSH_HOST || '').trim();
+let PLESK_SSH_USER = (process.env.PLESK_SSH_USER || '').trim();
+let PLESK_SSH_PORT = (process.env.PLESK_SSH_PORT || '22').trim();
+let PLESK_REMOTE_PATH = (process.env.PLESK_REMOTE_PATH || '').trim();
+let PLESK_SSH_KEY = (process.env.PLESK_SSH_KEY || '').trim();
+let PLESK_REMOTE_ZIP_NAME = (process.env.PLESK_REMOTE_ZIP_NAME || ZIP_NAME).trim();
+let PLESK_INSTALL_COMMAND = (process.env.PLESK_INSTALL_COMMAND || 'npm ci --no-audit --no-fund').trim();
+let PLESK_RESTART_COMMAND = (process.env.PLESK_RESTART_COMMAND || 'mkdir -p tmp && touch tmp/restart.txt').trim();
 
 const RUN_PRISMA_GENERATE = parseBoolean(process.env.PLESK_RUN_PRISMA_GENERATE, true);
 const RUN_MIGRATIONS = parseBoolean(process.env.PLESK_RUN_MIGRATIONS, true);
@@ -73,27 +74,122 @@ function fail(message) {
   process.exit(1);
 }
 
-function validateRequiredConfig() {
+function getMissingRequiredConfig() {
   const required = {
     PLESK_SSH_HOST,
     PLESK_SSH_USER,
     PLESK_REMOTE_PATH
   };
 
-  const missing = Object.entries(required)
+  return Object.entries(required)
     .filter(([, value]) => !value)
     .map(([key]) => key);
+}
+
+function escapeEnvValue(value) {
+  return String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"');
+}
+
+function upsertEnvVariable(filePath, key, value) {
+  const line = `${key}="${escapeEnvValue(value)}"`;
+  const keyPattern = new RegExp(`^\\s*${key}\\s*=.*$`, 'm');
+
+  let content = '';
+  if (fs.existsSync(filePath)) {
+    content = fs.readFileSync(filePath, 'utf8');
+  }
+
+  if (keyPattern.test(content)) {
+    content = content.replace(keyPattern, line);
+  } else {
+    content = `${content.trimEnd()}\n${line}\n`;
+  }
+
+  fs.writeFileSync(filePath, content, 'utf8');
+}
+
+function askQuestion(rl, promptText, defaultValue = '') {
+  const suffix = defaultValue ? ` (${defaultValue})` : '';
+  return new Promise((resolve) => {
+    rl.question(`${promptText}${suffix}: `, (answer) => {
+      const value = answer.trim();
+      resolve(value || defaultValue);
+    });
+  });
+}
+
+async function promptForMissingConfig(missingKeys) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return;
+  }
+
+  console.log('\n⚙️ Missing required Plesk config. Let\'s set it once and continue.');
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  try {
+    if (missingKeys.includes('PLESK_SSH_HOST')) {
+      PLESK_SSH_HOST = (await askQuestion(rl, 'Plesk SSH host', 'your.server.com')).trim();
+    }
+
+    if (missingKeys.includes('PLESK_SSH_USER')) {
+      PLESK_SSH_USER = (await askQuestion(rl, 'Plesk SSH username', 'root')).trim();
+    }
+
+    if (missingKeys.includes('PLESK_REMOTE_PATH')) {
+      PLESK_REMOTE_PATH = (await askQuestion(
+        rl,
+        'Remote deploy path',
+        '/var/www/vhosts/yourdomain.com/httpdocs'
+      )).trim();
+    }
+
+    PLESK_SSH_PORT = (await askQuestion(rl, 'SSH port', PLESK_SSH_PORT || '22')).trim() || '22';
+
+    const keyInput = await askQuestion(
+      rl,
+      'SSH private key path (optional, leave blank to use default SSH agent)',
+      PLESK_SSH_KEY
+    );
+    PLESK_SSH_KEY = keyInput.trim();
+
+    const saveValues = await askQuestion(rl, 'Save these values to .env for future deploys? (Y/n)', 'Y');
+    if (parseBoolean(saveValues, true)) {
+      const envPath = path.join(ROOT_DIR, '.env');
+      upsertEnvVariable(envPath, 'PLESK_SSH_HOST', PLESK_SSH_HOST);
+      upsertEnvVariable(envPath, 'PLESK_SSH_USER', PLESK_SSH_USER);
+      upsertEnvVariable(envPath, 'PLESK_SSH_PORT', PLESK_SSH_PORT || '22');
+      upsertEnvVariable(envPath, 'PLESK_REMOTE_PATH', PLESK_REMOTE_PATH);
+      upsertEnvVariable(envPath, 'PLESK_SSH_KEY', PLESK_SSH_KEY);
+      console.log('✅ Saved Plesk deployment settings to .env');
+    }
+  } finally {
+    rl.close();
+  }
+}
+
+function validateRequiredConfig() {
+  const missing = getMissingRequiredConfig();
 
   if (missing.length > 0) {
     fail(
       `Missing required deployment variables: ${missing.join(', ')}. ` +
-      'Add them to your .env file (see .env.example).'
+      'Add them to your .env file (see .env.example), or rerun in an interactive terminal to be prompted.'
     );
   }
 }
 
-try {
+async function main() {
   console.log('🚀 Starting one-command Plesk deployment...');
+
+  const missingBeforePrompt = getMissingRequiredConfig();
+  if (missingBeforePrompt.length > 0) {
+    await promptForMissingConfig(missingBeforePrompt);
+  }
 
   validateRequiredConfig();
 
@@ -167,6 +263,8 @@ try {
 
   console.log('\n✅ Deployment complete!');
   console.log('If your Plesk setup uses a custom restart flow, set PLESK_RESTART_COMMAND in .env.');
-} catch (error) {
-  fail(error.message || 'Deployment failed.');
 }
+
+main().catch((error) => {
+  fail(error.message || 'Deployment failed.');
+});

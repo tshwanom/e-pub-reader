@@ -35,6 +35,8 @@ From your project root, run:
 npm run deploy:plesk
 ```
 
+If required `PLESK_*` values are missing, the script now prompts you in the terminal and can save them to your local `.env` automatically.
+
 ## 3) What this command does
 
 `npm run deploy:plesk` performs all of this automatically:

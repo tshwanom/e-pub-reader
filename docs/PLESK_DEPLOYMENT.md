@@ -12,6 +12,8 @@ npm run deploy:plesk
 
 This command builds, uploads, extracts, installs dependencies, runs Prisma steps, and restarts the app automatically.
 
+If `PLESK_*` deploy variables are missing, the command prompts for them on first run and can persist them to your local `.env`.
+
 Set these in your local `.env` first:
 
 ```env
