@@ -1,11 +1,19 @@
+import { isUserDonor } from '@/lib/book-access';
+import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import Header from '@/components/landing/Header';
 import HeroSection from '@/components/landing/HeroSection';
 import BookCard from '@/components/landing/BookCard';
 import Footer from '@/components/landing/Footer';
 import Link from 'next/link';
+import { getServerSession } from 'next-auth';
+
+export const dynamic = 'force-dynamic';
 
 export default async function LandingPage() {
+  const session = await getServerSession(authOptions);
+  const isDonor = await isUserDonor(session?.user?.id);
+
   // Fetch published books
   const books = await prisma.book.findMany({
     where: { status: 'PUBLISHED' },
@@ -103,14 +111,15 @@ export default async function LandingPage() {
             The Writings
           </h2>
           <div className="mt-6 space-y-4 text-lg leading-relaxed text-landing-text-muted">
-            <p>These books are free.</p>
+            <p>Most of these books are free.</p>
             <p>
               Not as a promotion.
               <br />
               Not as a tactic.
               <br />
-              But because truth cannot be sold without being compromised.
+              But because truth should travel further than any sales funnel.
             </p>
+            <p>Some special editions are reserved for donors who keep the work independent.</p>
           </div>
         </div>
 
@@ -125,11 +134,13 @@ export default async function LandingPage() {
                   author={book.author}
                   description={book.description}
                   coverUrl={book.coverUrl}
+                  donorOnly={book.donorOnly}
+                  isAccessible={!book.donorOnly || isDonor}
                 />
               ))}
             </div>
             <p className="mt-8 text-center italic text-landing-text-muted">
-              No account. No paywall. No obligation.
+              Read freely, and support if you want deeper access to donor releases.
             </p>
           </>
         ) : (
@@ -151,10 +162,10 @@ export default async function LandingPage() {
             Support the Work
           </h2>
           <div className="mx-auto mb-8 mt-6 max-w-2xl space-y-6 text-lg leading-relaxed text-landing-text-muted">
-            <p>This work is offered freely to everyone.</p>
+            <p>This work is offered freely wherever possible.</p>
             <p>
               If it resonates, you may choose to support its continuation. Your
-              contribution does not purchase access. It preserves independence.
+              contribution preserves independence and unlocks donor-only releases.
             </p>
           </div>
           <Link

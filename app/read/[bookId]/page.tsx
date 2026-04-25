@@ -1,7 +1,9 @@
+import { getBookAccessState } from "@/lib/book-access";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import Reader from "@/components/Reader";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 export default async function ReadBookPage({ params }: { params: Promise<{ bookId: string }> }) {
@@ -15,6 +17,44 @@ export default async function ReadBookPage({ params }: { params: Promise<{ bookI
 
   if (!book || !book.epubFile) {
     notFound();
+  }
+
+  const access = await getBookAccessState(book, session?.user);
+
+  if (!access.hasAccess) {
+    if (!access.isPublished) {
+      notFound();
+    }
+
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-landing-bg px-4 py-12">
+        <div className="surface-card max-w-xl p-8 text-center sm:p-10">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">
+            Donor Library
+          </p>
+          <h1 className="mt-4 font-playfair text-3xl font-semibold text-landing-text sm:text-4xl">
+            “{book.title}” is reserved for donors
+          </h1>
+          <p className="mt-4 text-base leading-relaxed text-landing-text-muted">
+            Support the work once to unlock this title and the rest of the donor collection.
+          </p>
+
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <Link href={`/books/${book.id}`} className="brand-button px-6 py-3">
+              Back to book page
+            </Link>
+            {!session && (
+              <Link
+                href={`/login?callbackUrl=${encodeURIComponent(`/books/${book.id}`)}`}
+                className="ghost-button px-6 py-3"
+              >
+                Sign in
+              </Link>
+            )}
+          </div>
+        </div>
+      </main>
+    );
   }
 
   // TODO: Fetch saved progress if user is logged in
@@ -35,7 +75,7 @@ export default async function ReadBookPage({ params }: { params: Promise<{ bookI
     <div className="h-screen w-screen overflow-hidden">
         {/* We pass the client-side logic to the Reader component */}
         <Reader 
-            url={book.epubFile.fileUrl} 
+            url={`/api/books/${book.id}/file`} 
             initialLocation={initialLocation}
             bookId={book.id}
         />

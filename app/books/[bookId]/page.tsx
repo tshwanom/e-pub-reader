@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { getBookAccessState } from '@/lib/book-access';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -10,10 +11,13 @@ import Footer from '@/components/landing/Footer';
 
 export default async function BookDetailsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ bookId: string }>;
+  searchParams?: Promise<{ donation?: string }>;
 }) {
   const { bookId } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const session = await getServerSession(authOptions);
 
   const book = await prisma.book.findUnique({
@@ -38,7 +42,15 @@ export default async function BookDetailsPage({
     notFound();
   }
 
-  const progress = session?.user?.id && book.readingProgress?.[0];
+  const access = await getBookAccessState(book, session?.user);
+
+  if (!access.isPublished && !access.isPrivileged) {
+    notFound();
+  }
+
+  const progress = access.hasAccess && session?.user?.id ? book.readingProgress?.[0] : null;
+  const donationStatus = resolvedSearchParams?.donation;
+  const loginHref = `/login?callbackUrl=${encodeURIComponent(`/books/${book.id}`)}`;
 
   return (
     <main className="page-shell">
@@ -78,12 +90,28 @@ export default async function BookDetailsPage({
                 )}
               </div>
 
-              <Link
-                href={`/read/${book.id}`}
-                className="brand-button mb-4 w-full"
-              >
-                {progress ? 'Continue Reading' : 'Start Reading'}
-              </Link>
+              {access.hasAccess ? (
+                <Link
+                  href={`/read/${book.id}`}
+                  className="brand-button mb-4 block w-full text-center"
+                >
+                  {progress ? 'Continue Reading' : 'Start Reading'}
+                </Link>
+              ) : session ? (
+                <a
+                  href="#support-this-book"
+                  className="brand-button mb-4 block w-full text-center"
+                >
+                  Donate to Unlock
+                </a>
+              ) : (
+                <Link
+                  href={loginHref}
+                  className="brand-button mb-4 block w-full text-center"
+                >
+                  Sign in to Unlock
+                </Link>
+              )}
 
               {progress && (
                 <div className="mb-4">
@@ -100,7 +128,28 @@ export default async function BookDetailsPage({
                 </div>
               )}
 
-              {book.audiobook && (
+              {book.donorOnly && (
+                <div
+                  className={`mb-4 rounded-2xl border px-4 py-4 ${
+                    access.hasAccess
+                      ? 'border-emerald-200 bg-emerald-50/70'
+                      : 'border-amber-200 bg-amber-50/80'
+                  }`}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-landing-accent">
+                    {access.hasAccess ? 'Donor access active' : 'Donor-only title'}
+                  </p>
+                  <p className="mt-2 text-sm leading-relaxed text-landing-text-muted">
+                    {access.hasAccess
+                      ? 'Thanks for supporting the work — this donor release is unlocked on your account.'
+                      : session
+                        ? 'Make one completed donation to unlock this book and future donor releases.'
+                        : 'Sign in first, then donate to unlock this book and the donor library.'}
+                  </p>
+                </div>
+              )}
+
+              {book.audiobook && access.hasAccess && (
                 <Link
                   href={`/listen/${book.id}`}
                   className="mb-4 block w-full rounded-xl border border-landing-border bg-white py-3 text-center font-semibold text-landing-text transition-colors hover:border-landing-accent/40 hover:text-landing-accent"
@@ -151,6 +200,18 @@ export default async function BookDetailsPage({
 
           {/* Right column - Details */}
           <div className="space-y-6 lg:col-span-2">
+            {donationStatus === 'success' && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 px-5 py-4 text-sm text-emerald-800">
+                Donation received successfully. {book.donorOnly ? 'This donor-only title is now unlocked on your account.' : 'Thank you for supporting the work.'}
+              </div>
+            )}
+
+            {donationStatus === 'failed' && (
+              <div className="rounded-2xl border border-red-200 bg-red-50/80 px-5 py-4 text-sm text-red-700">
+                We couldn’t confirm the donation. Please try again, and if PayPal already charged you, we can reconcile it from the admin side.
+              </div>
+            )}
+
             <div className="surface-card p-6 sm:p-8">
               <h1 className="font-playfair text-4xl font-semibold text-landing-text">
                 {book.title}
@@ -161,6 +222,17 @@ export default async function BookDetailsPage({
                 <span className="rounded-full bg-landing-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-landing-accent">
                   {book.status}
                 </span>
+                {book.donorOnly && (
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                      access.hasAccess
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}
+                  >
+                    {access.hasAccess ? 'Donor Access' : 'Donors Only'}
+                  </span>
+                )}
                 {book.language && book.language !== 'en' && (
                   <span className="rounded-full bg-landing-surface-muted px-3 py-1 text-xs text-landing-text-muted">
                     {book.language.toUpperCase()}
@@ -207,15 +279,62 @@ export default async function BookDetailsPage({
                   </p>
                 </div>
               )}
+
+              {book.donorOnly && !access.hasAccess && (
+                <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/80 p-5">
+                  <h3 className="text-lg font-semibold text-landing-text">This book is part of the donor library</h3>
+                  <p className="mt-2 leading-relaxed text-landing-text-muted">
+                    Access is unlocked after at least one completed donation on your account.
+                    {session
+                      ? ' Once that donation clears, you can open this title immediately.'
+                      : ' Sign in first so we can attach donor access to your library.'}
+                  </p>
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                    {session ? (
+                      <a href="#support-this-book" className="brand-button px-5 py-3 text-center">
+                        Donate and unlock
+                      </a>
+                    ) : (
+                      <Link href={loginHref} className="brand-button px-5 py-3 text-center">
+                        Sign in to continue
+                      </Link>
+                    )}
+                    <Link href="/library" className="ghost-button px-5 py-3 text-center">
+                      Browse library
+                    </Link>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {book.donationEnabled && (
-              <DonationSection
-                bookId={book.id}
-                bookTitle={book.title}
-                message={book.donationMessage}
-                goal={book.donationGoal ? Number(book.donationGoal) : undefined}
-              />
+            {(book.donationEnabled || book.donorOnly) && (
+              <section id="support-this-book">
+                {book.donorOnly && !session ? (
+                  <div className="surface-card p-6 sm:p-8">
+                    <h2 className="font-playfair text-3xl font-semibold text-landing-text">
+                      Sign in before donating
+                    </h2>
+                    <p className="mt-3 leading-relaxed text-landing-text-muted">
+                      Donor access is tied to your account, so please sign in first. Then any completed donation will unlock this book.
+                    </p>
+                    <Link href={loginHref} className="brand-button mt-6 inline-flex px-6 py-3">
+                      Sign in to continue
+                    </Link>
+                  </div>
+                ) : (
+                  <DonationSection
+                    bookId={book.id}
+                    bookTitle={book.title}
+                    message={
+                      book.donationMessage ||
+                      (book.donorOnly
+                        ? 'Make any completed donation to unlock this donor-only book and future donor releases on your account.'
+                        : undefined)
+                    }
+                    goal={book.donationGoal ? Number(book.donationGoal) : undefined}
+                  />
+                )}
+              </section>
             )}
 
             {book.supplementaryContents && book.supplementaryContents.length > 0 && (

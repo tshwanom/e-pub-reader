@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveStoredBookFilePath } from '@/lib/book-storage';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -33,8 +34,7 @@ export async function POST(
     }
 
     // Get local file path
-    const filename = book.epubFile.fileUrl.split('/').pop();
-    const filepath = path.join(process.cwd(), 'public', 'uploads', filename!);
+    const filepath = await resolveStoredBookFilePath(book.epubFile.fileUrl);
 
     // Read EPUB file (it's a ZIP)
     const epubBuffer = await fs.readFile(filepath);

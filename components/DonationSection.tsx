@@ -50,7 +50,7 @@ export default function DonationSection({
         Support “{bookTitle}”
       </h2>
       <p className="text-sm text-landing-text-muted mb-5">
-        Keep this library independent and freely accessible.
+        Help keep the library independent and fund future releases.
       </p>
 
       {message && (

@@ -14,8 +14,8 @@ const nextConfig = {
       },
     ],
   },
+  outputFileTracingRoot: __dirname,
   experimental: {
-    outputFileTracingRoot: __dirname,
     serverActions: {
       bodySizeLimit: '50mb',
     },

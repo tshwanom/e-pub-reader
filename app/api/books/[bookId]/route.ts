@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+import { isPrivilegedUser } from '@/lib/book-access';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
@@ -7,6 +8,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ bookId: string }> }
 ) {
+  const session = await getServerSession(authOptions);
   const { bookId } = await params;
   const { searchParams } = new URL(req.url);
   const includePrintLinks = searchParams.get('include')?.includes('printLinks');
@@ -21,6 +23,9 @@ export async function GET(
   });
 
   if (!book) return NextResponse.json({ error: 'Book not found' }, { status: 404 });
+  if (book.status !== 'PUBLISHED' && !isPrivilegedUser(session?.user)) {
+    return NextResponse.json({ error: 'Book not found' }, { status: 404 });
+  }
 
   return NextResponse.json(book);
 }

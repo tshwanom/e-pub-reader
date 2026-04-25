@@ -1,3 +1,4 @@
+import { isPrivilegedUser, isUserDonor } from "@/lib/book-access";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { getServerSession } from "next-auth";
@@ -6,11 +7,15 @@ import Header from "@/components/landing/Header";
 import BookCard from "@/components/landing/BookCard";
 import Footer from "@/components/landing/Footer";
 
+export const dynamic = 'force-dynamic';
+
 export default async function LibraryPage() {
   const session = await getServerSession(authOptions);
+  const privileged = isPrivilegedUser(session?.user);
+  const isDonor = privileged ? true : await isUserDonor(session?.user?.id);
   
-  // Fetch all books for library (not just published)
   const books = await prisma.book.findMany({
+    where: privileged ? undefined : { status: 'PUBLISHED' },
     orderBy: { createdAt: "desc" },
     include: { epubFile: true }
   });
@@ -27,7 +32,8 @@ export default async function LibraryPage() {
             Library
           </h1>
           <p className="mt-4 text-lg leading-relaxed text-landing-text-muted">
-            Browse all available books in one calm, distraction-free reading catalog.
+            Browse the full catalog in one calm, distraction-free reading space.
+            Some titles are marked for sustaining donors.
           </p>
         </div>
 
@@ -55,6 +61,8 @@ export default async function LibraryPage() {
                 author={book.author}
                 description={book.description}
                 coverUrl={book.coverUrl}
+                donorOnly={book.donorOnly}
+                isAccessible={privileged || !book.donorOnly || isDonor}
               />
             ))}
           </div>

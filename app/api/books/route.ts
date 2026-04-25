@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { saveBookUpload } from '@/lib/book-storage';
 import { prisma } from '@/lib/prisma';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
@@ -161,12 +162,7 @@ export async function POST(req: NextRequest) {
     // Generate unique filename
     const timestamp = Date.now();
     const filename = `${timestamp}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-    await mkdir(uploadsDir, { recursive: true });
-
-    // Save EPUB file
-    const filepath = path.join(uploadsDir, filename);
-    await writeFile(filepath, buffer);
+    const uploadedBookFile = await saveBookUpload(filename, buffer);
 
     // Save cover if extracted
     let coverUrl = '/placeholder-cover.jpg';
@@ -203,7 +199,7 @@ export async function POST(req: NextRequest) {
         publishedAt: metadata.publishedDate ? new Date(metadata.publishedDate) : null,
         epubFile: {
           create: {
-            fileUrl: `/uploads/${filename}`,
+            fileUrl: uploadedBookFile.fileUrl,
             fileSize: buffer.length,
             mimeType: 'application/epub+zip',
           },

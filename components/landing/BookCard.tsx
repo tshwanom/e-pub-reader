@@ -7,13 +7,35 @@ interface BookCardProps {
   author: string;
   description: string;
   coverUrl: string;
+  donorOnly?: boolean;
+  isAccessible?: boolean;
 }
 
-export default function BookCard({ id, title, author, description, coverUrl }: BookCardProps) {
+export default function BookCard({
+  id,
+  title,
+  author,
+  description,
+  coverUrl,
+  donorOnly = false,
+  isAccessible = !donorOnly,
+}: BookCardProps) {
+  const ctaLabel = donorOnly
+    ? isAccessible
+      ? 'Open donor edition'
+      : 'Donor access'
+    : 'Read free';
+
   return (
     <article className="group surface-card flex h-full flex-col overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
       {/* Book Cover */}
       <div className="relative aspect-[2/3] overflow-hidden bg-gradient-to-br from-landing-accent/10 to-landing-bg">
+        {donorOnly && (
+          <div className="absolute left-3 top-3 z-10 rounded-full border border-white/40 bg-black/55 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white backdrop-blur-sm">
+            {isAccessible ? 'Donor edition' : 'Donors only'}
+          </div>
+        )}
+
         {coverUrl && coverUrl !== '/placeholder-cover.jpg' ? (
           <Image
             src={coverUrl}
@@ -36,6 +58,11 @@ export default function BookCard({ id, title, author, description, coverUrl }: B
 
       {/* Book Info */}
       <div className="flex flex-1 flex-col p-6">
+        {donorOnly && (
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-landing-accent">
+            {isAccessible ? 'Unlocked for donors' : 'Reserved for donors'}
+          </p>
+        )}
         <h3 className="line-clamp-2 font-inter text-xl font-semibold text-landing-text">
           {title}
         </h3>
@@ -51,7 +78,7 @@ export default function BookCard({ id, title, author, description, coverUrl }: B
           href={`/books/${id}`}
           className="inline-flex items-center text-sm font-semibold text-landing-accent transition-colors duration-200 hover:text-landing-accent-secondary"
         >
-          Read Free
+          {ctaLabel}
           <svg
             className="ml-2 h-4 w-4 transition-transform duration-200 group-hover:translate-x-1"
             fill="none"

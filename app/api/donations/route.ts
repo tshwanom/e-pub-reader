@@ -39,6 +39,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
   }
 
+  const book = bookId
+    ? await prisma.book.findUnique({
+        where: { id: bookId },
+        select: {
+          id: true,
+          title: true,
+          donorOnly: true,
+          status: true,
+        },
+      })
+    : null;
+
+  if (bookId && !book) {
+    return NextResponse.json({ error: 'Book not found' }, { status: 404 });
+  }
+
+  if (book && book.status !== 'PUBLISHED') {
+    return NextResponse.json({ error: 'Book not available for donations' }, { status: 400 });
+  }
+
+  if (book?.donorOnly && !session?.user?.id) {
+    return NextResponse.json(
+      { error: 'Please sign in before donating to unlock donor-only books.' },
+      { status: 401 }
+    );
+  }
+
   try {
     const accessToken = await getPayPalAccessToken();
 
@@ -57,14 +84,14 @@ export async function POST(req: NextRequest) {
               currency_code: 'USD',
               value: amount.toFixed(2),
             },
-            description: bookId
-              ? `Donation for book ${bookId}`
+            description: book
+              ? `Support for “${book.title}”`
               : 'General donation',
           },
         ],
         application_context: {
           return_url: `${process.env.NEXTAUTH_URL}/api/donations/success`,
-          cancel_url: `${process.env.NEXTAUTH_URL}/books/${bookId}`,
+          cancel_url: `${process.env.NEXTAUTH_URL}${book ? `/books/${book.id}` : '/library'}`,
         },
       }),
     });
@@ -83,7 +110,7 @@ export async function POST(req: NextRequest) {
     await prisma.donation.create({
       data: {
         userId: session?.user?.id,
-        bookId,
+        bookId: book?.id,
         amount,
         currency: 'USD',
         paypalId: orderData.id,
@@ -95,6 +122,13 @@ export async function POST(req: NextRequest) {
     const approvalUrl = orderData.links.find(
       (link: any) => link.rel === 'approve'
     )?.href;
+
+    if (!approvalUrl) {
+      return NextResponse.json(
+        { error: 'PayPal approval URL missing from response' },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ approvalUrl });
   } catch (error) {

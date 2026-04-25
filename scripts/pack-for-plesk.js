@@ -10,7 +10,13 @@ console.log('🚀 Starting Next.js Production Build for Plesk...');
 try {
   // 1. Run the build
   console.log('Running npm run build...');
-  execSync('npm run build', { stdio: 'inherit' });
+  execSync('npm run build', {
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      NODE_ENV: 'production',
+    },
+  });
   console.log('✅ Build successful.');
 
   // 2. Create a file to stream archive data to.

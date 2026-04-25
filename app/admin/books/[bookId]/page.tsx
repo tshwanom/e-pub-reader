@@ -25,6 +25,7 @@ interface BookForm {
   author: string;
   description: string;
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  donorOnly: boolean;
   donationEnabled: boolean;
   donationMessage?: string;
   donationGoal?: number;
@@ -43,6 +44,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
   
   const { register, handleSubmit, reset, control, watch } = useForm<BookForm>({
     defaultValues: {
+      donorOnly: false,
       printLinks: [],
       supplementaryContents: [],
     },
@@ -75,6 +77,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
         author: data.author,
         description: data.description,
         status: data.status,
+        donorOnly: data.donorOnly || false,
         donationEnabled: data.donationEnabled || false,
         donationMessage: data.donationMessage || '',
         donationGoal: data.donationGoal ? Number(data.donationGoal) : undefined,
@@ -230,6 +233,26 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
               <option value="PUBLISHED">Published</option>
               <option value="ARCHIVED">Archived</option>
             </select>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow space-y-4">
+          <h2 className="text-lg font-semibold mb-4">Access</h2>
+
+          <div className="flex items-start">
+            <input
+              type="checkbox"
+              {...register('donorOnly')}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <div className="ml-3">
+              <label className="block text-sm font-medium text-gray-700">
+                Restrict this book to donors
+              </label>
+              <p className="mt-1 text-sm text-gray-500">
+                Readers must sign in and have at least one completed donation before they can open this title.
+              </p>
+            </div>
           </div>
         </div>
 

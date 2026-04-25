@@ -4,6 +4,8 @@ import { Metadata } from 'next';
 import Header from '@/components/landing/Header';
 import Footer from '@/components/landing/Footer';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Blog | One Man Revolution',
   description: 'Articles and essays from our collection.',
