@@ -1,64 +1,27 @@
-# One-Command Plesk Deployment
+# Plesk Server-Side Deployment
 
-You can now deploy with a single command:
+This guide explains how to deploy your application directly on your Plesk server using the Plesk Node.js UI. This method requires no SSH configuration and no manual uploading of ZIP files.
 
-```bash
-npm run deploy:plesk
-```
+## 1) Pull the latest code on your Server
 
-The command builds the app, uploads it to your Plesk server, extracts it, installs dependencies, runs Prisma steps, and restarts the app.
+Since you are managing Git yourself, simply ensure the latest version of your code is available on the Plesk server. 
+- You can do this by using the **Plesk Git extension** to pull the latest commit, or by running `git pull` yourself.
 
-## 1) One-time setup
+## 2) Run the Deployment Script in Plesk
 
-1. Make sure your Plesk app is already created once in **Websites & Domains → Node.js**.
-2. In Plesk Node.js settings, keep:
-   - **Application mode**: `production`
-   - **Application startup file**: `server.js`
-   - **Application root**: your deploy path (usually `httpdocs`)
-3. Keep your production `.env` file on the server in your app root.
-4. Configure local deploy variables in your local `.env` (not committed):
+1. Log into your Plesk Panel.
+2. Go to **Websites & Domains** and open the **Node.js** app for your domain.
+3. Click the **Run script** button.
+4. Type `deploy:plesk` and hit Run.
 
-```env
-PLESK_SSH_HOST="your.server.com"
-PLESK_SSH_USER="your-ssh-user"
-PLESK_SSH_PORT="22"
-PLESK_REMOTE_PATH="/var/www/vhosts/yourdomain.com/httpdocs"
-PLESK_SSH_KEY="" # optional
-PLESK_RUN_MIGRATIONS="true"
-```
+This single script (`scripts/deploy-plesk.js`) will execute the following steps locally on your server:
+1. `npm install` (Installs/updates packages)
+2. `npx prisma generate` (Generates the database client for the server's OS)
+3. `npm run build` (Compiles the Next.js production build)
 
-## 2) Deploy
+## 3) Restart the App
 
-From your project root, run:
+Once the script finishes successfully:
+1. In the Node.js Plesk UI, click the **Restart App** button.
 
-```bash
-npm run deploy:plesk
-```
-
-If required `PLESK_*` values are missing, the script now prompts you in the terminal and can save them to your local `.env` automatically.
-
-## 3) What this command does
-
-`npm run deploy:plesk` performs all of this automatically:
-
-1. Runs `npm run build:plesk` (build + create `plesk-deploy.zip`)
-2. Uploads the zip to your server with SSH/SCP
-3. Extracts it in `PLESK_REMOTE_PATH`
-4. Runs install command (`npm ci --no-audit --no-fund` by default)
-5. Runs `npx prisma generate`
-6. Runs `npx prisma migrate deploy` (unless disabled)
-7. Restarts app using `mkdir -p tmp && touch tmp/restart.txt` (default)
-
-## 4) Optional knobs (all in `.env`)
-
-- `PLESK_RUN_PRISMA_GENERATE="false"` → skip Prisma generate
-- `PLESK_RUN_MIGRATIONS="false"` → skip DB migrations
-- `PLESK_SKIP_BUILD="true"` → skip local build/package
-- `PLESK_INSTALL_COMMAND="npm install --no-audit --no-fund"` → custom install command
-- `PLESK_RESTART_COMMAND="..."` → custom restart command for your server setup
-
-## 5) Notes
-
-- Requires local `ssh` and `scp` commands available in PATH.
-- Keep secrets in `.env` only.
-- If your server does not use Passenger restart behavior, set `PLESK_RESTART_COMMAND` to your real restart command.
+Your server is now running the latest version!
