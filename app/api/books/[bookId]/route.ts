@@ -55,9 +55,9 @@ export async function PATCH(
     // Handle print links and supplementary content separately
     const { printLinks, supplementaryContents, ...bookData } = data;
 
-    // Sanitize numeric fields that might come in as empty strings
+    // Sanitize numeric fields that might come in as empty strings, null, or undefined
     if ('donationGoal' in bookData) {
-      if (bookData.donationGoal === '' || bookData.donationGoal === null) {
+      if (bookData.donationGoal === '' || bookData.donationGoal == null || isNaN(Number(bookData.donationGoal))) {
         bookData.donationGoal = null;
       } else {
         bookData.donationGoal = Number(bookData.donationGoal);
