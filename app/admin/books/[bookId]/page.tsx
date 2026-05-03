@@ -154,7 +154,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <h1 className="text-2xl font-bold">Edit Book</h1>
         <button
           onClick={handleDelete}
@@ -168,7 +168,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
         {/* Cover Section */}
         <div className="bg-white p-6 rounded-lg shadow">
           <h2 className="text-lg font-semibold mb-4">Cover Image</h2>
-          <div className="flex gap-4 items-start">
+          <div className="flex flex-col sm:flex-row gap-4 items-start">
             <div className="w-32 h-48 bg-gray-100 rounded overflow-hidden flex-shrink-0">
               {coverUrl && coverUrl !== '/placeholder-cover.jpg' ? (
                 <img src={coverUrl} alt="Cover" className="w-full h-full object-cover" />
@@ -328,22 +328,22 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
             </div>
 
             {printLinkFields.map((field, index) => (
-              <div key={field.id} className="flex gap-3 mb-3 p-3 bg-gray-50 rounded">
-                <div className="flex-1">
+              <div key={field.id} className="flex flex-col sm:flex-row gap-3 mb-3 p-3 bg-gray-50 rounded">
+                <div className="flex-1 w-full">
                   <input
                     {...register(`printLinks.${index}.provider` as const)}
                     placeholder="Provider name (e.g., IngramSpark)"
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                   />
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 w-full">
                   <input
                     {...register(`printLinks.${index}.url` as const)}
                     placeholder="https://..."
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                   />
                 </div>
-                <div className="w-32">
+                <div className="w-full sm:w-32">
                   <select
                     {...register(`printLinks.${index}.format` as const)}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
@@ -355,7 +355,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
                 <button
                   type="button"
                   onClick={() => removePrintLink(index)}
-                  className="text-red-600 hover:text-red-800 px-2"
+                  className="text-red-600 hover:text-red-800 px-2 sm:self-center self-start"
                 >
                   ✕
                 </button>
@@ -370,17 +370,17 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
           </div>
         </div>
 
-        <div className="flex gap-4 pt-4">
+        <div className="flex flex-col sm:flex-row gap-4 pt-4">
           <button
             type="submit"
-            className="flex-1 bg-indigo-600 text-white py-2 px-4 rounded hover:bg-indigo-700 transition"
+            className="flex-1 bg-indigo-600 text-white py-3 sm:py-2 px-4 rounded hover:bg-indigo-700 transition"
           >
             Save Changes
           </button>
           <button
             type="button"
             onClick={() => router.back()}
-            className="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded hover:bg-gray-200 transition"
+            className="flex-1 bg-gray-100 text-gray-700 py-3 sm:py-2 px-4 rounded hover:bg-gray-200 transition"
           >
             Cancel
           </button>
