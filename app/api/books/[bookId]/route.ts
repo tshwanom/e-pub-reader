@@ -8,26 +8,35 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ bookId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  const { bookId } = await params;
-  const { searchParams } = new URL(req.url);
-  const includePrintLinks = searchParams.get('include')?.includes('printLinks');
-  const includeSupplementary = searchParams.get('include')?.includes('supplementaryContents');
+  try {
+    const session = await getServerSession(authOptions);
+    const { bookId } = await params;
+    const { searchParams } = new URL(req.url);
+    const includePrintLinks = searchParams.get('include')?.includes('printLinks');
+    const includeSupplementary = searchParams.get('include')?.includes('supplementaryContents');
 
-  const book = await prisma.book.findUnique({
-    where: { id: bookId },
-    include: {
-      printLinks: includePrintLinks,
-      supplementaryContents: includeSupplementary,
-    },
-  });
+    const include: any = {};
+    if (includePrintLinks) include.printLinks = true;
+    if (includeSupplementary) include.supplementaryContents = true;
 
-  if (!book) return NextResponse.json({ error: 'Book not found' }, { status: 404 });
-  if (book.status !== 'PUBLISHED' && !isPrivilegedUser(session?.user)) {
-    return NextResponse.json({ error: 'Book not found' }, { status: 404 });
+    const book = await prisma.book.findUnique({
+      where: { id: bookId },
+      ...(Object.keys(include).length > 0 ? { include } : {}),
+    });
+
+    if (!book) return NextResponse.json({ error: 'Book not found' }, { status: 404 });
+    if (book.status !== 'PUBLISHED' && !isPrivilegedUser(session?.user)) {
+      return NextResponse.json({ error: 'Book not found' }, { status: 404 });
+    }
+
+    return NextResponse.json(book);
+  } catch (error) {
+    console.error('GET Book Error:', error);
+    return NextResponse.json(
+      { error: 'Internal Server Error', details: error instanceof Error ? error.message : String(error) },
+      { status: 500 }
+    );
   }
-
-  return NextResponse.json(book);
 }
 
 export async function PATCH(

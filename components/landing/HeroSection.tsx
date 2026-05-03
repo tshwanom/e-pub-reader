@@ -35,7 +35,7 @@ export default function HeroSection() {
 
       <div className="mx-auto flex w-full max-w-5xl flex-col items-center space-y-8 text-center">
         <span className="fade-in-element inline-flex items-center rounded-full border border-landing-border bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-landing-accent">
-          Free EPUB Library
+          The truth shall set you free
         </span>
 
         <h1 className="fade-in-element font-playfair text-5xl font-semibold leading-tight text-landing-text md:text-6xl lg:text-7xl">
