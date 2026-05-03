@@ -161,11 +161,15 @@ export default async function LandingPage() {
           <h2 className="font-playfair text-4xl font-semibold text-landing-text md:text-5xl">
             Support the Work
           </h2>
-          <div className="mx-auto mb-8 mt-6 max-w-2xl space-y-6 text-lg leading-relaxed text-landing-text-muted">
-            <p>This work is offered freely wherever possible.</p>
+          <div className="mx-auto mb-8 mt-6 max-w-3xl space-y-6 text-lg leading-relaxed text-landing-text-muted">
             <p>
-              If it resonates, you may choose to support its continuation. Your
-              contribution preserves independence and unlocks donor-only releases.
+              We provide most of our books for free, with some reserved for our donors to keep the One Man Revolution alive.
+            </p>
+            <p>
+              We need to convert our books to audiobooks, as well as dubbing and translating them into other languages. Furthermore, the servers that host this library cost money to maintain.
+            </p>
+            <p>
+              If it resonates, you may choose to support its continuation. Your contribution preserves our independence and makes this expansion possible. If you cannot donate, we encourage you to at least share our work to help spread the word.
             </p>
           </div>
           <Link
