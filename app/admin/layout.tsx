@@ -20,7 +20,7 @@ export default async function AdminLayout({
         <div className="p-4 md:p-6 flex items-center justify-between">
           <h2 className="text-xl md:text-2xl font-bold text-gray-800">Admin Panel</h2>
         </div>
-        <nav className="flex flex-row overflow-x-auto md:flex-col border-b md:border-b-0 md:mt-6 pb-2 md:pb-0 scrollbar-hide flex-1">
+        <nav className="flex flex-row overflow-x-auto md:flex-col border-b md:border-b-0 md:mt-6 pb-2 md:pb-0 scrollbar-hide md:flex-1">
           <Link
             href="/admin"
             className="block px-4 md:px-6 py-2 md:py-3 text-gray-700 hover:bg-gray-100 whitespace-nowrap text-sm md:text-base"
