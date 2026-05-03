@@ -55,6 +55,15 @@ export async function PATCH(
     // Handle print links and supplementary content separately
     const { printLinks, supplementaryContents, ...bookData } = data;
 
+    // Sanitize numeric fields that might come in as empty strings
+    if ('donationGoal' in bookData) {
+      if (bookData.donationGoal === '' || bookData.donationGoal === null) {
+        bookData.donationGoal = null;
+      } else {
+        bookData.donationGoal = Number(bookData.donationGoal);
+      }
+    }
+
     // Update book
     await prisma.book.update({
       where: { id: bookId },
