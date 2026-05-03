@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default async function Footer() {
   // Fetch social links from database
@@ -11,13 +12,16 @@ export default async function Footer() {
       <div className="page-container py-7 sm:py-8">
         <div className="surface-muted px-5 py-4 sm:px-6 sm:py-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="min-w-0">
-              <p className="font-playfair text-lg font-semibold text-landing-text sm:text-xl">
-                One Man Revolution
-              </p>
-              <p className="mt-1 text-xs text-landing-text-muted sm:text-sm">
-                A quiet space for long-form truth.
-              </p>
+            <div className="min-w-0 flex items-center gap-3">
+              <Image src="/logo.png" alt="OMR Logo" width={40} height={40} className="rounded-full" />
+              <div>
+                <p className="font-playfair text-lg font-semibold text-landing-text sm:text-xl">
+                  One Man Revolution
+                </p>
+                <p className="mt-1 text-xs text-landing-text-muted sm:text-sm">
+                  A quiet space for long-form truth.
+                </p>
+              </div>
             </div>
 
             <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs sm:text-sm">

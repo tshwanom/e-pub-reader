@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import Image from 'next/image';
 
 export default async function Header() {
   const session = await getServerSession(authOptions);
@@ -19,9 +20,7 @@ export default async function Header() {
           href="/"
           className="group inline-flex items-center gap-3 rounded-xl px-1 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2"
         >
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-landing-accent text-xs font-semibold tracking-wide text-white shadow-sm">
-            OMR
-          </span>
+          <Image src="/logo.png" alt="OMR Logo" width={36} height={36} className="rounded-full shadow-sm" />
           <span className="font-playfair text-lg font-semibold text-landing-text transition-colors group-hover:text-landing-accent">
             One Man Revolution
           </span>
