@@ -30,11 +30,18 @@ interface SearchResult {
   excerpt: string;
 }
 
+interface StandaloneNote {
+  id: string;
+  cfi: string;
+  content: string;
+  createdAt: string;
+}
+
 type Theme = 'light' | 'dark' | 'sepia';
 type Flow = 'paginated' | 'scrolled';
 type FontFamily = 'Crimson Pro' | 'Inter' | 'Georgia';
 type LineSpacing = 1.4 | 1.6 | 1.9;
-type SidePanel = 'toc' | 'highlights' | 'bookmarks' | null;
+type SidePanel = 'toc' | 'highlights' | 'notes' | 'bookmarks' | null;
 
 const FONT_FAMILIES: { label: string; value: FontFamily }[] = [
   { label: 'Serif', value: 'Crimson Pro' },
@@ -109,16 +116,30 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
   const [progressPct, setProgressPct] = useState(0);
   const [editingHighlight, setEditingHighlight] = useState<Highlight | null>(null);
   const [editNote, setEditNote] = useState('');
+  const [pendingColor, setPendingColor] = useState('yellow');
+  const [pendingNote, setPendingNote] = useState('');
+  const [inlinePanelEditId, setInlinePanelEditId] = useState<string | null>(null);
+  const [inlinePanelNote, setInlinePanelNote] = useState('');
   const [isFading, setIsFading] = useState(false);
   const [goToInput, setGoToInput] = useState('');
   const [showGoTo, setShowGoTo] = useState(false);
-  const [currentBookmark, setCurrentBookmark] = useState<string | null>(null); // cfi of bookmark at current location
+  const [currentBookmark, setCurrentBookmark] = useState<string | null>(null);
+  const [standaloneNotes, setStandaloneNotes] = useState<StandaloneNote[]>([]);
+  const [showQuickNote, setShowQuickNote] = useState(false);
+  const [quickNoteText, setQuickNoteText] = useState('');
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingNoteText, setEditingNoteText] = useState('');
 
   const locationTimeout = useRef<NodeJS.Timeout | null>(null);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
   const currentCfiRef = useRef<string | null>(null);
   const isFirstRelocate = useRef(true);
+  // Always-current mirror of highlights — used inside epub.js annotation callbacks
+  // to avoid stale closures when notes are edited after registration.
+  const highlightsRef = useRef<Highlight[]>([]);
+  // Tracks which CFIs have already been registered so we never double-register.
+  const registeredHighlightCfis = useRef<Set<string>>(new Set());
 
   // ── First-time tour ──────────────────────────────────────────────
   useEffect(() => {
@@ -177,16 +198,18 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
     }
   }, [bookId]);
 
-  // Load highlights and bookmarks
+  // Load highlights, bookmarks and notes
   useEffect(() => {
     const loadAnnotations = async () => {
       try {
-        const [hRes, bRes] = await Promise.all([
+        const [hRes, bRes, nRes] = await Promise.all([
           fetch(`/api/highlights?bookId=${bookId}`),
           fetch(`/api/bookmarks?bookId=${bookId}`),
+          fetch(`/api/notes?bookId=${bookId}`),
         ]);
         if (hRes.ok) setHighlights(await hRes.json());
         if (bRes.ok) setBookmarks(await bRes.json());
+        if (nRes.ok) setStandaloneNotes(await nRes.json());
       } catch (error) {
         console.error('Failed to load annotations', error);
       }
@@ -239,7 +262,7 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
       rendition.themes.select(theme);
       rendition.themes.fontSize(`${fontSize}%`);
       rendition.themes.font(fontFamily);
-      rendition.themes.override({ 'line-height': String(lineSpacing) });
+      rendition.themes.override('line-height', String(lineSpacing));
 
       // Display book — resume position when two-page/flow mode changes
       const resumeAt = currentCfiRef.current ?? initialLocation;
@@ -313,23 +336,44 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
 
     return () => {
       destroyed = true;
+      // Clear the registered-CFI set so highlights are re-annotated on the
+      // fresh rendition after a re-initialization.
+      registeredHighlightCfis.current.clear();
       if (locationTimeout.current) clearTimeout(locationTimeout.current);
       renditionInstance?.destroy();
     };
   }, [url, twoPage, flow]); // Re-initialize if URL, page-spread, or flow mode changes
 
-  // Load and apply highlights separately
+  // Keep the ref in sync so annotation callbacks always see the latest note text.
+  useEffect(() => {
+    highlightsRef.current = highlights;
+  }, [highlights]);
+
+  // Register NEW highlights only — never re-register an already-annotated CFI.
+  // This prevents stale-closure bugs (old note showing on click) and duplicate
+  // event listeners that would fire the modal multiple times per click.
   useEffect(() => {
     if (!renditionRef.current || highlights.length === 0) return;
-    
+
     highlights.forEach((h) => {
+      if (registeredHighlightCfis.current.has(h.cfi)) return;
+
       renditionRef.current?.annotations.highlight(
         h.cfi,
         {},
         () => {
-          setEditingHighlight(h);
-          setEditNote(h.note || '');
-        }, 'hl-' + h.color, { fill: h.color, 'fill-opacity': '0.3' });
+          // Read from ref — always gets the latest note even after edits.
+          const current = highlightsRef.current.find(x => x.id === h.id);
+          if (current) {
+            setEditingHighlight(current);
+            setEditNote(current.note || '');
+          }
+        },
+        'hl-' + h.color,
+        { fill: h.color, 'fill-opacity': '0.3' }
+      );
+
+      registeredHighlightCfis.current.add(h.cfi);
     });
   }, [highlights]);
 
@@ -366,25 +410,22 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
   // Line spacing
   const changeLineSpacing = useCallback((spacing: LineSpacing) => {
     setLineSpacing(spacing);
-    renditionRef.current?.themes.override({ 'line-height': String(spacing) });
+    renditionRef.current?.themes.override('line-height', String(spacing));
   }, []);
 
-  // Add highlight
-  const addHighlight = async (color: string) => {
+  // Add highlight (color + optional note in one step)
+  const addHighlight = async () => {
     if (!selectedText) return;
-    
+    const color = pendingColor;
+    const note = pendingNote.trim() || undefined;
+
     try {
       const res = await fetch('/api/highlights', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bookId,
-          cfi: selectedText.cfi,
-          text: selectedText.text,
-          color,
-        }),
+        body: JSON.stringify({ bookId, cfi: selectedText.cfi, text: selectedText.text, color, note }),
       });
-      
+
       if (res.ok) {
         const newHighlight = await res.json();
         setHighlights([...highlights, newHighlight]);
@@ -392,8 +433,8 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
           newHighlight.cfi,
           {},
           () => {
-            setEditingHighlight(newHighlight);
-            setEditNote(newHighlight.note || '');
+            const current = highlightsRef.current.find(x => x.id === newHighlight.id);
+            if (current) { setEditingHighlight(current); setEditNote(current.note || ''); }
           },
           'hl-' + color,
           { fill: color, 'fill-opacity': '0.3' }
@@ -402,8 +443,10 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
     } catch (error) {
       console.error('Failed to add highlight', error);
     }
-    
+
     setSelectedText(null);
+    setPendingNote('');
+    setPendingColor('yellow');
   };
 
   // Save highlight note
@@ -432,10 +475,53 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
       await fetch(`/api/highlights?id=${id}`, { method: 'DELETE' });
       setHighlights(highlights.filter(h => h.id !== id));
       renditionRef.current?.annotations.remove(cfi, 'highlight');
+      // Allow re-registration if this CFI is ever highlighted again.
+      registeredHighlightCfis.current.delete(cfi);
     } catch (error) {
       console.error('Failed to delete highlight', error);
     }
     setEditingHighlight(null);
+  };
+
+  // Save a standalone note at current CFI
+  const saveQuickNote = async () => {
+    const cfi = currentCfiRef.current;
+    const text = quickNoteText.trim();
+    if (!cfi || !text) return;
+    try {
+      const res = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookId, cfi, content: text }),
+      });
+      if (res.ok) {
+        const note = await res.json();
+        setStandaloneNotes(prev => [note, ...prev]);
+      }
+    } catch (e) { console.error(e); }
+    setShowQuickNote(false);
+    setQuickNoteText('');
+  };
+
+  // Update standalone note content
+  const updateStandaloneNote = async (id: string, content: string) => {
+    try {
+      const res = await fetch(`/api/notes/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      });
+      if (res.ok) setStandaloneNotes(prev => prev.map(n => n.id === id ? { ...n, content } : n));
+    } catch (e) { console.error(e); }
+    setEditingNoteId(null);
+  };
+
+  // Delete standalone note
+  const deleteStandaloneNote = async (id: string) => {
+    try {
+      await fetch(`/api/notes/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      setStandaloneNotes(prev => prev.filter(n => n.id !== id));
+    } catch (e) { console.error(e); }
   };
 
   // Toggle bookmark at current location
@@ -624,6 +710,22 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
             </svg>
           </button>
 
+          {/* Notes panel toggle */}
+          <button
+            onClick={() => setSidePanel(sidePanel === 'notes' ? null : 'notes')}
+            aria-label="My notes"
+            aria-pressed={sidePanel === 'notes'}
+            className={`flex h-9 w-9 items-center justify-center rounded-full backdrop-blur-sm transition focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
+              sidePanel === 'notes'
+                ? 'bg-landing-accent text-white'
+                : 'bg-black/25 text-white hover:bg-black/45'
+            }`}
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
+
           {/* Bookmark toggle */}
           <button
             onClick={toggleBookmark}
@@ -696,15 +798,26 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
             Back to Library
           </button>
 
-          <button
-            onClick={() => { setShowMenu(false); setSidePanel('toc'); }}
-            className="mb-5 flex items-center gap-2 rounded-xl bg-landing-accent px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-landing-accent-secondary"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h10" />
-            </svg>
-            Table of Contents
-          </button>
+          <div className="mb-5 flex gap-2">
+            <button
+              onClick={() => { setShowMenu(false); setSidePanel('toc'); }}
+              className="flex flex-1 items-center gap-2 rounded-xl bg-landing-accent px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-landing-accent-secondary"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h10" />
+              </svg>
+              Contents
+            </button>
+            <button
+              onClick={() => { setShowMenu(false); setSidePanel('notes'); }}
+              className="flex flex-1 items-center gap-2 rounded-xl border border-landing-accent px-4 py-3 text-sm font-semibold text-landing-accent transition-colors hover:bg-landing-accent/10"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              My Notes
+            </button>
+          </div>
 
           <div className="mb-4 border-t border-landing-border" />
 
@@ -831,19 +944,31 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
         <div className="flex h-full flex-col">
           {/* Tab bar */}
           <div className="flex items-center border-b border-landing-border px-2 pt-2">
-            {(['toc', 'highlights', 'bookmarks'] as SidePanel[]).map((panel) => (
-              <button
-                key={panel!}
-                onClick={() => setSidePanel(panel)}
-                className={`flex-1 rounded-t-lg py-2.5 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
-                  sidePanel === panel
-                    ? 'border-b-2 border-landing-accent text-landing-accent'
-                    : 'text-landing-text-muted hover:text-landing-text'
-                }`}
-              >
-                {panel === 'toc' ? 'Contents' : panel === 'highlights' ? 'Highlights' : 'Bookmarks'}
-              </button>
-            ))}
+            {(['toc', 'highlights', 'notes', 'bookmarks'] as SidePanel[]).map((panel) => {
+              const label = panel === 'toc' ? 'Contents' : panel === 'highlights' ? 'Highlights' : panel === 'notes' ? 'Notes' : 'Bookmarks';
+              const badge = panel === 'notes'
+                ? standaloneNotes.length + highlights.filter(h => h.note).length
+                : panel === 'highlights' ? highlights.length
+                : panel === 'bookmarks' ? bookmarks.length : 0;
+              return (
+                <button
+                  key={panel!}
+                  onClick={() => setSidePanel(panel)}
+                  className={`relative flex-1 rounded-t-lg py-2.5 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
+                    sidePanel === panel
+                      ? 'border-b-2 border-landing-accent text-landing-accent'
+                      : 'text-landing-text-muted hover:text-landing-text'
+                  }`}
+                >
+                  {label}
+                  {badge > 0 && (
+                    <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-landing-accent/15 px-1 text-[10px] font-bold text-landing-accent">
+                      {badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
             <button
               onClick={() => setSidePanel(null)}
               className="ml-2 rounded-full p-2 text-landing-text-muted transition hover:bg-landing-surface-muted hover:text-landing-text focus-visible:ring-2 focus-visible:ring-landing-accent"
@@ -875,45 +1000,265 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
 
           {/* Highlights */}
           {sidePanel === 'highlights' && (
-            <div className="flex-1 overflow-y-auto p-3">
+            <div className="flex-1 overflow-y-auto">
               {highlights.length === 0 ? (
-                <p className="px-3 py-8 text-center text-sm text-landing-text-muted">No highlights yet. Select text to highlight it.</p>
+                <div className="flex flex-col items-center px-6 py-12 text-center">
+                  <svg className="mb-3 h-10 w-10 text-landing-border" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a4 4 0 01-1.414.94l-3.535.884.884-3.535a4 4 0 01.94-1.414z" />
+                  </svg>
+                  <p className="text-sm font-medium text-landing-text">No highlights yet</p>
+                  <p className="mt-1 text-xs text-landing-text-muted">Select any text while reading to highlight it.</p>
+                </div>
               ) : (
-                <div className="space-y-2">
-                  {highlights.map((h) => (
-                    <div
-                      key={h.id}
-                      className="rounded-xl border border-landing-border p-3"
-                      style={{ borderLeftWidth: 4, borderLeftColor: h.color === 'yellow' ? '#f8e16f' : h.color === 'green' ? '#99d98c' : '#90caf9' }}
-                    >
-                      <p className="mb-1 text-sm text-landing-text line-clamp-3">"{h.text}"</p>
-                      {h.note && <p className="mb-2 text-xs text-landing-text-muted italic">{h.note}</p>}
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => { renditionRef.current?.display(h.cfi); setSidePanel(null); }}
-                          className="text-xs text-landing-accent hover:underline"
-                        >
-                          Jump to
-                        </button>
-                        <button
-                          onClick={() => { setEditingHighlight(h); setEditNote(h.note || ''); }}
-                          className="text-xs text-landing-text-muted hover:text-landing-text"
-                        >
-                          Edit note
-                        </button>
-                        <button
-                          onClick={() => deleteHighlight(h.id, h.cfi)}
-                          className="text-xs text-red-400 hover:text-red-600"
-                        >
-                          Delete
-                        </button>
+                <div className="divide-y divide-landing-border">
+                  {highlights.map((h) => {
+                    const accentColor = h.color === 'yellow' ? '#ca8a04' : h.color === 'green' ? '#16a34a' : '#2563eb';
+                    const bgColor    = h.color === 'yellow' ? '#fefce8' : h.color === 'green' ? '#f0fdf4' : '#eff6ff';
+                    const isEditing  = inlinePanelEditId === h.id;
+                    return (
+                      <div key={h.id} className="group px-4 py-4">
+                        {/* Quoted text with colour bar */}
+                        <div className="mb-2 flex gap-2.5">
+                          <div className="mt-0.5 w-1 shrink-0 rounded-full" style={{ backgroundColor: accentColor }} />
+                          <p className="text-sm leading-relaxed text-landing-text">&ldquo;{h.text}&rdquo;</p>
+                        </div>
+
+                        {/* Note display / inline edit */}
+                        {isEditing ? (
+                          <div className="mb-2 ml-3.5">
+                            <textarea
+                              autoFocus
+                              value={inlinePanelNote}
+                              onChange={(e) => setInlinePanelNote(e.target.value)}
+                              onKeyDown={async (e) => {
+                                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                  const res = await fetch(`/api/highlights/${h.id}`, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ note: inlinePanelNote.trim() || null }),
+                                  });
+                                  if (res.ok) setHighlights(highlights.map(x => x.id === h.id ? { ...x, note: inlinePanelNote.trim() || undefined } : x));
+                                  setInlinePanelEditId(null);
+                                }
+                                if (e.key === 'Escape') setInlinePanelEditId(null);
+                              }}
+                              placeholder="Write a note…"
+                              rows={3}
+                              className="w-full resize-none rounded-xl border border-landing-border bg-landing-surface-muted px-3 py-2 text-xs text-landing-text outline-none focus:border-landing-accent focus:ring-1 focus:ring-landing-accent"
+                            />
+                            <div className="mt-1.5 flex gap-2">
+                              <button
+                                onClick={() => setInlinePanelEditId(null)}
+                                className="rounded-lg border border-landing-border px-3 py-1 text-xs text-landing-text-muted transition hover:border-landing-accent/40"
+                              >Cancel</button>
+                              <button
+                                onClick={async () => {
+                                  const res = await fetch(`/api/highlights/${h.id}`, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ note: inlinePanelNote.trim() || null }),
+                                  });
+                                  if (res.ok) setHighlights(highlights.map(x => x.id === h.id ? { ...x, note: inlinePanelNote.trim() || undefined } : x));
+                                  setInlinePanelEditId(null);
+                                }}
+                                className="rounded-lg bg-landing-accent px-3 py-1 text-xs font-semibold text-white transition hover:bg-landing-accent-secondary"
+                              >Save</button>
+                            </div>
+                          </div>
+                        ) : (
+                          h.note ? (
+                            <div
+                              className="mb-2 ml-3.5 cursor-text rounded-lg px-3 py-2 text-xs leading-relaxed text-landing-text transition-colors hover:bg-landing-surface-muted"
+                              style={{ borderLeft: `2px solid ${accentColor}33`, backgroundColor: bgColor }}
+                              onClick={() => { setInlinePanelEditId(h.id); setInlinePanelNote(h.note || ''); }}
+                              title="Click to edit note"
+                            >
+                              {h.note}
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setInlinePanelEditId(h.id); setInlinePanelNote(''); }}
+                              className="mb-2 ml-3.5 flex items-center gap-1 text-xs text-landing-text-muted opacity-0 transition-opacity group-hover:opacity-100 hover:text-landing-accent"
+                            >
+                              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                              Add note
+                            </button>
+                          )
+                        )}
+
+                        {/* Action row */}
+                        <div className="ml-3.5 flex items-center gap-3">
+                          <button
+                            onClick={() => { renditionRef.current?.display(h.cfi); setSidePanel(null); }}
+                            className="flex items-center gap-1 text-xs font-medium text-landing-accent transition hover:text-landing-accent-secondary"
+                          >
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                            Jump to
+                          </button>
+                          <button
+                            onClick={() => deleteHighlight(h.id, h.cfi)}
+                            className="text-xs text-landing-text-muted opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-500"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
           )}
+
+          {/* Notes */}
+          {sidePanel === 'notes' && (() => {
+            // Merge highlight notes + standalone notes into a single sorted list
+            const highlightNoteItems = highlights
+              .filter(h => h.note)
+              .map(h => ({ type: 'highlight' as const, id: h.id, content: h.note!, quote: h.text, color: h.color, cfi: h.cfi, createdAt: '' }));
+            const standaloneItems = standaloneNotes
+              .map(n => ({ type: 'note' as const, id: n.id, content: n.content, quote: '', color: '', cfi: n.cfi, createdAt: n.createdAt }));
+            const all = [...highlightNoteItems, ...standaloneItems];
+
+            return (
+              <div className="flex-1 overflow-y-auto">
+                {all.length === 0 ? (
+                  <div className="flex flex-col items-center px-6 py-12 text-center">
+                    <svg className="mb-3 h-10 w-10 text-landing-border" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    <p className="text-sm font-medium text-landing-text">No notes yet</p>
+                    <p className="mt-1 text-xs leading-relaxed text-landing-text-muted">
+                      Use the pencil button in the toolbar to write a note at any position, or add notes to your highlights.
+                    </p>
+                    <button
+                      onClick={() => { setShowQuickNote(true); setQuickNoteText(''); }}
+                      className="mt-4 rounded-xl bg-landing-accent px-4 py-2 text-xs font-semibold text-white transition hover:bg-landing-accent-secondary"
+                    >
+                      Write a note
+                    </button>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-landing-border">
+                    {/* Quick-add note button at top */}
+                    <button
+                      onClick={() => { setShowQuickNote(true); setQuickNoteText(''); }}
+                      className="flex w-full items-center gap-2 px-4 py-3 text-xs font-semibold text-landing-accent transition hover:bg-landing-accent/5"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Add note at current position
+                    </button>
+
+                    {all.map((item) => {
+                      const accentColor = item.type === 'highlight'
+                        ? (item.color === 'yellow' ? '#ca8a04' : item.color === 'green' ? '#16a34a' : '#2563eb')
+                        : '#3D737A';
+                      const isEditing = editingNoteId === item.id;
+
+                      return (
+                        <div key={`${item.type}-${item.id}`} className="group px-4 py-4">
+                          {/* Source label */}
+                          <div className="mb-2 flex items-center gap-1.5">
+                            <div className="h-2 w-2 rounded-full" style={{ backgroundColor: accentColor }} />
+                            <span className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: accentColor }}>
+                              {item.type === 'highlight' ? 'Highlight note' : 'Note'}
+                            </span>
+                          </div>
+
+                          {/* Quoted text (highlight notes only) */}
+                          {item.quote && (
+                            <p className="mb-2 border-l-2 pl-3 text-xs italic leading-relaxed text-landing-text-muted" style={{ borderColor: accentColor }}>
+                              &ldquo;{item.quote}&rdquo;
+                            </p>
+                          )}
+
+                          {/* Note content — inline editable */}
+                          {isEditing ? (
+                            <div className="mb-2">
+                              <textarea
+                                autoFocus
+                                value={editingNoteText}
+                                onChange={(e) => setEditingNoteText(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                    if (item.type === 'note') updateStandaloneNote(item.id, editingNoteText.trim());
+                                    else {
+                                      fetch(`/api/highlights/${item.id}`, {
+                                        method: 'PATCH',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ note: editingNoteText.trim() || null }),
+                                      }).then(r => { if (r.ok) setHighlights(prev => prev.map(h => h.id === item.id ? { ...h, note: editingNoteText.trim() || undefined } : h)); });
+                                      setEditingNoteId(null);
+                                    }
+                                  }
+                                  if (e.key === 'Escape') setEditingNoteId(null);
+                                }}
+                                rows={4}
+                                className="w-full resize-none rounded-xl border border-landing-border bg-landing-surface-muted px-3 py-2.5 text-sm text-landing-text outline-none focus:border-landing-accent focus:ring-1 focus:ring-landing-accent"
+                              />
+                              <div className="mt-2 flex gap-2">
+                                <button onClick={() => setEditingNoteId(null)} className="rounded-lg border border-landing-border px-3 py-1.5 text-xs text-landing-text-muted transition hover:border-landing-accent/40">Cancel</button>
+                                <button
+                                  onClick={() => {
+                                    if (item.type === 'note') updateStandaloneNote(item.id, editingNoteText.trim());
+                                    else {
+                                      fetch(`/api/highlights/${item.id}`, {
+                                        method: 'PATCH',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ note: editingNoteText.trim() || null }),
+                                      }).then(r => { if (r.ok) setHighlights(prev => prev.map(h => h.id === item.id ? { ...h, note: editingNoteText.trim() || undefined } : h)); });
+                                      setEditingNoteId(null);
+                                    }
+                                  }}
+                                  className="rounded-lg bg-landing-accent px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-landing-accent-secondary"
+                                >Save</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p
+                              className="mb-3 cursor-text rounded-xl bg-landing-surface-muted px-3 py-2.5 text-sm leading-relaxed text-landing-text transition hover:bg-landing-border/40"
+                              onClick={() => { setEditingNoteId(item.id); setEditingNoteText(item.content); }}
+                              title="Click to edit"
+                            >
+                              {item.content}
+                            </p>
+                          )}
+
+                          {/* Actions */}
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => { renditionRef.current?.display(item.cfi); setSidePanel(null); }}
+                              className="flex items-center gap-1 text-xs font-medium text-landing-accent transition hover:text-landing-accent-secondary"
+                            >
+                              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                              Jump to
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (item.type === 'note') deleteStandaloneNote(item.id);
+                                else deleteHighlight(item.id, item.cfi);
+                              }}
+                              className="text-xs text-landing-text-muted opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-500"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Bookmarks */}
           {sidePanel === 'bookmarks' && (
@@ -991,6 +1336,57 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
         </div>
       )}
 
+      {/* ── Quick note modal ─────────────────────────────────────────── */}
+      {showQuickNote && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowQuickNote(false); setQuickNoteText(''); } }}
+        >
+          <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-landing-border bg-white shadow-2xl">
+            {/* Header */}
+            <div className="bg-[#f0f9fa] px-5 pb-4 pt-5">
+              <div className="mb-1 flex items-center gap-2">
+                <svg className="h-4 w-4 text-landing-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-landing-accent">Note at this position</p>
+              </div>
+              <p className="text-xs text-landing-text-muted">This note will be pinned to your current reading location.</p>
+            </div>
+
+            <div className="px-5 py-4">
+              <textarea
+                autoFocus
+                value={quickNoteText}
+                onChange={(e) => setQuickNoteText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) saveQuickNote();
+                  if (e.key === 'Escape') { setShowQuickNote(false); setQuickNoteText(''); }
+                }}
+                placeholder="Write your note… (⌘↵ to save)"
+                rows={5}
+                className="mb-4 w-full resize-none rounded-xl border border-landing-border bg-landing-surface-muted px-4 py-2.5 text-sm text-landing-text outline-none placeholder:text-landing-text-muted/60 focus:border-landing-accent focus:ring-1 focus:ring-landing-accent"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setShowQuickNote(false); setQuickNoteText(''); }}
+                  className="flex-1 rounded-xl border border-landing-border py-2.5 text-sm text-landing-text-muted transition hover:border-landing-accent/40"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveQuickNote}
+                  disabled={!quickNoteText.trim()}
+                  className="flex-1 rounded-xl bg-landing-accent py-2.5 text-sm font-semibold text-white transition hover:bg-landing-accent-secondary disabled:opacity-40"
+                >
+                  Save Note
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Go to location dialog ─────────────────────────────────────── */}
       {showGoTo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setShowGoTo(false); }}>
@@ -1016,58 +1412,115 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
         </div>
       )}
 
-      {/* ── Highlight picker ──────────────────────────────────────────── */}
+      {/* ── Highlight picker — colour + note in one step ─────────────── */}
       {selectedText && (
-        <div className="fixed left-1/2 top-1/2 z-50 w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-landing-border bg-white p-4 shadow-2xl">
-          <p className="mb-1 text-sm font-medium text-landing-text">Highlight selected text</p>
-          <p className="mb-3 line-clamp-2 text-xs text-landing-text-muted">"{selectedText.text}"</p>
-          <div className="mb-3 flex gap-2">
-            {[
-              { color: 'yellow', bg: '#f8e16f' },
-              { color: 'green', bg: '#99d98c' },
-              { color: 'blue', bg: '#90caf9' },
-            ].map(({ color, bg }) => (
-              <button
-                key={color}
-                onClick={() => addHighlight(color)}
-                className="h-10 w-10 rounded-full border border-black/10 transition hover:scale-105"
-                style={{ backgroundColor: bg }}
-                title={`${color} highlight`}
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center" onClick={(e) => { if (e.target === e.currentTarget) { setSelectedText(null); setPendingNote(''); setPendingColor('yellow'); } }}>
+          <div className="w-full max-w-sm rounded-2xl border border-landing-border bg-white shadow-2xl overflow-hidden">
+            {/* Colour strip header */}
+            <div
+              className="px-5 pt-5 pb-4 transition-colors duration-200"
+              style={{ backgroundColor: pendingColor === 'yellow' ? '#fefce8' : pendingColor === 'green' ? '#f0fdf4' : '#eff6ff' }}
+            >
+              <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-landing-text-muted">Highlight</p>
+              <p className="line-clamp-2 text-sm font-medium text-landing-text leading-snug">&ldquo;{selectedText.text}&rdquo;</p>
+            </div>
+
+            <div className="px-5 py-4">
+              {/* Colour swatches */}
+              <div className="mb-4 flex items-center gap-2">
+                {[
+                  { color: 'yellow', bg: '#f8e16f', ring: '#ca8a04' },
+                  { color: 'green',  bg: '#99d98c', ring: '#16a34a' },
+                  { color: 'blue',   bg: '#90caf9', ring: '#2563eb' },
+                ].map(({ color, bg, ring }) => (
+                  <button
+                    key={color}
+                    onClick={() => setPendingColor(color)}
+                    aria-label={`${color} highlight`}
+                    aria-pressed={pendingColor === color}
+                    className="relative h-9 w-9 rounded-full border-2 transition-transform duration-150 hover:scale-110 focus-visible:outline-none"
+                    style={{
+                      backgroundColor: bg,
+                      borderColor: pendingColor === color ? ring : 'transparent',
+                      boxShadow: pendingColor === color ? `0 0 0 3px ${ring}33` : undefined,
+                    }}
+                  >
+                    {pendingColor === color && (
+                      <svg className="absolute inset-0 m-auto h-4 w-4" fill="none" stroke="#fff" strokeWidth={2.5} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                ))}
+                <span className="ml-auto text-xs capitalize text-landing-text-muted">{pendingColor}</span>
+              </div>
+
+              {/* Note textarea */}
+              <textarea
+                value={pendingNote}
+                onChange={(e) => setPendingNote(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addHighlight(); }}
+                placeholder="Add a note… (optional)"
+                rows={3}
+                className="mb-4 w-full resize-none rounded-xl border border-landing-border bg-landing-surface-muted px-4 py-2.5 text-sm text-landing-text outline-none placeholder:text-landing-text-muted/60 focus:border-landing-accent focus:ring-1 focus:ring-landing-accent"
               />
-            ))}
+
+              {/* Actions */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setSelectedText(null); setPendingNote(''); setPendingColor('yellow'); }}
+                  className="flex-1 rounded-xl border border-landing-border py-2.5 text-sm text-landing-text-muted transition hover:border-landing-accent/40 hover:text-landing-text"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={addHighlight}
+                  className="flex-1 rounded-xl bg-landing-accent py-2.5 text-sm font-semibold text-white transition hover:bg-landing-accent-secondary"
+                >
+                  Save Highlight
+                </button>
+              </div>
+            </div>
           </div>
-          <button
-            onClick={() => setSelectedText(null)}
-            className="w-full rounded-xl border border-landing-border bg-landing-surface-muted px-4 py-2 text-sm text-landing-text-muted transition-colors hover:text-landing-text"
-          >
-            Cancel
-          </button>
         </div>
       )}
 
-      {/* ── Highlight note editor ─────────────────────────────────────── */}
+      {/* ── Highlight note editor (opened by tapping a highlight in the book) ── */}
       {editingHighlight && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl border border-landing-border bg-white p-6 shadow-2xl">
-            <h3 className="mb-1 text-base font-semibold text-landing-text">Note</h3>
-            <p className="mb-3 line-clamp-2 text-xs text-landing-text-muted">"{editingHighlight.text}"</p>
-            <textarea
-              autoFocus
-              value={editNote}
-              onChange={(e) => setEditNote(e.target.value)}
-              placeholder="Add a note…"
-              rows={4}
-              className="mb-4 w-full resize-none rounded-xl border border-landing-border bg-landing-surface-muted px-4 py-2.5 text-sm text-landing-text outline-none focus:border-landing-accent focus:ring-1 focus:ring-landing-accent"
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => deleteHighlight(editingHighlight.id, editingHighlight.cfi)}
-                className="rounded-xl border border-red-200 px-3 py-2 text-sm text-red-500 transition hover:bg-red-50"
-              >
-                Delete
-              </button>
-              <button onClick={() => setEditingHighlight(null)} className="flex-1 rounded-xl border border-landing-border py-2 text-sm text-landing-text-muted transition hover:border-landing-accent/40">Cancel</button>
-              <button onClick={saveHighlightNote} className="flex-1 rounded-xl bg-landing-accent py-2 text-sm font-semibold text-white transition hover:bg-landing-accent-secondary">Save</button>
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
+          onClick={(e) => { if (e.target === e.currentTarget) setEditingHighlight(null); }}
+        >
+          <div className="w-full max-w-sm rounded-2xl border border-landing-border bg-white shadow-2xl overflow-hidden">
+            {/* Colour header */}
+            <div
+              className="px-5 pt-5 pb-4"
+              style={{ backgroundColor: editingHighlight.color === 'yellow' ? '#fefce8' : editingHighlight.color === 'green' ? '#f0fdf4' : '#eff6ff' }}
+            >
+              <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-landing-text-muted">Highlight</p>
+              <p className="line-clamp-2 text-sm font-medium text-landing-text leading-snug">&ldquo;{editingHighlight.text}&rdquo;</p>
+            </div>
+            <div className="px-5 py-4">
+              <label className="mb-1.5 block text-xs font-semibold text-landing-text-muted">Your note</label>
+              <textarea
+                autoFocus
+                value={editNote}
+                onChange={(e) => setEditNote(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) saveHighlightNote(); if (e.key === 'Escape') setEditingHighlight(null); }}
+                placeholder="Write a note…"
+                rows={4}
+                className="mb-4 w-full resize-none rounded-xl border border-landing-border bg-landing-surface-muted px-4 py-2.5 text-sm text-landing-text outline-none placeholder:text-landing-text-muted/60 focus:border-landing-accent focus:ring-1 focus:ring-landing-accent"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => deleteHighlight(editingHighlight.id, editingHighlight.cfi)}
+                  className="rounded-xl border border-red-200 px-3 py-2.5 text-sm text-red-500 transition hover:bg-red-50"
+                >
+                  Delete
+                </button>
+                <button onClick={() => setEditingHighlight(null)} className="flex-1 rounded-xl border border-landing-border py-2.5 text-sm text-landing-text-muted transition hover:border-landing-accent/40">Cancel</button>
+                <button onClick={saveHighlightNote} className="flex-1 rounded-xl bg-landing-accent py-2.5 text-sm font-semibold text-white transition hover:bg-landing-accent-secondary">Save</button>
+              </div>
             </div>
           </div>
         </div>
