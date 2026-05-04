@@ -134,6 +134,8 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
   const currentCfiRef = useRef<string | null>(null);
+  const dragWrapperRef = useRef<HTMLDivElement>(null);
+  const swipeCommittedRef = useRef(false);
   const isFirstRelocate = useRef(true);
   // Always-current mirror of highlights — used inside epub.js annotation callbacks
   // to avoid stale closures when notes are edited after registration.
@@ -171,16 +173,51 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
   const onIframeTouchStart = (e: TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
+    if (dragWrapperRef.current) {
+      dragWrapperRef.current.style.transition = 'none';
+    }
+  };
+
+  const onIframeTouchMove = (e: TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const dx = e.touches[0].clientX - touchStartX.current;
+    const dy = e.touches[0].clientY - touchStartY.current;
+    if (Math.abs(dx) > Math.abs(dy) && dragWrapperRef.current) {
+      // Rubber-band: resistance near edges for a natural feel
+      const damped = dx * 0.6;
+      dragWrapperRef.current.style.transform = `translateX(${damped}px)`;
+    }
   };
 
   const onIframeTouchEnd = (e: TouchEvent) => {
     if (touchStartX.current === null || touchStartY.current === null) return;
     const dx = e.changedTouches[0].clientX - touchStartX.current;
     const dy = e.changedTouches[0].clientY - touchStartY.current;
-    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 44) {
-      if (dx < 0) renditionRef.current?.next();
-      else renditionRef.current?.prev();
+
+    const isHorizontal = Math.abs(dx) > Math.abs(dy);
+    const committed = isHorizontal && Math.abs(dx) > 44;
+
+    if (committed && dragWrapperRef.current) {
+      // Snap off-screen in swipe direction, then navigate
+      swipeCommittedRef.current = true;
+      const snapX = dx < 0 ? -window.innerWidth : window.innerWidth;
+      dragWrapperRef.current.style.transition = 'transform 0.22s ease-in';
+      dragWrapperRef.current.style.transform = `translateX(${snapX}px)`;
+      setTimeout(() => {
+        // Instantly reset (new content will render), then navigate
+        if (dragWrapperRef.current) {
+          dragWrapperRef.current.style.transition = 'none';
+          dragWrapperRef.current.style.transform = 'translateX(0)';
+        }
+        if (dx < 0) renditionRef.current?.next();
+        else renditionRef.current?.prev();
+      }, 220);
+    } else if (!committed && dragWrapperRef.current) {
+      // Snap back
+      dragWrapperRef.current.style.transition = 'transform 0.25s ease-out';
+      dragWrapperRef.current.style.transform = 'translateX(0)';
     }
+
     touchStartX.current = null;
     touchStartY.current = null;
   };
@@ -290,6 +327,7 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
 
       // Swipe navigation via epub.js relay (works across the iframe boundary)
       rendition.on('touchstart', onIframeTouchStart);
+      rendition.on('touchmove', onIframeTouchMove);
       rendition.on('touchend', onIframeTouchEnd);
 
       // Handle text selection
@@ -319,11 +357,12 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
         // Update current bookmark state
         setCurrentBookmark(null);
 
-        // Page turn crossfade (skip the very first display)
-        if (!isFirstRelocate.current) {
+        // Page turn crossfade (skip for swipe — animation already played, skip first display)
+        if (!isFirstRelocate.current && !swipeCommittedRef.current) {
           setIsFading(true);
           setTimeout(() => setIsFading(false), 120);
         }
+        swipeCommittedRef.current = false;
         isFirstRelocate.current = false;
 
         locationTimeout.current = setTimeout(() => {
@@ -556,31 +595,23 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
     }
   };
 
-  // In-book search
+  // In-book search — uses epub.js Section.find() which returns proper navigable CFIs
   const runSearch = useCallback(async (query: string) => {
     if (!query.trim() || !bookRef.current) return;
     setIsSearching(true);
     setSearchResults([]);
     try {
       const results: SearchResult[] = [];
+      const book = bookRef.current as any;
       await Promise.all(
-        (bookRef.current.spine as any).spineItems.map(async (item: any) => {
-          const doc = await item.load((bookRef.current as any).load.bind(bookRef.current));
-          const text = doc.body?.textContent || '';
-          const lower = text.toLowerCase();
-          const q = query.toLowerCase();
-          let idx = 0;
-          while ((idx = lower.indexOf(q, idx)) !== -1) {
-            const excerpt = text.slice(Math.max(0, idx - 40), idx + query.length + 40).trim();
-            // Generate a rough CFI — navigate to item start, user gets close enough
-            results.push({ cfi: item.cfiFromElement(doc.body) || item.href, excerpt: `…${excerpt}…` });
-            idx += query.length;
-            if (results.length >= 30) break;
-          }
+        (book.spine.spineItems as any[]).map(async (item: any) => {
+          await item.load(book.load.bind(book));
+          const found: Array<{ cfi: string; excerpt: string }> = item.find(query) || [];
+          results.push(...found);
           item.unload();
         })
       );
-      setSearchResults(results);
+      setSearchResults(results.slice(0, 50));
     } catch (e) {
       console.error('Search failed', e);
     }
@@ -633,21 +664,23 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
         )}
 
         {/* Book canvas */}
-        <div className="flex flex-1 min-h-0 items-center justify-center overflow-hidden p-2 md:p-5">
-          <div
-            ref={viewerRef}
-            className={`overflow-hidden rounded-xl border border-landing-border bg-white shadow-2xl transition-opacity duration-150 ${isFading ? 'opacity-0' : 'opacity-100'}`}
-            style={flow === 'scrolled' ? {
-              width: '100%',
-              maxWidth: '680px',
-              height: '100%',
-            } : {
-              width: '100%',
-              maxWidth: twoPage ? '1100px' : '560px',
-              maxHeight: '100%',
-              aspectRatio: twoPage ? '4 / 3' : '2 / 3',
-            }}
-          />
+        <div className="flex flex-1 min-h-0 items-stretch justify-center overflow-hidden md:p-5 md:items-center">
+          {/* Drag wrapper — translates during swipe animation */}
+          <div ref={dragWrapperRef} className="flex w-full min-h-0 items-stretch justify-center md:items-center" style={{ willChange: 'transform' }}>
+            <div
+              ref={viewerRef}
+              className={`overflow-hidden md:rounded-xl md:border border-landing-border bg-white md:shadow-2xl transition-opacity duration-150 ${isFading ? 'opacity-0' : 'opacity-100'}`}
+              style={flow === 'scrolled' ? {
+                width: '100%',
+                maxWidth: '680px',
+                height: '100%',
+              } : {
+                width: '100%',
+                maxWidth: twoPage ? '1100px' : '560px',
+                height: '100%',
+              }}
+            />
+          </div>
         </div>
 
         {/* Right gutter — desktop next arrow (hidden in scroll mode) */}
