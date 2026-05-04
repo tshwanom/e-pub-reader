@@ -66,11 +66,12 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
   const [selectedText, setSelectedText] = useState<{ cfi: string; text: string } | null>(null);
   const [showTour, setShowTour] = useState(false);
   const [tourStep, setTourStep] = useState(0);
+  const [twoPage, setTwoPage] = useState(false);
 
   const locationTimeout = useRef<NodeJS.Timeout | null>(null);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
-  const resizeHandlerRef = useRef<(() => void) | null>(null);
+  const currentCfiRef = useRef<string | null>(null);
 
   // ── First-time tour ──────────────────────────────────────────────
   useEffect(() => {
@@ -167,7 +168,7 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
         width: container.clientWidth || window.innerWidth,
         height: container.clientHeight || window.innerHeight,
         flow: 'paginated',
-        spread: 'none',
+        spread: twoPage ? 'auto' : 'none',
       }) as Rendition;
 
       renditionInstance = rendition;
@@ -187,9 +188,10 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
       rendition.themes.select(theme);
       rendition.themes.fontSize(`${fontSize}%`);
 
-      // Display book
-      const displayPromise = initialLocation
-        ? rendition.display(initialLocation)
+      // Display book — resume position when two-page mode changes
+      const resumeAt = currentCfiRef.current ?? initialLocation;
+      const displayPromise = resumeAt
+        ? rendition.display(resumeAt)
         : rendition.display();
 
       displayPromise.then(() => {
@@ -199,16 +201,6 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
       // Swipe navigation via epub.js relay (works across the iframe boundary)
       rendition.on('touchstart', onIframeTouchStart);
       rendition.on('touchend', onIframeTouchEnd);
-
-      // Resize: keep paginated layout in sync with viewport
-      resizeHandlerRef.current = () => {
-        if (destroyed || !viewerRef.current) return;
-        rendition.resize(
-          viewerRef.current.clientWidth || window.innerWidth,
-          viewerRef.current.clientHeight || window.innerHeight,
-        );
-      };
-      window.addEventListener('resize', resizeHandlerRef.current);
 
       // Handle text selection
       rendition.on('selected', (cfiRange: string) => {
@@ -222,6 +214,7 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
       // Track location changes
       rendition.on('relocated', (location: any) => {
         if (locationTimeout.current) clearTimeout(locationTimeout.current);
+        currentCfiRef.current = location.start.cfi;
 
         const currentLocation = location.start.index || 0;
         setCurrentPage(currentLocation + 1);
@@ -243,12 +236,8 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
       destroyed = true;
       if (locationTimeout.current) clearTimeout(locationTimeout.current);
       renditionInstance?.destroy();
-      if (resizeHandlerRef.current) {
-        window.removeEventListener('resize', resizeHandlerRef.current);
-        resizeHandlerRef.current = null;
-      }
     };
-  }, [url]); // Only re-initialize if URL changes!
+  }, [url, twoPage]); // Re-initialize if URL or page-spread mode changes
 
   // Load and apply highlights separately
   useEffect(() => {
@@ -263,6 +252,17 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
         }, 'hl-' + h.color, { fill: h.color, 'fill-opacity': '0.3' });
     });
   }, [highlights]);
+
+  // ResizeObserver: keep epub.js pagination in sync with the CSS-sized book container
+  useEffect(() => {
+    if (!isReady || !viewerRef.current) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) renditionRef.current?.resize(width, height);
+    });
+    ro.observe(viewerRef.current);
+    return () => ro.disconnect();
+  }, [isReady]);
 
   // Theme switching
   const changeTheme = useCallback((newTheme: Theme) => {
@@ -315,11 +315,51 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
 
   return (
     <div className="relative h-screen w-full overflow-hidden">
-      {/* ── Full-screen EPUB canvas ───────────────────────────────────── */}
-      {/* Viewer sits edge-to-edge; on desktop we inset horizontally so
-          the floating arrows occupy the gutter and never overlap text. */}
-      <div className="absolute inset-0 md:inset-x-[72px]">
-        <div ref={viewerRef} className="h-full w-full" />
+      {/* ── Reading area: gutters with arrows flank the book canvas ─── */}
+      <div className="absolute inset-0 flex items-stretch bg-landing-bg">
+
+        {/* Left gutter — desktop arrow */}
+        <div className="hidden md:flex w-20 shrink-0 items-center justify-center">
+          <button
+            onClick={() => renditionRef.current?.prev()}
+            disabled={!isReady}
+            aria-label="Previous page"
+            className="flex h-14 w-14 items-center justify-center rounded-2xl bg-landing-accent/80 text-white shadow-lg backdrop-blur-sm transition-all hover:bg-landing-accent disabled:pointer-events-none disabled:opacity-25"
+          >
+            <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Book canvas — portrait aspect ratio, centered */}
+        <div className="flex flex-1 min-h-0 items-center justify-center overflow-hidden p-2 md:p-5">
+          <div
+            ref={viewerRef}
+            className="overflow-hidden rounded-xl border border-landing-border bg-white shadow-2xl"
+            style={{
+              width: '100%',
+              maxWidth: twoPage ? '1100px' : '560px',
+              maxHeight: '100%',
+              aspectRatio: twoPage ? '4 / 3' : '2 / 3',
+            }}
+          />
+        </div>
+
+        {/* Right gutter — desktop arrow */}
+        <div className="hidden md:flex w-20 shrink-0 items-center justify-center">
+          <button
+            onClick={() => renditionRef.current?.next()}
+            disabled={!isReady}
+            aria-label="Next page"
+            className="flex h-14 w-14 items-center justify-center rounded-2xl bg-landing-accent/80 text-white shadow-lg backdrop-blur-sm transition-all hover:bg-landing-accent disabled:pointer-events-none disabled:opacity-25"
+          >
+            <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+
       </div>
 
       {/* ── Floating hamburger (top-right, always visible) ────────────── */}
@@ -340,28 +380,6 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
       >
         {currentPage} / {totalPages || '—'}
       </div>
-
-      {/* ── Desktop floating side arrows (hidden on mobile) ───────────── */}
-      <button
-        onClick={() => renditionRef.current?.prev()}
-        disabled={!isReady}
-        aria-label="Previous page"
-        className="absolute left-0 top-1/2 z-30 hidden h-[72px] w-[72px] -translate-y-1/2 items-center justify-center rounded-r-2xl bg-black/15 text-white backdrop-blur-sm transition-all hover:bg-black/35 disabled:pointer-events-none disabled:opacity-20 md:flex"
-      >
-        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-      </button>
-      <button
-        onClick={() => renditionRef.current?.next()}
-        disabled={!isReady}
-        aria-label="Next page"
-        className="absolute right-0 top-1/2 z-30 hidden h-[72px] w-[72px] -translate-y-1/2 items-center justify-center rounded-l-2xl bg-black/15 text-white backdrop-blur-sm transition-all hover:bg-black/35 disabled:pointer-events-none disabled:opacity-20 md:flex"
-      >
-        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-      </button>
 
       {/* ── Thin progress strip (bottom edge, always visible) ─────────── */}
       <div className="absolute bottom-0 left-0 right-0 z-30 h-1 bg-black/10">
@@ -446,6 +464,33 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
                 {t === 'light' ? '☀ Light' : t === 'dark' ? '🌙 Dark' : '📄 Sepia'}
               </button>
             ))}
+          </div>
+
+          {/* Layout: single vs two-page */}
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-landing-text-muted">
+            Layout
+          </p>
+          <div className="mb-5 flex gap-2">
+            <button
+              onClick={() => setTwoPage(false)}
+              className={`flex-1 rounded-xl border py-2 text-xs font-medium transition-all ${
+                !twoPage
+                  ? 'border-landing-accent bg-landing-accent text-white'
+                  : 'border-landing-border text-landing-text-muted hover:border-landing-accent/40 hover:text-landing-text'
+              }`}
+            >
+              Single Page
+            </button>
+            <button
+              onClick={() => setTwoPage(true)}
+              className={`flex-1 rounded-xl border py-2 text-xs font-medium transition-all ${
+                twoPage
+                  ? 'border-landing-accent bg-landing-accent text-white'
+                  : 'border-landing-border text-landing-text-muted hover:border-landing-accent/40 hover:text-landing-text'
+              }`}
+            >
+              Two Pages
+            </button>
           </div>
 
           {/* Font size */}
