@@ -17,7 +17,12 @@ export default async function LibraryPage() {
   const books = await prisma.book.findMany({
     where: privileged ? undefined : { status: 'PUBLISHED' },
     orderBy: { createdAt: "desc" },
-    include: { epubFile: true }
+    include: {
+      epubFile: true,
+      readingProgress: session?.user?.id
+        ? { where: { userId: session.user.id }, take: 1 }
+        : false,
+    },
   });
 
   return (
@@ -63,6 +68,7 @@ export default async function LibraryPage() {
                 coverUrl={book.coverUrl}
                 donorOnly={book.donorOnly}
                 isAccessible={privileged || !book.donorOnly || isDonor}
+                readingProgress={book.readingProgress?.[0]?.progress ?? null}
               />
             ))}
           </div>

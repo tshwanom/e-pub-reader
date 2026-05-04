@@ -9,6 +9,7 @@ interface BookCardProps {
   coverUrl: string;
   donorOnly?: boolean;
   isAccessible?: boolean;
+  readingProgress?: number | null; // 0–100
 }
 
 export default function BookCard({
@@ -19,12 +20,15 @@ export default function BookCard({
   coverUrl,
   donorOnly = false,
   isAccessible = !donorOnly,
+  readingProgress,
 }: BookCardProps) {
   const ctaLabel = donorOnly
     ? isAccessible
       ? 'Open donor edition'
       : 'Donor access'
     : 'Read free';
+
+  const hasProgress = isAccessible && readingProgress != null && readingProgress > 0;
 
   return (
     <article className="group surface-card flex h-full flex-col overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
@@ -54,6 +58,21 @@ export default function BookCard({
             </svg>
           </div>
         )}
+
+        {/* Reading progress bar overlay on cover */}
+        {hasProgress && (
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/20">
+            <div
+              className="h-full bg-landing-accent"
+              style={{ width: `${readingProgress}%` }}
+              role="progressbar"
+              aria-valuenow={readingProgress ?? 0}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`${Math.round(readingProgress ?? 0)}% read`}
+            />
+          </div>
+        )}
       </div>
 
       {/* Book Info */}
@@ -73,26 +92,37 @@ export default function BookCard({
           {description}
         </p>
 
-        {/* CTA */}
-        <Link
-          href={`/books/${id}`}
-          className="inline-flex items-center text-sm font-semibold text-landing-accent transition-colors duration-200 hover:text-landing-accent-secondary"
-        >
-          {ctaLabel}
-          <svg
-            className="ml-2 h-4 w-4 transition-transform duration-200 group-hover:translate-x-1"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+        {/* CTAs */}
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/books/${id}`}
+            className="inline-flex items-center text-sm font-semibold text-landing-accent transition-colors duration-200 hover:text-landing-accent-secondary"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2.2}
-              d="M9 5l7 7-7 7"
-            />
-          </svg>
-        </Link>
+            {ctaLabel}
+            <svg
+              className="ml-2 h-4 w-4 transition-transform duration-200 group-hover:translate-x-1"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.2}
+                d="M9 5l7 7-7 7"
+              />
+            </svg>
+          </Link>
+
+          {hasProgress && isAccessible && (
+            <Link
+              href={`/read/${id}`}
+              className="ml-auto rounded-lg bg-landing-accent/10 px-3 py-1.5 text-xs font-semibold text-landing-accent transition hover:bg-landing-accent hover:text-white"
+            >
+              Resume {Math.round(readingProgress ?? 0)}%
+            </Link>
+          )}
+        </div>
       </div>
     </article>
   );
