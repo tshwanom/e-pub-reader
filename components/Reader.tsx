@@ -301,8 +301,10 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
       rendition.themes.font(fontFamily);
       rendition.themes.override('line-height', String(lineSpacing));
 
-      // Display book — resume position when two-page/flow mode changes
-      const resumeAt = currentCfiRef.current ?? initialLocation;
+      // Display book — resume position when two-page/flow mode changes.
+      // Priority: in-memory ref (layout change) › localStorage (refresh within debounce) › server DB › beginning.
+      const localCfi = typeof window !== 'undefined' ? localStorage.getItem(`reader-progress-${bookId}`) : null;
+      const resumeAt = currentCfiRef.current ?? localCfi ?? initialLocation;
       const displayPromise = resumeAt
         ? rendition.display(resumeAt)
         : rendition.display();
@@ -343,6 +345,9 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
       rendition.on('relocated', (location: any) => {
         if (locationTimeout.current) clearTimeout(locationTimeout.current);
         currentCfiRef.current = location.start.cfi;
+        // Persist synchronously to localStorage so a refresh within the
+        // DB debounce window still restores the correct position.
+        try { localStorage.setItem(`reader-progress-${bookId}`, location.start.cfi); } catch (_) {}
 
         const currentLocation = location.start.index || 0;
         setCurrentPage(currentLocation + 1);
@@ -647,22 +652,6 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
       {/* ── Reading area ──────────────────────────────────────────────── */}
       <div className="absolute inset-0 flex items-stretch bg-landing-bg">
 
-        {/* Left gutter — desktop prev arrow (hidden in scroll mode) */}
-        {flow === 'paginated' && (
-          <div className="hidden md:flex w-20 shrink-0 items-center justify-center">
-            <button
-              onClick={() => renditionRef.current?.prev()}
-              disabled={!isReady}
-              aria-label="Previous page"
-              className="flex h-14 w-14 items-center justify-center rounded-2xl bg-landing-accent/80 text-white shadow-lg backdrop-blur-sm transition-all hover:bg-landing-accent disabled:pointer-events-none disabled:opacity-25"
-            >
-              <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-          </div>
-        )}
-
         {/* Book canvas */}
         <div className="flex flex-1 min-h-0 items-stretch justify-center overflow-hidden md:p-5 md:items-center">
           {/* Drag wrapper — translates during swipe animation */}
@@ -682,23 +671,33 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
             />
           </div>
         </div>
-
-        {/* Right gutter — desktop next arrow (hidden in scroll mode) */}
-        {flow === 'paginated' && (
-          <div className="hidden md:flex w-20 shrink-0 items-center justify-center">
-            <button
-              onClick={() => renditionRef.current?.next()}
-              disabled={!isReady}
-              aria-label="Next page"
-              className="flex h-14 w-14 items-center justify-center rounded-2xl bg-landing-accent/80 text-white shadow-lg backdrop-blur-sm transition-all hover:bg-landing-accent disabled:pointer-events-none disabled:opacity-25"
-            >
-              <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
-        )}
       </div>
+
+      {/* ── Desktop pagination arrows (absolutely positioned overlays) ─── */}
+      {flow === 'paginated' && (
+        <>
+          <button
+            onClick={() => renditionRef.current?.prev()}
+            disabled={!isReady}
+            aria-label="Previous page"
+            className="absolute left-4 top-1/2 z-20 hidden -translate-y-1/2 md:flex h-14 w-14 items-center justify-center rounded-full border border-landing-border bg-white/90 text-landing-accent shadow-lg backdrop-blur-sm transition-all hover:bg-landing-accent hover:text-white hover:border-landing-accent disabled:pointer-events-none disabled:opacity-30"
+          >
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button
+            onClick={() => renditionRef.current?.next()}
+            disabled={!isReady}
+            aria-label="Next page"
+            className="absolute right-4 top-1/2 z-20 hidden -translate-y-1/2 md:flex h-14 w-14 items-center justify-center rounded-full border border-landing-border bg-white/90 text-landing-accent shadow-lg backdrop-blur-sm transition-all hover:bg-landing-accent hover:text-white hover:border-landing-accent disabled:pointer-events-none disabled:opacity-30"
+          >
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </>
+      )}
 
       {/* ── Top toolbar ───────────────────────────────────────────────── */}
       <div className="absolute left-0 right-0 top-0 z-30 flex items-center justify-between px-4 py-3 pointer-events-none">
@@ -767,6 +766,22 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
           >
             <svg className="h-4 w-4" fill={isBookmarkedHere ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16l-7-4-7 4V5z" />
+            </svg>
+          </button>
+
+          {/* Table of Contents — quick access */}
+          <button
+            onClick={() => setSidePanel(sidePanel === 'toc' ? null : 'toc')}
+            aria-label="Table of contents"
+            aria-pressed={sidePanel === 'toc'}
+            className={`flex h-9 w-9 items-center justify-center rounded-full backdrop-blur-sm transition focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
+              sidePanel === 'toc'
+                ? 'bg-landing-accent text-white shadow-md'
+                : 'bg-black/25 text-white hover:bg-black/45'
+            }`}
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h10" />
             </svg>
           </button>
 
