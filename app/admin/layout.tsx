@@ -20,8 +20,8 @@ export default async function AdminLayout({
   return (
     <div className="page-shell">
       <div className="mx-auto w-full max-w-[1600px] px-4 py-4 sm:px-6 sm:py-6 2xl:px-8 lg:py-8">
-        <div className="grid gap-6 2xl:grid-cols-[312px_minmax(0,1fr)]">
-          <aside className="hidden 2xl:flex 2xl:sticky 2xl:top-8 2xl:h-[calc(100vh-4rem)] 2xl:flex-col 2xl:overflow-hidden surface-card p-5">
+        <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
+          <aside className="hidden xl:flex xl:sticky xl:top-8 xl:h-[calc(100vh-4rem)] xl:flex-col xl:overflow-hidden surface-card p-5">
             <div className="rounded-2xl bg-landing-accent px-5 py-5 text-white shadow-sm">
               <div className="flex items-center gap-3">
                 <span className="rounded-2xl bg-white/15 p-2.5">
@@ -43,7 +43,7 @@ export default async function AdminLayout({
           </aside>
 
           <div className="flex min-h-[calc(100vh-4rem)] min-w-0 flex-col gap-6">
-            <section className="surface-card p-4 sm:p-5 2xl:hidden">
+            <section className="surface-card p-4 sm:p-5 xl:hidden">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">

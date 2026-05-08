@@ -92,6 +92,7 @@ export default async function ReadBookPage({ params }: { params: Promise<{ bookI
             url={`/api/books/${book.id}/file`} 
             initialLocation={initialLocation}
             bookId={book.id}
+            title={book.title}
             initialNarrationPlayerExpanded={initialNarrationPlayerExpanded}
             narrationPlayerPreferenceEndpoint={session ? '/api/reader/preferences' : null}
             narrationAccess={{

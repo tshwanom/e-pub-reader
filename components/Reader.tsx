@@ -14,6 +14,7 @@ interface ReaderProps {
   url: string;
   initialLocation?: string | null;
   bookId: string;
+  title?: string;
   initialNarrationPlayerExpanded?: boolean | null;
   narrationPlayerPreferenceEndpoint?: string | null;
   narrationAccess?: ReaderNarrationAccess;
@@ -384,6 +385,7 @@ export default function Reader({
   url,
   initialLocation,
   bookId,
+  title,
   initialNarrationPlayerExpanded = null,
   narrationPlayerPreferenceEndpoint = null,
   narrationAccess,
@@ -428,6 +430,7 @@ export default function Reader({
   const [standaloneNotes, setStandaloneNotes] = useState<StandaloneNote[]>([]);
   const [showQuickNote, setShowQuickNote] = useState(false);
   const [quickNoteText, setQuickNoteText] = useState('');
+  const [showMobileToolbar, setShowMobileToolbar] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteText, setEditingNoteText] = useState('');
   const [showNarrationModal, setShowNarrationModal] = useState(false);
@@ -455,6 +458,7 @@ export default function Reader({
   const dragWrapperRef = useRef<HTMLDivElement>(null);
   const swipeCommittedRef = useRef(false);
   const isFirstRelocate = useRef(true);
+  const toolbarHideTimer = useRef<NodeJS.Timeout | null>(null);
   // Always-current mirror of highlights — used inside epub.js annotation callbacks
   // to avoid stale closures when notes are edited after registration.
   const highlightsRef = useRef<Highlight[]>([]);
@@ -559,6 +563,13 @@ export default function Reader({
     setShowTour(false);
     setTourStep(0);
   };
+
+  // Reveal the mobile toolbar and start a 3-second auto-hide timer.
+  const revealToolbar = useCallback(() => {
+    setShowMobileToolbar(true);
+    if (toolbarHideTimer.current) clearTimeout(toolbarHideTimer.current);
+    toolbarHideTimer.current = setTimeout(() => setShowMobileToolbar(false), 3000);
+  }, []);
 
   const persistNarrationPlayerPreference = useCallback(async (expanded: boolean) => {
     try {
@@ -699,6 +710,11 @@ export default function Reader({
       // Snap back
       dragWrapperRef.current.style.transition = 'transform 0.25s ease-out';
       dragWrapperRef.current.style.transform = 'translateX(0)';
+    }
+
+    // Tap (negligible movement) → reveal mobile toolbar
+    if (!committed && Math.abs(dx) < 10 && Math.abs(dy) < 10) {
+      revealToolbar();
     }
 
     touchStartX.current = null;
@@ -1324,15 +1340,19 @@ export default function Reader({
         isFirstRelocate.current = true;
       }
 
-      // Estimate word count for time-to-finish
+      // Estimate word count for time-to-finish.
+      // Deferred by 3 s so per-chapter network requests don't compete with the
+      // initial page render — the reader is already visible before this runs.
       book.ready.then(() => {
-        let total = 0;
-        book.spine.each((item: any) => {
-          item.load(book.load.bind(book)).then((doc: Document) => {
-            total += (doc.body?.textContent || '').split(/\s+/).filter(Boolean).length;
-            setWordCount(total);
-          }).catch(() => {});
-        });
+        setTimeout(() => {
+          let total = 0;
+          book.spine.each((item: any) => {
+            item.load(book.load.bind(book)).then((doc: Document) => {
+              total += (doc.body?.textContent || '').split(/\s+/).filter(Boolean).length;
+              setWordCount(total);
+            }).catch(() => {});
+          });
+        }, 3000);
       });
 
       // Swipe navigation via epub.js relay (works across the iframe boundary)
@@ -1679,6 +1699,9 @@ export default function Reader({
 
   const isBookmarkedHere = bookmarks.some(b => b.cfi === currentCfiRef.current);
 
+  // On mobile the toolbar hides by default; it reveals on tap or when any panel is open.
+  const isToolbarVisible = showMobileToolbar || Boolean(sidePanel) || showMenu || showSearch || showGoTo || showNarrationModal;
+
   return (
     <div className="relative h-screen w-full overflow-hidden">
 
@@ -1723,7 +1746,7 @@ export default function Reader({
                         <div className="mx-auto h-11 w-11 animate-spin rounded-full border-2 border-landing-border border-t-landing-accent motion-reduce:animate-none" />
                         <h2 className="mt-4 text-base font-semibold text-landing-text">Loading your book</h2>
                         <p className="mt-2 text-sm leading-relaxed text-landing-text-muted">
-                          We&apos;re opening the EPUB and restoring your place. The reader will appear in a moment.
+                          We&apos;re opening {title ?? 'your book'} and restoring your place. The reader will appear in a moment.
                         </p>
                       </>
                     )}
@@ -1762,7 +1785,7 @@ export default function Reader({
       )}
 
       {/* ── Top toolbar ───────────────────────────────────────────────── */}
-      <div className="absolute left-0 right-0 top-0 z-30 flex items-center justify-between px-4 py-3 pointer-events-none">
+      <div className={`absolute left-0 right-0 top-0 z-30 flex items-center justify-between px-4 py-3 pointer-events-none transition-[opacity,transform] duration-300 ease-out md:opacity-100 md:translate-y-0 ${isToolbarVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-full'}`}>
         <div className="pointer-events-auto flex items-center gap-2">
           <div
             aria-live="polite"
