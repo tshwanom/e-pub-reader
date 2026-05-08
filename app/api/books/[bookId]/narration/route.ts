@@ -74,8 +74,8 @@ export async function GET(
         available: false,
         reason: featureAccess.isSignedIn ? "donor-required" : "sign-in-required",
         message: featureAccess.isSignedIn
-          ? "Narrated mode is reserved for donors. Make one completed donation to unlock it on your account."
-          : "Sign in first, then make a donation to unlock narrated mode on your account.",
+          ? "Due to the cost of running narration, this feature is reserved for donors only. Make one completed donation to unlock it on your account."
+          : "Due to the cost of running narration, this feature is reserved for donors only. Sign in to unlock it with your donation.",
         storageProvider: activeStorageProvider,
         manifest: null,
         manifestUrl: null,

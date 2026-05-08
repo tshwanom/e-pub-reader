@@ -2251,8 +2251,8 @@ export default function Reader({
                   : narrationAccess.hasAccess
                     ? 'We will stream narrated audio securely once this book’s signed narration assets are ready.'
                     : narrationAccess.isSignedIn
-                      ? 'Make one completed donation to unlock narrated mode across your account.'
-                      : 'Sign in first, then make one completed donation to unlock narrated mode across your account.'}
+                      ? 'Due to the cost of running narration, this feature is reserved for donors only. Make one completed donation to unlock it on your account.'
+                      : 'Due to the cost of running narration, this feature is reserved for donors only. Sign in to unlock it with your donation.'}
               </p>
 
               {narrationHasReadyPlayer && narrationVoiceOptions.length > 1 && (
@@ -2924,8 +2924,8 @@ export default function Reader({
                 <>
                   <p className="text-sm leading-relaxed text-landing-text-muted">
                     {narrationAccess.isSignedIn
-                      ? 'Make one completed donation to unlock narrated mode for this book and future donor releases on your account.'
-                      : 'Sign in first, then make one completed donation to unlock narrated mode for your account.'}
+                      ? 'Due to the cost of running narration, this feature is reserved for donors only. Make one completed donation to unlock it on your account.'
+                      : 'Due to the cost of running narration, this feature is reserved for donors only. Sign in to unlock it with your donation.'}
                   </p>
 
                   <div className="mt-4 flex gap-2">
