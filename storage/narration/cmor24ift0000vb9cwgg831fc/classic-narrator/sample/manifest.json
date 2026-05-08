@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "bookId": "cmor24ift0000vb9cwgg831fc",
+  "narrationId": "cmovyb7gc0004vb5s5fpjou7s",
+  "generatedAt": "2026-05-08T10:41:17.074Z",
+  "totalDurationMs": 6000,
+  "chapterCount": 1,
+  "storage": {
+    "provider": "local",
+    "manifestObjectKey": "narration/cmor24ift0000vb9cwgg831fc/classic-narrator/sample/manifest.json"
+  },
+  "voice": {
+    "id": "cmovyb6h70001vb5s6liamw3e",
+    "name": "Classic Narrator",
+    "slug": "classic-narrator",
+    "provider": "manual-seed",
+    "language": "en"
+  },
+  "chapters": [
+    {
+      "id": "cmowsboka000ovbqsqnxggdpu",
+      "chapterIndex": 0,
+      "title": "Foreword",
+      "spineHref": "5_foreword.xhtml",
+      "durationMs": 6000,
+      "audio": {
+        "objectKey": "narration/cmor24ift0000vb9cwgg831fc/classic-narrator/sample/chapters/0.wav",
+        "mimeType": "audio/wav",
+        "url": null
+      },
+      "cueCount": 5,
+      "cues": [
+        {
+          "sequence": 0,
+          "startMs": 0,
+          "endMs": 1862,
+          "targetHref": "5_foreword.xhtml",
+          "targetElementId": null,
+          "targetCfi": null,
+          "excerpt": "The Captured Soul: Decoding the Matrix The pages before you unmask a reality so pervasive, so intricately woven into your daily life, that it remains nearly invisible."
+        },
+        {
+          "sequence": 1,
+          "startMs": 1862,
+          "endMs": 2483,
+          "targetHref": "5_foreword.xhtml",
+          "targetElementId": null,
+          "targetCfi": null,
+          "excerpt": "This is not merely a book—it is a revelation."
+        },
+        {
+          "sequence": 2,
+          "startMs": 2483,
+          "endMs": 3083,
+          "targetHref": "5_foreword.xhtml",
+          "targetElementId": null,
+          "targetCfi": null,
+          "excerpt": "A narrative about a prison with no walls."
+        },
+        {
+          "sequence": 3,
+          "startMs": 3083,
+          "endMs": 4621,
+          "targetHref": "5_foreword.xhtml",
+          "targetElementId": null,
+          "targetCfi": null,
+          "excerpt": "A system that rebranded captivity as “progress,” taught its inmates to pay rent on cages they never built, and disguised dependency as freedom."
+        },
+        {
+          "sequence": 4,
+          "startMs": 4621,
+          "endMs": 6000,
+          "targetHref": "5_foreword.xhtml",
+          "targetElementId": null,
+          "targetCfi": null,
+          "excerpt": "From the very moment of conception, when the Soul enters this realm, you are marked—not for freedom, but for programming."
+        }
+      ]
+    }
+  ]
+}

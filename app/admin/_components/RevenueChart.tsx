@@ -15,30 +15,35 @@ export default function RevenueChart({
   data: { date: string; total: number }[];
 }) {
   return (
-    <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-      <h3 className="text-gray-500 text-sm font-medium mb-4">Revenue (Last 30 Days)</h3>
-      <div className="h-[300px] w-full">
+    <div className="surface-card min-w-0 p-6">
+      <div className="mb-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-text-muted">
+          Revenue
+        </p>
+        <h3 className="mt-2 text-lg font-semibold text-landing-text">Completed donations over the last 30 days</h3>
+      </div>
+      <div className="h-[300px] w-full min-w-0">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data}>
             <XAxis
               dataKey="date"
-              stroke="#888888"
+              stroke="#5f6b76"
               fontSize={12}
               tickLine={false}
               axisLine={false}
             />
             <YAxis
-              stroke="#888888"
+              stroke="#5f6b76"
               fontSize={12}
               tickLine={false}
               axisLine={false}
               tickFormatter={(value) => `$${value}`}
             />
             <Tooltip 
-                cursor={{ fill: 'transparent' }}
-                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                cursor={{ fill: 'rgba(61, 115, 122, 0.06)' }}
+                contentStyle={{ borderRadius: '16px', border: '1px solid rgba(216, 224, 228, 0.8)', boxShadow: '0 10px 30px rgba(17, 24, 39, 0.08)' }}
             />
-            <Bar dataKey="total" fill="#adfa1d" radius={[4, 4, 0, 0]} className="fill-primary" />
+            <Bar dataKey="total" fill="#3D737A" radius={[10, 10, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

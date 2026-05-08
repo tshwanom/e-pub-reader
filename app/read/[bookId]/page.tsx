@@ -1,10 +1,11 @@
-import { getBookAccessState } from "@/lib/book-access";
+import { getBookAccessState, getDonorFeatureAccessState } from "@/lib/book-access";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import Reader from "@/components/Reader";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { normalizeReaderPreferences } from "@/lib/reader-preferences";
 
 export default async function ReadBookPage({ params }: { params: Promise<{ bookId: string }> }) {
   const { bookId } = await params;
@@ -57,18 +58,31 @@ export default async function ReadBookPage({ params }: { params: Promise<{ bookI
     );
   }
 
+  const donorFeatureAccess = await getDonorFeatureAccessState(book, session?.user);
+  const loginHref = `/login?callbackUrl=${encodeURIComponent(`/books/${book.id}`)}`;
+  const narrationManageHref = session ? `/books/${book.id}#support-this-book` : loginHref;
+
   // TODO: Fetch saved progress if user is logged in
   let initialLocation = null;
+  let initialNarrationPlayerExpanded: boolean | null = null;
   if (session) {
-    const progress = await prisma.readingProgress.findUnique({
+    const [progress, user] = await Promise.all([
+      prisma.readingProgress.findUnique({
         where: {
-            userId_bookId: {
-                userId: session.user.id,
-                bookId: book.id
-            }
+          userId_bookId: {
+            userId: session.user.id,
+            bookId: book.id
+          }
         }
-    });
+      }),
+      prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { readerPreferences: true },
+      }),
+    ]);
+
     if (progress) initialLocation = progress.cfi;
+    initialNarrationPlayerExpanded = normalizeReaderPreferences(user?.readerPreferences).narrationPlayerExpanded ?? null;
   }
 
   return (
@@ -78,6 +92,14 @@ export default async function ReadBookPage({ params }: { params: Promise<{ bookI
             url={`/api/books/${book.id}/file`} 
             initialLocation={initialLocation}
             bookId={book.id}
+            initialNarrationPlayerExpanded={initialNarrationPlayerExpanded}
+            narrationPlayerPreferenceEndpoint={session ? '/api/reader/preferences' : null}
+            narrationAccess={{
+              hasAccess: donorFeatureAccess.hasAccess,
+              isSignedIn: donorFeatureAccess.isSignedIn,
+              manageHref: narrationManageHref,
+              statusEndpoint: `/api/books/${book.id}/narration`,
+            }}
         />
     </div>
   );

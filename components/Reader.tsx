@@ -1,14 +1,32 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import ePub from 'epubjs';
 import type { Book, Rendition } from 'epubjs';
+import type {
+  NarrationFeatureVoiceOption,
+  NarrationFeatureResponse,
+  NarrationManifestChapter,
+  NarrationManifestCue,
+} from '@/lib/narration';
 
 interface ReaderProps {
   url: string;
   initialLocation?: string | null;
   bookId: string;
+  initialNarrationPlayerExpanded?: boolean | null;
+  narrationPlayerPreferenceEndpoint?: string | null;
+  narrationAccess?: ReaderNarrationAccess;
 }
+
+interface ReaderNarrationAccess {
+  hasAccess: boolean;
+  isSignedIn: boolean;
+  manageHref: string;
+  statusEndpoint: string;
+}
+
+type NarrationStatusPayload = NarrationFeatureResponse;
 
 interface Highlight {
   id: string;
@@ -42,6 +60,281 @@ type Flow = 'paginated' | 'scrolled';
 type FontFamily = 'Crimson Pro' | 'Inter' | 'Georgia';
 type LineSpacing = 1.4 | 1.6 | 1.9;
 type SidePanel = 'toc' | 'highlights' | 'notes' | 'bookmarks' | null;
+type NarrationPlaybackRate = 0.8 | 1 | 1.25 | 1.5;
+
+const NARRATION_PLAYBACK_RATES: NarrationPlaybackRate[] = [0.8, 1, 1.25, 1.5];
+const NARRATION_ACTIVE_ANNOTATION_STYLE = {
+  fill: '#3D737A',
+  'fill-opacity': '0.18',
+  stroke: '#3D737A',
+  'stroke-opacity': '0.55',
+};
+const NARRATION_ACTIVE_ELEMENT_CLASS = 'omr-narration-active-cue';
+const NARRATION_EXCERPT_MATCH_SELECTOR = 'p, li, blockquote, h1, h2, h3, h4, h5, h6, div, span';
+const NARRATION_WRAPPER_ATTRIBUTE = 'data-omr-narration-wrapper';
+const NARRATION_PLAYER_PREFERENCE_KEY = 'reader-narration-player-expanded';
+const NARRATION_VOICE_PREFERENCE_KEY_PREFIX = 'reader-narration-voice';
+
+function normalizeNarrationHref(value?: string | null) {
+  return value ? value.split('#')[0] : null;
+}
+
+function normalizeNarrationSearchText(value?: string | null) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[^a-z0-9\s']/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildNarrationExcerptProbes(excerpt?: string | null) {
+  const normalizedExcerpt = normalizeNarrationSearchText(excerpt);
+
+  if (!normalizedExcerpt) {
+    return [] as string[];
+  }
+
+  const words = normalizedExcerpt.split(' ').filter(Boolean);
+  const probes = [normalizedExcerpt];
+
+  if (words.length >= 14) {
+    probes.push(words.slice(0, 14).join(' '));
+  }
+
+  if (words.length >= 10) {
+    probes.push(words.slice(0, 10).join(' '));
+  }
+
+  if (words.length >= 6) {
+    probes.push(words.slice(0, 6).join(' '));
+  }
+
+  return [...new Set(probes.filter((probe) => probe.length >= 20))];
+}
+
+function getNarrationExcerptElementScore(element: HTMLElement, probes: string[]) {
+  const text = normalizeNarrationSearchText(element.textContent);
+
+  if (!text || text.length < 16 || probes.length === 0) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  let matchedProbeIndex = -1;
+
+  for (let probeIndex = 0; probeIndex < probes.length; probeIndex += 1) {
+    const probe = probes[probeIndex];
+
+    if (text.includes(probe) || probe.includes(text)) {
+      matchedProbeIndex = probeIndex;
+      break;
+    }
+  }
+
+  if (matchedProbeIndex < 0) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const tagName = element.tagName.toLowerCase();
+  let score = 260 - matchedProbeIndex * 25;
+
+  if (tagName === 'p') {
+    score += 90;
+  } else if (tagName === 'blockquote') {
+    score += 76;
+  } else if (tagName === 'li') {
+    score += 64;
+  } else if (/^h[1-6]$/.test(tagName)) {
+    score += 34;
+  } else if (tagName === 'div') {
+    score += 18;
+  }
+
+  if (element.id) {
+    score += 8;
+  }
+
+  score -= Math.abs(text.length - probes[0].length) / 20;
+
+  return score;
+}
+
+function findNarrationCueElementByExcerpt(doc: Document | undefined, excerpt?: string | null) {
+  if (!doc?.body) {
+    return null;
+  }
+
+  const probes = buildNarrationExcerptProbes(excerpt);
+
+  if (probes.length === 0) {
+    return null;
+  }
+
+  const elements = Array.from(doc.body.querySelectorAll<HTMLElement>(NARRATION_EXCERPT_MATCH_SELECTOR));
+  let bestMatchElement: HTMLElement | null = null;
+  let bestMatchScore = Number.NEGATIVE_INFINITY;
+
+  elements.forEach((element) => {
+    const score = getNarrationExcerptElementScore(element, probes);
+
+    if (!Number.isFinite(score)) {
+      return;
+    }
+
+    if (!bestMatchElement || score > bestMatchScore) {
+      bestMatchElement = element;
+      bestMatchScore = score;
+    }
+  });
+
+  return bestMatchElement;
+}
+
+function escapeNarrationExcerptForRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function findNarrationCueRangeInElement(element: HTMLElement, excerpt?: string | null) {
+  const rawExcerpt = String(excerpt || '').trim();
+
+  if (!rawExcerpt) {
+    return null;
+  }
+
+  const document = element.ownerDocument;
+  const textNodes: Array<{ node: Text; start: number; end: number }> = [];
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      return node.textContent?.trim()
+        ? NodeFilter.FILTER_ACCEPT
+        : NodeFilter.FILTER_REJECT;
+    },
+  });
+
+  let currentNode = walker.nextNode();
+  let combinedText = '';
+
+  while (currentNode) {
+    const textNode = currentNode as Text;
+    const start = combinedText.length;
+    combinedText += textNode.textContent || '';
+    textNodes.push({ node: textNode, start, end: combinedText.length });
+    currentNode = walker.nextNode();
+  }
+
+  if (combinedText.length === 0) {
+    return null;
+  }
+
+  const excerptPattern = new RegExp(
+    escapeNarrationExcerptForRegExp(rawExcerpt).replace(/\s+/g, '\\s+'),
+    'i'
+  );
+  const match = combinedText.match(excerptPattern);
+
+  if (!match || match.index == null) {
+    return null;
+  }
+
+  const startIndex = match.index;
+  const endIndex = startIndex + match[0].length;
+  const startEntry = textNodes.find((entry) => startIndex >= entry.start && startIndex < entry.end);
+  const endEntry = textNodes.find((entry) => endIndex > entry.start && endIndex <= entry.end)
+    || textNodes.find((entry) => endIndex === entry.end);
+
+  if (!startEntry || !endEntry) {
+    return null;
+  }
+
+  const range = document.createRange();
+  range.setStart(startEntry.node, startIndex - startEntry.start);
+  range.setEnd(endEntry.node, endIndex - endEntry.start);
+  return range;
+}
+
+function wrapNarrationCueExcerpt(element: HTMLElement, excerpt?: string | null) {
+  const range = findNarrationCueRangeInElement(element, excerpt);
+
+  if (!range || range.collapsed) {
+    return null;
+  }
+
+  const document = element.ownerDocument;
+  const wrapper = document.createElement('span');
+  wrapper.setAttribute(NARRATION_WRAPPER_ATTRIBUTE, 'true');
+  wrapper.className = NARRATION_ACTIVE_ELEMENT_CLASS;
+
+  try {
+    const contents = range.extractContents();
+    wrapper.appendChild(contents);
+    range.insertNode(wrapper);
+    return wrapper;
+  } catch (error) {
+    console.error('Failed to wrap narration excerpt highlight', error);
+    return null;
+  }
+}
+
+function formatMediaTime(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return '0:00';
+  }
+
+  const totalSeconds = Math.floor(seconds);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+  }
+
+  return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
+function formatNarrationVoiceName(voiceName?: string | null) {
+  const normalizedVoiceName = String(voiceName || '').replace(/^Gemini\s+/i, '').trim();
+  return normalizedVoiceName || 'Voice';
+}
+
+function getNarrationVoicePreferenceStorageKey(bookId: string) {
+  return `${NARRATION_VOICE_PREFERENCE_KEY_PREFIX}-${bookId}`;
+}
+
+function resolveNarrationChapterIndexFromChapters(
+  chapters: NarrationManifestChapter[],
+  preferredHref?: string | null,
+  currentCfi?: string | null,
+) {
+  if (chapters.length === 0) {
+    return 0;
+  }
+
+  const normalizedPreferredHref = normalizeNarrationHref(preferredHref);
+
+  if (normalizedPreferredHref) {
+    const matchingHrefIndex = chapters.findIndex(
+      (chapter) => normalizeNarrationHref(chapter.spineHref) === normalizedPreferredHref
+    );
+
+    if (matchingHrefIndex >= 0) {
+      return matchingHrefIndex;
+    }
+  }
+
+  if (currentCfi) {
+    const matchingCueIndex = chapters.findIndex((chapter) =>
+      chapter.cues.some((cue) => cue.targetCfi === currentCfi)
+    );
+
+    if (matchingCueIndex >= 0) {
+      return matchingCueIndex;
+    }
+  }
+
+  return 0;
+}
 
 const FONT_FAMILIES: { label: string; value: FontFamily }[] = [
   { label: 'Serif', value: 'Crimson Pro' },
@@ -87,12 +380,20 @@ const TOUR_STEPS = [
   },
 ];
 
-export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
+export default function Reader({
+  url,
+  initialLocation,
+  bookId,
+  initialNarrationPlayerExpanded = null,
+  narrationPlayerPreferenceEndpoint = null,
+  narrationAccess,
+}: ReaderProps) {
   const viewerRef = useRef<HTMLDivElement>(null);
   const renditionRef = useRef<Rendition | null>(null);
   const bookRef = useRef<Book | null>(null);
 
   const [isReady, setIsReady] = useState(false);
+  const [readerLoadError, setReaderLoadError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [theme, setTheme] = useState<Theme>('light');
@@ -129,11 +430,28 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
   const [quickNoteText, setQuickNoteText] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteText, setEditingNoteText] = useState('');
+  const [showNarrationModal, setShowNarrationModal] = useState(false);
+  const [isCheckingNarration, setIsCheckingNarration] = useState(false);
+  const [narrationStatus, setNarrationStatus] = useState<NarrationStatusPayload | null>(null);
+  const [narrationError, setNarrationError] = useState<string | null>(null);
+  const [currentHref, setCurrentHref] = useState<string | null>(null);
+  const [narrationChapterIndex, setNarrationChapterIndex] = useState(0);
+  const [narrationCurrentTime, setNarrationCurrentTime] = useState(0);
+  const [narrationDuration, setNarrationDuration] = useState(0);
+  const [narrationPlaybackRate, setNarrationPlaybackRate] = useState<NarrationPlaybackRate>(1);
+  const [isNarrationPlaying, setIsNarrationPlaying] = useState(false);
+  const [isNarrationPlayerExpanded, setIsNarrationPlayerExpanded] = useState(Boolean(initialNarrationPlayerExpanded));
+  const [selectedNarrationVoiceSlug, setSelectedNarrationVoiceSlug] = useState<string | null>(null);
+  const [followNarrationText, setFollowNarrationText] = useState(true);
+  const [activeNarrationCue, setActiveNarrationCue] = useState<NarrationManifestCue | null>(null);
+  const [narrationPlaybackError, setNarrationPlaybackError] = useState<string | null>(null);
 
   const locationTimeout = useRef<NodeJS.Timeout | null>(null);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const currentCfiRef = useRef<string | null>(null);
+  const currentHrefRef = useRef<string | null>(null);
   const dragWrapperRef = useRef<HTMLDivElement>(null);
   const swipeCommittedRef = useRef(false);
   const isFirstRelocate = useRef(true);
@@ -142,6 +460,93 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
   const highlightsRef = useRef<Highlight[]>([]);
   // Tracks which CFIs have already been registered so we never double-register.
   const registeredHighlightCfis = useRef<Set<string>>(new Set());
+  const activeNarrationCueRef = useRef<NarrationManifestCue | null>(null);
+  const activeNarrationCueCfiRef = useRef<string | null>(null);
+  const narrationHighlightedElementsRef = useRef<HTMLElement[]>([]);
+  const pendingNarrationAutoplayRef = useRef(false);
+  const lastNarrationDisplayTargetRef = useRef<string | null>(null);
+  const themeRef = useRef(theme);
+  const fontSizeRef = useRef(fontSize);
+  const fontFamilyRef = useRef(fontFamily);
+  const lineSpacingRef = useRef(lineSpacing);
+
+  const narrationVoiceOptions = useMemo<NarrationFeatureVoiceOption[]>(() => {
+    if (narrationStatus?.voices?.length) {
+      return narrationStatus.voices;
+    }
+
+    if (narrationStatus?.manifest) {
+      return [{
+        narrationId: narrationStatus.manifest.narrationId,
+        active: true,
+        totalDurationMs: narrationStatus.manifest.totalDurationMs,
+        chapterCount: narrationStatus.manifest.chapterCount,
+        manifest: narrationStatus.manifest,
+        manifestUrl: narrationStatus.manifestUrl,
+        voice: narrationStatus.manifest.voice,
+      }];
+    }
+
+    return [];
+  }, [narrationStatus]);
+  const activeNarrationVoiceOption = useMemo(() => {
+    return narrationVoiceOptions.find(
+      (voiceOption) => voiceOption.voice.slug === selectedNarrationVoiceSlug
+    ) ?? narrationVoiceOptions.find(
+      (voiceOption) => voiceOption.voice.slug === narrationStatus?.defaultVoiceSlug
+    ) ?? narrationVoiceOptions.find((voiceOption) => voiceOption.active)
+      ?? narrationVoiceOptions[0]
+      ?? null;
+  }, [narrationStatus?.defaultVoiceSlug, narrationVoiceOptions, selectedNarrationVoiceSlug]);
+  const narrationManifest = useMemo(
+    () => activeNarrationVoiceOption?.manifest ?? narrationStatus?.manifest ?? null,
+    [activeNarrationVoiceOption, narrationStatus?.manifest]
+  );
+  const narrationChapters = useMemo(
+    () => narrationManifest?.chapters ?? [],
+    [narrationManifest]
+  );
+  const activeNarrationChapter = narrationChapters[narrationChapterIndex] ?? null;
+  const narrationHasReadyPlayer = Boolean(narrationStatus?.available && narrationManifest && narrationChapters.length > 0);
+  const activeNarrationVoiceName = activeNarrationVoiceOption
+    ? formatNarrationVoiceName(activeNarrationVoiceOption.voice.name)
+    : narrationManifest
+      ? formatNarrationVoiceName(narrationManifest.voice.name)
+      : 'Voice';
+  const narrationPlaybackMax = Math.max(
+    narrationDuration,
+    activeNarrationChapter?.durationMs ? activeNarrationChapter.durationMs / 1000 : 0,
+    1
+  );
+  const narrationPlayerMessage = narrationPlaybackError
+    || activeNarrationCue?.excerpt
+    || narrationStatus?.message
+    || 'Narrated mode is ready to stream.';
+  const narrationPlayerTitle = activeNarrationChapter?.title || `Chapter ${narrationChapterIndex + 1}`;
+  const narrationPlaybackProgressPct = narrationPlaybackMax > 0
+    ? Math.min(Math.max((narrationCurrentTime / narrationPlaybackMax) * 100, 0), 100)
+    : 0;
+  const readerViewportInsetClass = narrationHasReadyPlayer
+    ? isNarrationPlayerExpanded
+      ? 'pb-32 sm:pb-28 lg:pb-24'
+      : 'pb-20 sm:pb-16'
+    : '';
+
+  useEffect(() => {
+    themeRef.current = theme;
+  }, [theme]);
+
+  useEffect(() => {
+    fontSizeRef.current = fontSize;
+  }, [fontSize]);
+
+  useEffect(() => {
+    fontFamilyRef.current = fontFamily;
+  }, [fontFamily]);
+
+  useEffect(() => {
+    lineSpacingRef.current = lineSpacing;
+  }, [lineSpacing]);
 
   // ── First-time tour ──────────────────────────────────────────────
   useEffect(() => {
@@ -154,6 +559,84 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
     setShowTour(false);
     setTourStep(0);
   };
+
+  const persistNarrationPlayerPreference = useCallback(async (expanded: boolean) => {
+    try {
+      localStorage.setItem(NARRATION_PLAYER_PREFERENCE_KEY, expanded ? 'true' : 'false');
+    } catch (error) {
+      console.error('Failed to save the narration player preference locally', error);
+    }
+
+    if (!narrationPlayerPreferenceEndpoint) {
+      return;
+    }
+
+    try {
+      const response = await fetch(narrationPlayerPreferenceEndpoint, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ narrationPlayerExpanded: expanded }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Preference sync failed with status ${response.status}`);
+      }
+    } catch (error) {
+      console.error('Failed to sync the narration player preference', error);
+    }
+  }, [narrationPlayerPreferenceEndpoint]);
+
+  useEffect(() => {
+    if (typeof initialNarrationPlayerExpanded === 'boolean') {
+      setIsNarrationPlayerExpanded(initialNarrationPlayerExpanded);
+
+      try {
+        localStorage.setItem(
+          NARRATION_PLAYER_PREFERENCE_KEY,
+          initialNarrationPlayerExpanded ? 'true' : 'false'
+        );
+      } catch (error) {
+        console.error('Failed to mirror the narration player preference locally', error);
+      }
+
+      return;
+    }
+
+    try {
+      const savedPreference = localStorage.getItem(NARRATION_PLAYER_PREFERENCE_KEY);
+
+      if (savedPreference === 'true' || savedPreference === 'false') {
+        const expanded = savedPreference === 'true';
+        setIsNarrationPlayerExpanded(expanded);
+
+        if (narrationPlayerPreferenceEndpoint) {
+          void persistNarrationPlayerPreference(expanded);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load the narration player preference', error);
+    }
+  }, [initialNarrationPlayerExpanded, narrationPlayerPreferenceEndpoint, persistNarrationPlayerPreference]);
+
+  const expandNarrationPlayer = useCallback((persistPreference = true) => {
+    setIsNarrationPlayerExpanded(true);
+
+    if (!persistPreference) {
+      return;
+    }
+
+    void persistNarrationPlayerPreference(true);
+  }, [persistNarrationPlayerPreference]);
+
+  const collapseNarrationPlayer = useCallback((persistPreference = true) => {
+    setIsNarrationPlayerExpanded(false);
+
+    if (!persistPreference) {
+      return;
+    }
+
+    void persistNarrationPlayerPreference(false);
+  }, [persistNarrationPlayerPreference]);
 
   // ── Keyboard navigation ───────────────────────────────────────────
   useEffect(() => {
@@ -235,6 +718,289 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
     }
   }, [bookId]);
 
+  const loadNarrationStatus = useCallback(async (force = false) => {
+    if (!narrationAccess?.hasAccess || isCheckingNarration) return;
+    if (narrationStatus && !force) return;
+
+    setIsCheckingNarration(true);
+    if (force) {
+      setNarrationStatus(null);
+    }
+    setNarrationError(null);
+
+    try {
+      const response = await fetch(narrationAccess.statusEndpoint, {
+        cache: 'no-store',
+      });
+      const payload = (await response.json().catch(() => null)) as NarrationStatusPayload | null;
+
+      if (payload) {
+        setNarrationStatus(payload);
+      }
+
+      if (!response.ok && !payload?.message) {
+        setNarrationError('Unable to load narration status right now.');
+      }
+    } catch (error) {
+      console.error('Failed to load narration status', error);
+      setNarrationError('Unable to load narration status right now.');
+    } finally {
+      setIsCheckingNarration(false);
+    }
+  }, [isCheckingNarration, narrationAccess, narrationStatus]);
+
+  const openNarrationModal = useCallback(() => {
+    setShowNarrationModal(true);
+    void loadNarrationStatus();
+  }, [loadNarrationStatus]);
+
+  const ensureNarrationCueStyles = useCallback(() => {
+    const contents = (renditionRef.current as any)?.getContents?.() ?? [];
+
+    contents.forEach((content: any) => {
+      const doc = content?.document as Document | undefined;
+
+      if (!doc || doc.getElementById('omr-narration-cue-style')) {
+        return;
+      }
+
+      const style = doc.createElement('style');
+      style.id = 'omr-narration-cue-style';
+      style.textContent = `
+        .${NARRATION_ACTIVE_ELEMENT_CLASS} {
+          background: rgba(61, 115, 122, 0.16) !important;
+          box-shadow: 0 0 0 3px rgba(61, 115, 122, 0.18) !important;
+          border-radius: 0.35rem;
+          transition: background-color 160ms ease, box-shadow 160ms ease;
+        }
+      `;
+
+      doc.head?.appendChild(style);
+    });
+  }, []);
+
+  const clearNarrationCueHighlight = useCallback(() => {
+    if (renditionRef.current && activeNarrationCueCfiRef.current) {
+      try {
+        renditionRef.current.annotations.remove(activeNarrationCueCfiRef.current, 'highlight');
+      } catch (error) {
+        console.error('Failed to remove narration highlight', error);
+      }
+    }
+
+    activeNarrationCueCfiRef.current = null;
+
+    narrationHighlightedElementsRef.current.forEach((element) => {
+      if (element.getAttribute(NARRATION_WRAPPER_ATTRIBUTE) === 'true') {
+        const parent = element.parentNode;
+
+        while (element.firstChild) {
+          parent?.insertBefore(element.firstChild, element);
+        }
+
+        parent?.removeChild(element);
+        parent?.normalize?.();
+        return;
+      }
+
+      element.classList.remove(NARRATION_ACTIVE_ELEMENT_CLASS);
+    });
+    narrationHighlightedElementsRef.current = [];
+  }, []);
+
+  const applyNarrationCueHighlight = useCallback((cue: NarrationManifestCue | null) => {
+    clearNarrationCueHighlight();
+
+    if (!cue) {
+      return;
+    }
+
+    ensureNarrationCueStyles();
+
+    if (cue.targetCfi && renditionRef.current) {
+      try {
+        renditionRef.current.annotations.highlight(
+          cue.targetCfi,
+          {},
+          undefined,
+          'hl-narration-active',
+          NARRATION_ACTIVE_ANNOTATION_STYLE
+        );
+        activeNarrationCueCfiRef.current = cue.targetCfi;
+      } catch (error) {
+        console.error('Failed to apply narration CFI highlight', error);
+      }
+    }
+
+    if (cue.targetElementId || cue.excerpt) {
+      const contents = (renditionRef.current as any)?.getContents?.() ?? [];
+      const nextElements: HTMLElement[] = [];
+
+      contents.forEach((content: any) => {
+        const doc = content?.document as Document | undefined;
+        const excerptMatchedElement = findNarrationCueElementByExcerpt(doc, cue.excerpt);
+        const element = excerptMatchedElement ?? doc?.getElementById(cue.targetElementId ?? '');
+        const frameHTMLElement = doc?.defaultView?.HTMLElement;
+
+        if (element && (!frameHTMLElement || element instanceof frameHTMLElement)) {
+          const htmlElement = element as HTMLElement;
+          const wrappedExcerpt = cue.excerpt ? wrapNarrationCueExcerpt(htmlElement, cue.excerpt) : null;
+
+          if (wrappedExcerpt) {
+            nextElements.push(wrappedExcerpt);
+          } else {
+            htmlElement.classList.add(NARRATION_ACTIVE_ELEMENT_CLASS);
+            nextElements.push(htmlElement);
+          }
+        }
+      });
+
+      narrationHighlightedElementsRef.current = nextElements;
+    }
+  }, [clearNarrationCueHighlight, ensureNarrationCueStyles]);
+
+  const resolveNarrationChapterIndex = useCallback((preferredHref?: string | null) => {
+    return resolveNarrationChapterIndexFromChapters(
+      narrationChapters,
+      preferredHref ?? currentHrefRef.current,
+      currentCfiRef.current,
+    );
+  }, [narrationChapters]);
+
+  const handleNarrationVoiceChange = useCallback((voiceSlug: string) => {
+    const nextVoiceOption = narrationVoiceOptions.find((voiceOption) => voiceOption.voice.slug === voiceSlug);
+
+    if (!nextVoiceOption || selectedNarrationVoiceSlug === voiceSlug) {
+      return;
+    }
+
+    pendingNarrationAutoplayRef.current = isNarrationPlaying;
+    audioRef.current?.pause();
+    setNarrationPlaybackError(null);
+    setSelectedNarrationVoiceSlug(voiceSlug);
+
+    try {
+      localStorage.setItem(getNarrationVoicePreferenceStorageKey(bookId), voiceSlug);
+    } catch (error) {
+      console.error('Failed to save the narration voice preference', error);
+    }
+
+    const nextChapterIndex = resolveNarrationChapterIndexFromChapters(
+      nextVoiceOption.manifest.chapters,
+      currentHrefRef.current,
+      currentCfiRef.current,
+    );
+
+    setNarrationChapterIndex(nextChapterIndex);
+    setNarrationCurrentTime(0);
+    setNarrationDuration(
+      nextVoiceOption.manifest.chapters[nextChapterIndex]?.durationMs
+        ? nextVoiceOption.manifest.chapters[nextChapterIndex].durationMs / 1000
+        : 0
+    );
+    setActiveNarrationCue(null);
+    lastNarrationDisplayTargetRef.current = null;
+    expandNarrationPlayer(false);
+  }, [
+    bookId,
+    expandNarrationPlayer,
+    isNarrationPlaying,
+    narrationVoiceOptions,
+    selectedNarrationVoiceSlug,
+  ]);
+
+  const skipNarrationChapter = useCallback((direction: -1 | 1) => {
+    if (narrationChapters.length === 0) {
+      return;
+    }
+
+    const nextIndex = Math.min(
+      Math.max(narrationChapterIndex + direction, 0),
+      narrationChapters.length - 1
+    );
+
+    if (nextIndex === narrationChapterIndex) {
+      return;
+    }
+
+    pendingNarrationAutoplayRef.current = isNarrationPlaying;
+    setNarrationPlaybackError(null);
+    setNarrationChapterIndex(nextIndex);
+    setNarrationCurrentTime(0);
+    setNarrationDuration(narrationChapters[nextIndex].durationMs ? narrationChapters[nextIndex].durationMs / 1000 : 0);
+    lastNarrationDisplayTargetRef.current = null;
+  }, [isNarrationPlaying, narrationChapterIndex, narrationChapters]);
+
+  const toggleNarrationPlayback = useCallback(async () => {
+    if (!narrationAccess?.hasAccess) {
+      openNarrationModal();
+      return;
+    }
+
+    if (!narrationHasReadyPlayer || !activeNarrationChapter?.audio.url) {
+      setShowNarrationModal(true);
+      void loadNarrationStatus(true);
+      return;
+    }
+
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    if (isNarrationPlaying) {
+      audio.pause();
+      return;
+    }
+
+    const suggestedChapterIndex = resolveNarrationChapterIndex(currentHref);
+    if (suggestedChapterIndex !== narrationChapterIndex) {
+      pendingNarrationAutoplayRef.current = true;
+      setNarrationPlaybackError(null);
+      setNarrationChapterIndex(suggestedChapterIndex);
+      setNarrationCurrentTime(0);
+      setNarrationDuration(
+        narrationChapters[suggestedChapterIndex]?.durationMs
+          ? narrationChapters[suggestedChapterIndex].durationMs / 1000
+          : 0
+      );
+      lastNarrationDisplayTargetRef.current = null;
+      return;
+    }
+
+    try {
+      setNarrationPlaybackError(null);
+      await audio.play();
+    } catch (error) {
+      console.error('Unable to start narration playback', error);
+      setNarrationPlaybackError('Unable to start narration playback right now.');
+    }
+  }, [
+    activeNarrationChapter?.audio.url,
+    currentHref,
+    isNarrationPlaying,
+    loadNarrationStatus,
+    narrationAccess?.hasAccess,
+    narrationChapterIndex,
+    narrationChapters,
+    narrationHasReadyPlayer,
+    openNarrationModal,
+    resolveNarrationChapterIndex,
+  ]);
+
+  const handleNarrationSeek = useCallback((nextTime: number) => {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    audio.currentTime = nextTime;
+    setNarrationCurrentTime(nextTime);
+    lastNarrationDisplayTargetRef.current = null;
+  }, []);
+
   // Load highlights, bookmarks and notes
   useEffect(() => {
     const loadAnnotations = async () => {
@@ -254,12 +1020,243 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
     loadAnnotations();
   }, [bookId]);
 
+  useEffect(() => {
+    activeNarrationCueRef.current = activeNarrationCue;
+  }, [activeNarrationCue]);
+
+  useEffect(() => {
+    if (narrationPlaybackError) {
+      expandNarrationPlayer(false);
+    }
+  }, [expandNarrationPlayer, narrationPlaybackError]);
+
+  useEffect(() => {
+    if (!narrationAccess?.hasAccess || narrationStatus || isCheckingNarration) {
+      return;
+    }
+
+    void loadNarrationStatus();
+  }, [isCheckingNarration, loadNarrationStatus, narrationAccess?.hasAccess, narrationStatus]);
+
+  useEffect(() => {
+    if (narrationVoiceOptions.length === 0) {
+      setSelectedNarrationVoiceSlug(null);
+      return;
+    }
+
+    let savedVoiceSlug: string | null = null;
+
+    try {
+      savedVoiceSlug = localStorage.getItem(getNarrationVoicePreferenceStorageKey(bookId));
+    } catch (error) {
+      console.error('Failed to read the narration voice preference', error);
+    }
+
+    const nextVoiceSlug = [
+      selectedNarrationVoiceSlug,
+      savedVoiceSlug,
+      narrationStatus?.defaultVoiceSlug ?? null,
+      narrationVoiceOptions.find((voiceOption) => voiceOption.active)?.voice.slug ?? null,
+      narrationVoiceOptions[0]?.voice.slug ?? null,
+    ].find(
+      (voiceSlug): voiceSlug is string => Boolean(
+        voiceSlug && narrationVoiceOptions.some((voiceOption) => voiceOption.voice.slug === voiceSlug)
+      )
+    ) ?? null;
+
+    if (nextVoiceSlug !== selectedNarrationVoiceSlug) {
+      setSelectedNarrationVoiceSlug(nextVoiceSlug);
+    }
+  }, [bookId, narrationStatus?.defaultVoiceSlug, narrationVoiceOptions, selectedNarrationVoiceSlug]);
+
+  useEffect(() => {
+    if (!narrationHasReadyPlayer || isNarrationPlaying) {
+      return;
+    }
+
+    const nextChapterIndex = resolveNarrationChapterIndex(currentHref);
+
+    setNarrationChapterIndex((previousIndex) => (previousIndex === nextChapterIndex ? previousIndex : nextChapterIndex));
+  }, [currentHref, isNarrationPlaying, narrationHasReadyPlayer, resolveNarrationChapterIndex]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+
+    if (!audio || !activeNarrationChapter?.audio.url) {
+      if (audio) {
+        audio.pause();
+        audio.removeAttribute('src');
+      }
+      setNarrationCurrentTime(0);
+      setNarrationDuration(0);
+      setActiveNarrationCue(null);
+      return;
+    }
+
+    const nextSource = activeNarrationChapter.audio.url;
+
+    if (audio.getAttribute('src') !== nextSource) {
+      audio.setAttribute('src', nextSource);
+      audio.load?.();
+    }
+
+    setNarrationCurrentTime(0);
+    setNarrationDuration(activeNarrationChapter.durationMs ? activeNarrationChapter.durationMs / 1000 : 0);
+    setActiveNarrationCue(null);
+  }, [activeNarrationChapter?.audio.url, activeNarrationChapter?.durationMs]);
+
+  useEffect(() => {
+    if (!audioRef.current) {
+      return;
+    }
+
+    audioRef.current.playbackRate = narrationPlaybackRate;
+  }, [narrationPlaybackRate]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    const handleTimeUpdate = () => {
+      setNarrationCurrentTime(audio.currentTime || 0);
+    };
+
+    const handleLoadedMetadata = () => {
+      const resolvedDuration = Number.isFinite(audio.duration) && audio.duration > 0
+        ? audio.duration
+        : activeNarrationChapter?.durationMs
+          ? activeNarrationChapter.durationMs / 1000
+          : 0;
+
+      setNarrationDuration(resolvedDuration);
+
+      if (pendingNarrationAutoplayRef.current) {
+        pendingNarrationAutoplayRef.current = false;
+        audio.play().catch((error) => {
+          console.error('Unable to continue narration playback', error);
+          setNarrationPlaybackError('Unable to continue narration playback right now.');
+        });
+      }
+    };
+
+    const handlePlay = () => {
+      setIsNarrationPlaying(true);
+      setNarrationPlaybackError(null);
+    };
+
+    const handlePause = () => {
+      setIsNarrationPlaying(false);
+    };
+
+    const handleEnded = () => {
+      if (narrationChapterIndex < narrationChapters.length - 1) {
+        pendingNarrationAutoplayRef.current = true;
+        setNarrationChapterIndex((previousIndex) => previousIndex + 1);
+        lastNarrationDisplayTargetRef.current = null;
+        return;
+      }
+
+      setIsNarrationPlaying(false);
+      setActiveNarrationCue(null);
+    };
+
+    const handleError = () => {
+      pendingNarrationAutoplayRef.current = false;
+      setIsNarrationPlaying(false);
+      setNarrationPlaybackError('Unable to stream narration audio right now.');
+    };
+
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('pause', handlePause);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleError);
+
+    return () => {
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('pause', handlePause);
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('error', handleError);
+    };
+  }, [activeNarrationChapter?.durationMs, narrationChapterIndex, narrationChapters.length]);
+
+  useEffect(() => {
+    if (!activeNarrationChapter || activeNarrationChapter.cues.length === 0) {
+      setActiveNarrationCue(null);
+      return;
+    }
+
+    const currentTimeMs = narrationCurrentTime * 1000;
+    const matchingCue = activeNarrationChapter.cues.find((cue, index) => {
+      const nextCue = activeNarrationChapter.cues[index + 1];
+      return currentTimeMs >= cue.startMs && (!nextCue || currentTimeMs < nextCue.startMs);
+    }) ?? null;
+
+    setActiveNarrationCue((previousCue) => {
+      if (
+        previousCue?.sequence === matchingCue?.sequence &&
+        previousCue?.targetCfi === matchingCue?.targetCfi &&
+        previousCue?.targetHref === matchingCue?.targetHref
+      ) {
+        return previousCue;
+      }
+
+      return matchingCue;
+    });
+  }, [activeNarrationChapter, narrationCurrentTime]);
+
+  useEffect(() => {
+    if (!activeNarrationCue) {
+      clearNarrationCueHighlight();
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncCue = async () => {
+      const targetLocation = activeNarrationCue.targetCfi ?? activeNarrationCue.targetHref;
+
+      try {
+        if (followNarrationText && targetLocation && lastNarrationDisplayTargetRef.current !== targetLocation) {
+          lastNarrationDisplayTargetRef.current = targetLocation;
+          await renditionRef.current?.display(targetLocation);
+        }
+      } catch (error) {
+        console.error('Failed to sync narration cue to the reader', error);
+      }
+
+      if (!cancelled) {
+        applyNarrationCueHighlight(activeNarrationCue);
+      }
+    };
+
+    void syncCue();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeNarrationCue, applyNarrationCueHighlight, clearNarrationCueHighlight, followNarrationText]);
+
+  useEffect(() => () => {
+    clearNarrationCueHighlight();
+  }, [clearNarrationCueHighlight]);
+
   // Initialize book - only once!
   useEffect(() => {
     if (!viewerRef.current) return;
 
     let destroyed = false;
     let renditionInstance: Rendition | null = null;
+    const registeredHighlightCfisForRender = registeredHighlightCfis.current;
+
+    setIsReady(false);
+    setReaderLoadError(null);
 
     const initBook = async () => {
       // Pre-fetch as ArrayBuffer so epub.js doesn't misdetect the URL as a
@@ -296,25 +1293,36 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
         body: { background: '#f4ecd8', color: '#5c4a3a' },
       });
 
-      rendition.themes.select(theme);
-      rendition.themes.fontSize(`${fontSize}%`);
-      rendition.themes.font(fontFamily);
-      rendition.themes.override('line-height', String(lineSpacing));
+      rendition.themes.select(themeRef.current);
+      rendition.themes.fontSize(`${fontSizeRef.current}%`);
+      rendition.themes.font(fontFamilyRef.current);
+      rendition.themes.override('line-height', String(lineSpacingRef.current));
 
       // Display book — resume position when two-page/flow mode changes.
       // Priority: in-memory ref (layout change) › localStorage (refresh within debounce) › server DB › beginning.
       const localCfi = typeof window !== 'undefined' ? localStorage.getItem(`reader-progress-${bookId}`) : null;
       const resumeAt = currentCfiRef.current ?? localCfi ?? initialLocation;
-      const displayPromise = resumeAt
-        ? rendition.display(resumeAt)
-        : rendition.display();
 
-      displayPromise.then(() => {
-        if (!destroyed) {
-          setIsReady(true);
-          isFirstRelocate.current = true;
+      try {
+        if (resumeAt) {
+          await rendition.display(resumeAt);
+        } else {
+          await rendition.display();
         }
-      }).catch(console.error);
+      } catch (error) {
+        if (!resumeAt) {
+          throw error;
+        }
+
+        console.error('Failed to resume the saved reader location, falling back to the beginning of the book', error);
+        await rendition.display();
+      }
+
+      if (!destroyed) {
+        setReaderLoadError(null);
+        setIsReady(true);
+        isFirstRelocate.current = true;
+      }
 
       // Estimate word count for time-to-finish
       book.ready.then(() => {
@@ -331,6 +1339,13 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
       rendition.on('touchstart', onIframeTouchStart);
       rendition.on('touchmove', onIframeTouchMove);
       rendition.on('touchend', onIframeTouchEnd);
+      rendition.on('rendered', () => {
+        ensureNarrationCueStyles();
+
+        if (activeNarrationCueRef.current) {
+          applyNarrationCueHighlight(activeNarrationCueRef.current);
+        }
+      });
 
       // Handle text selection
       rendition.on('selected', (cfiRange: string) => {
@@ -345,6 +1360,9 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
       rendition.on('relocated', (location: any) => {
         if (locationTimeout.current) clearTimeout(locationTimeout.current);
         currentCfiRef.current = location.start.cfi;
+        const nextHref = normalizeNarrationHref(location?.start?.href ?? null);
+        currentHrefRef.current = nextHref;
+        setCurrentHref(nextHref);
         // Persist synchronously to localStorage so a refresh within the
         // DB debounce window still restores the correct position.
         try { localStorage.setItem(`reader-progress-${bookId}`, location.start.cfi); } catch (_) {}
@@ -376,17 +1394,32 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
       });
     };
 
-    initBook().catch(console.error);
+    initBook().catch((error) => {
+      console.error('Failed to initialize the reader', error);
+
+      if (!destroyed) {
+        setReaderLoadError('We could not open this page right away. Please refresh and try again.');
+      }
+    });
 
     return () => {
       destroyed = true;
       // Clear the registered-CFI set so highlights are re-annotated on the
       // fresh rendition after a re-initialization.
-      registeredHighlightCfis.current.clear();
+      registeredHighlightCfisForRender.clear();
       if (locationTimeout.current) clearTimeout(locationTimeout.current);
       renditionInstance?.destroy();
     };
-  }, [url, twoPage, flow]); // Re-initialize if URL, page-spread, or flow mode changes
+  }, [
+    applyNarrationCueHighlight,
+    bookId,
+    ensureNarrationCueStyles,
+    flow,
+    initialLocation,
+    saveProgress,
+    twoPage,
+    url,
+  ]); // Re-initialize if URL, page-spread, or flow mode changes
 
   // Keep the ref in sync so annotation callbacks always see the latest note text.
   useEffect(() => {
@@ -650,14 +1683,13 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
     <div className="relative h-screen w-full overflow-hidden">
 
       {/* ── Reading area ──────────────────────────────────────────────── */}
-      <div className="absolute inset-0 flex items-stretch bg-landing-bg">
+      <div className={`absolute inset-0 flex items-stretch bg-landing-bg ${readerViewportInsetClass}`}>
 
         {/* Book canvas */}
         <div className="flex flex-1 min-h-0 items-stretch justify-center overflow-hidden md:p-5 md:items-center">
           {/* Drag wrapper — translates during swipe animation */}
           <div ref={dragWrapperRef} className="flex w-full min-h-0 items-stretch justify-center md:items-center" style={{ willChange: 'transform' }}>
             <div
-              ref={viewerRef}
               className={`overflow-hidden md:rounded-xl md:border border-landing-border bg-white md:shadow-2xl transition-opacity duration-150 ${isFading ? 'opacity-0' : 'opacity-100'}`}
               style={flow === 'scrolled' ? {
                 width: '100%',
@@ -668,7 +1700,37 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
                 maxWidth: twoPage ? '1100px' : '560px',
                 height: '100%',
               }}
-            />
+            >
+              <div ref={viewerRef} className="h-full w-full" />
+
+              {(!isReady || readerLoadError) && (
+                <div className="absolute inset-0 flex items-center justify-center bg-white/88 px-6 text-center backdrop-blur-[1px]">
+                  <div className="surface-card max-w-sm px-6 py-5 sm:px-7">
+                    {readerLoadError ? (
+                      <>
+                        <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-rose-50 text-rose-500">
+                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v4m0 4h.01M5.93 19h12.14c1.54 0 2.5-1.67 1.73-3L13.73 5c-.77-1.33-2.69-1.33-3.46 0L4.2 16c-.77 1.33.19 3 1.73 3z" />
+                          </svg>
+                        </div>
+                        <h2 className="mt-4 text-base font-semibold text-landing-text">The page needs another try</h2>
+                        <p className="mt-2 text-sm leading-relaxed text-landing-text-muted">
+                          {readerLoadError}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="mx-auto h-11 w-11 animate-spin rounded-full border-2 border-landing-border border-t-landing-accent motion-reduce:animate-none" />
+                        <h2 className="mt-4 text-base font-semibold text-landing-text">Loading your book</h2>
+                        <p className="mt-2 text-sm leading-relaxed text-landing-text-muted">
+                          We&apos;re opening the EPUB and restoring your place. The reader will appear in a moment.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -701,7 +1763,6 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
 
       {/* ── Top toolbar ───────────────────────────────────────────────── */}
       <div className="absolute left-0 right-0 top-0 z-30 flex items-center justify-between px-4 py-3 pointer-events-none">
-        {/* Left: page counter + time estimate */}
         <div className="pointer-events-auto flex items-center gap-2">
           <div
             aria-live="polite"
@@ -718,9 +1779,7 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
           )}
         </div>
 
-        {/* Right: search, bookmark, go-to, menu */}
         <div className="pointer-events-auto flex items-center gap-2">
-          {/* Search */}
           <button
             onClick={() => setShowSearch(true)}
             aria-label="Search in book"
@@ -731,7 +1790,6 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
             </svg>
           </button>
 
-          {/* Go to location */}
           <button
             onClick={() => setShowGoTo(true)}
             aria-label="Go to location"
@@ -742,7 +1800,6 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
             </svg>
           </button>
 
-          {/* Notes panel toggle */}
           <button
             onClick={() => setSidePanel(sidePanel === 'notes' ? null : 'notes')}
             aria-label="My notes"
@@ -758,7 +1815,6 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
             </svg>
           </button>
 
-          {/* Bookmark toggle */}
           <button
             onClick={toggleBookmark}
             aria-label={isBookmarkedHere ? 'Remove bookmark' : 'Add bookmark'}
@@ -769,7 +1825,6 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
             </svg>
           </button>
 
-          {/* Table of Contents — quick access */}
           <button
             onClick={() => setSidePanel(sidePanel === 'toc' ? null : 'toc')}
             aria-label="Table of contents"
@@ -785,7 +1840,50 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
             </svg>
           </button>
 
-          {/* Hamburger menu */}
+          {narrationAccess && (
+            <button
+              onClick={narrationHasReadyPlayer ? () => void toggleNarrationPlayback() : openNarrationModal}
+              aria-label={
+                narrationHasReadyPlayer
+                  ? isNarrationPlaying
+                    ? 'Pause narration'
+                    : 'Play narration'
+                  : narrationAccess.hasAccess
+                    ? 'Open narrated mode status'
+                    : 'Narrated mode reserved for donors'
+              }
+              className={`relative flex h-9 w-9 items-center justify-center rounded-full backdrop-blur-sm transition focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
+                narrationHasReadyPlayer || narrationAccess.hasAccess
+                  ? 'bg-landing-accent text-white hover:bg-landing-accent-secondary'
+                  : 'bg-black/25 text-white hover:bg-black/45'
+              }`}
+            >
+              {narrationHasReadyPlayer && isNarrationPlaying ? (
+                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 6h3v12H8zM13 6h3v12h-3z" />
+                </svg>
+              ) : (
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.8}
+                    d="M4.5 12a7.5 7.5 0 1115 0v4.25A1.75 1.75 0 0117.75 18H16a1 1 0 01-1-1v-3.5a1 1 0 011-1h3.5m-15 0H8a1 1 0 011 1V17a1 1 0 01-1 1H6.25A1.75 1.75 0 014.5 16.25V12z"
+                  />
+                </svg>
+              )}
+              <span
+                className={`absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full border border-white text-[9px] font-bold ${
+                  narrationHasReadyPlayer || narrationAccess.hasAccess
+                    ? 'bg-white text-landing-accent'
+                    : 'bg-amber-400 text-amber-950'
+                }`}
+              >
+                {narrationHasReadyPlayer ? '▶' : narrationAccess.hasAccess ? '✓' : '★'}
+              </span>
+            </button>
+          )}
+
           <button
             onClick={() => setShowMenu(true)}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-black/25 text-white shadow-md backdrop-blur-sm transition hover:bg-black/45 focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2"
@@ -797,6 +1895,235 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
           </button>
         </div>
       </div>
+
+      {narrationAccess && <audio ref={audioRef} preload="metadata" data-testid="narration-audio" className="hidden" />}
+
+      {narrationHasReadyPlayer && activeNarrationChapter && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-3 sm:px-4">
+          <div className={`pointer-events-auto w-full overflow-hidden rounded-2xl border border-landing-border bg-white/92 shadow-xl backdrop-blur-xl transition-all duration-200 ${
+            isNarrationPlayerExpanded ? 'max-w-2xl' : 'max-w-xl'
+          }`}>
+            {isNarrationPlayerExpanded ? (
+              <div className="px-3.5 py-3 sm:px-4">
+                <div className="flex items-start gap-2.5 sm:gap-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => skipNarrationChapter(-1)}
+                      disabled={narrationChapterIndex === 0}
+                      aria-label="Previous narration chapter"
+                      className="flex h-9 w-9 items-center justify-center rounded-full border border-landing-border bg-white text-landing-text transition-colors hover:border-landing-accent/40 hover:text-landing-accent disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => void toggleNarrationPlayback()}
+                      aria-label={isNarrationPlaying ? 'Pause narration' : 'Play narration'}
+                      className="flex h-10 w-10 items-center justify-center rounded-full bg-landing-accent text-white shadow-sm transition-colors hover:bg-landing-accent-secondary"
+                    >
+                      {isNarrationPlaying ? (
+                        <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 6h3v12H8zM13 6h3v12h-3z" />
+                        </svg>
+                      ) : (
+                        <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => skipNarrationChapter(1)}
+                      disabled={narrationChapterIndex >= narrationChapters.length - 1}
+                      aria-label="Next narration chapter"
+                      className="flex h-9 w-9 items-center justify-center rounded-full border border-landing-border bg-white text-landing-text transition-colors hover:border-landing-accent/40 hover:text-landing-accent disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                        <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                          Donor narration
+                        </span>
+                        <span className="rounded-full border border-landing-border bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-landing-text-muted">
+                          {activeNarrationVoiceName}
+                        </span>
+                        <span className="rounded-full border border-landing-border bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-landing-text-muted">
+                          {narrationChapterIndex + 1}/{narrationChapters.length}
+                        </span>
+                        <button
+                          onClick={() => setFollowNarrationText((value) => !value)}
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors ${
+                            followNarrationText
+                              ? 'bg-landing-accent text-white'
+                              : 'border border-landing-border bg-white text-landing-text-muted hover:border-landing-accent/40 hover:text-landing-accent'
+                          }`}
+                        >
+                          Follow {followNarrationText ? 'on' : 'off'}
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => collapseNarrationPlayer()}
+                        aria-label="Collapse narration player"
+                        aria-expanded={true}
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-landing-border bg-white text-landing-text-muted transition-colors hover:border-landing-accent/40 hover:text-landing-accent"
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 15l-7-7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-landing-text">
+                        {narrationPlayerTitle}
+                      </h3>
+                      <button
+                        onClick={openNarrationModal}
+                        className="hidden rounded-full border border-landing-border bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-landing-text-muted transition-colors hover:border-landing-accent/40 hover:text-landing-accent sm:inline-flex"
+                      >
+                        Details
+                      </button>
+                    </div>
+
+                    <p className="mt-1 truncate text-[11px] leading-relaxed text-landing-text-muted">
+                      {narrationPlayerMessage}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <input
+                    type="range"
+                    min={0}
+                    max={narrationPlaybackMax}
+                    step={0.1}
+                    value={Math.min(narrationCurrentTime, narrationPlaybackMax)}
+                    onChange={(event) => handleNarrationSeek(Number(event.target.value))}
+                    aria-label="Narration playback position"
+                    className="w-full accent-landing-accent"
+                  />
+                  <div className="mt-1.5 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.12em] text-landing-text-muted">
+                    <span>{formatMediaTime(narrationCurrentTime)}</span>
+                    <span>{activeNarrationCue ? 'Cue synced' : 'Awaiting cue'}</span>
+                    <span>{formatMediaTime(narrationPlaybackMax)}</span>
+                  </div>
+                </div>
+
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                  {NARRATION_PLAYBACK_RATES.map((rate) => (
+                    <button
+                      key={rate}
+                      onClick={() => setNarrationPlaybackRate(rate)}
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                        narrationPlaybackRate === rate
+                          ? 'bg-landing-accent text-white'
+                          : 'border border-landing-border bg-white text-landing-text-muted hover:border-landing-accent/40 hover:text-landing-accent'
+                      }`}
+                    >
+                      {rate}×
+                    </button>
+                  ))}
+                  {narrationVoiceOptions.length > 1 && narrationVoiceOptions.map((voiceOption) => {
+                    const isSelected = activeNarrationVoiceOption?.voice.slug === voiceOption.voice.slug;
+
+                    return (
+                      <button
+                        key={voiceOption.voice.slug}
+                        onClick={() => handleNarrationVoiceChange(voiceOption.voice.slug)}
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                          isSelected
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'border border-landing-border bg-white text-landing-text-muted hover:border-landing-accent/40 hover:text-landing-accent'
+                        }`}
+                      >
+                        {formatNarrationVoiceName(voiceOption.voice.name)}
+                      </button>
+                    );
+                  })}
+                  <button
+                    onClick={openNarrationModal}
+                    className="rounded-full border border-landing-border bg-white px-2.5 py-1 text-[11px] font-semibold text-landing-text-muted transition-colors hover:border-landing-accent/40 hover:text-landing-accent sm:hidden"
+                  >
+                    Details
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="px-3 py-2.5 sm:px-3.5">
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={() => void toggleNarrationPlayback()}
+                    aria-label={isNarrationPlaying ? 'Pause narration' : 'Play narration'}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-landing-accent text-white shadow-sm transition-colors hover:bg-landing-accent-secondary"
+                  >
+                    {isNarrationPlaying ? (
+                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 6h3v12H8zM13 6h3v12h-3z" />
+                      </svg>
+                    ) : (
+                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => expandNarrationPlayer()}
+                    aria-label="Expand narration player"
+                    aria-expanded={false}
+                    className="min-w-0 flex-1 rounded-xl px-1 text-left transition-colors hover:bg-landing-surface-muted/80"
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                            Donor narration
+                          </span>
+                          <span className="rounded-full border border-landing-border bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-landing-text-muted">
+                            {activeNarrationVoiceName}
+                          </span>
+                          <span className="rounded-full border border-landing-border bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-landing-text-muted">
+                            {narrationChapterIndex + 1}/{narrationChapters.length}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-landing-text">
+                            {narrationPlayerTitle}
+                          </h3>
+                          <span className="shrink-0 text-[11px] font-semibold text-landing-text-muted">
+                            {formatMediaTime(narrationCurrentTime)} / {formatMediaTime(narrationPlaybackMax)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-landing-border bg-white text-landing-text-muted transition-colors">
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 15l-7-7-7 7" />
+                        </svg>
+                      </span>
+                    </div>
+                  </button>
+                </div>
+
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-landing-border/80">
+                  <div
+                    className="h-full rounded-full bg-landing-accent transition-[width] duration-200"
+                    style={{ width: `${narrationPlaybackProgressPct}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Progress strip (bottom edge) ──────────────────────────────── */}
       <div className="absolute bottom-0 left-0 right-0 z-30 h-1 bg-black/10">
@@ -866,6 +2193,87 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
               My Notes
             </button>
           </div>
+
+          {narrationAccess && (
+            <div className="mb-5 rounded-2xl border border-landing-border bg-landing-surface-muted px-4 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">Narrated mode</p>
+                  <h3 className="mt-1 text-sm font-semibold text-landing-text">
+                    {narrationHasReadyPlayer
+                      ? 'Narrated mode is ready'
+                      : narrationAccess.hasAccess
+                        ? 'Unlocked for your donor account'
+                        : 'Reserved for donors'}
+                  </h3>
+                </div>
+                <span
+                  className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${
+                    narrationHasReadyPlayer || narrationAccess.hasAccess
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-amber-100 text-amber-700'
+                  }`}
+                >
+                  {narrationHasReadyPlayer
+                    ? 'Ready to stream'
+                    : narrationAccess.hasAccess
+                      ? 'Donor unlocked'
+                      : 'Donors only'}
+                </span>
+              </div>
+
+              <p className="mt-3 text-xs leading-relaxed text-landing-text-muted">
+                {narrationHasReadyPlayer
+                  ? 'Signed narration audio is ready. Play it here and the reader will follow the text as each cue advances.'
+                  : narrationAccess.hasAccess
+                    ? 'We will stream narrated audio securely once this book’s signed narration assets are ready.'
+                    : narrationAccess.isSignedIn
+                      ? 'Make one completed donation to unlock narrated mode across your account.'
+                      : 'Sign in first, then make one completed donation to unlock narrated mode across your account.'}
+              </p>
+
+              {narrationHasReadyPlayer && narrationVoiceOptions.length > 1 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {narrationVoiceOptions.map((voiceOption) => {
+                    const isSelected = activeNarrationVoiceOption?.voice.slug === voiceOption.voice.slug;
+
+                    return (
+                      <button
+                        key={voiceOption.voice.slug}
+                        onClick={() => handleNarrationVoiceChange(voiceOption.voice.slug)}
+                        className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors ${
+                          isSelected
+                            ? 'bg-landing-accent text-white'
+                            : 'border border-landing-border bg-white text-landing-text-muted hover:border-landing-accent/40 hover:text-landing-accent'
+                        }`}
+                      >
+                        {formatNarrationVoiceName(voiceOption.voice.name)}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <button
+                onClick={narrationHasReadyPlayer ? () => void toggleNarrationPlayback() : openNarrationModal}
+                className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${
+                  narrationHasReadyPlayer || narrationAccess.hasAccess
+                    ? 'bg-landing-accent text-white hover:bg-landing-accent-secondary'
+                    : 'border border-landing-border bg-white text-landing-text hover:border-landing-accent/40 hover:text-landing-accent'
+                }`}
+              >
+                {narrationHasReadyPlayer
+                  ? isNarrationPlaying
+                    ? 'Pause narrated mode'
+                    : 'Start narrated mode'
+                  : narrationAccess.hasAccess
+                    ? 'Check narrated mode'
+                    : narrationAccess.isSignedIn
+                      ? 'Unlock with donation'
+                      : 'Sign in to unlock'}
+              </button>
+            </div>
+          )}
 
           <div className="mb-4 border-t border-landing-border" />
 
@@ -1455,6 +2863,195 @@ export default function Reader({ url, initialLocation, bookId }: ReaderProps) {
             <div className="flex gap-2">
               <button onClick={() => setShowGoTo(false)} className="flex-1 rounded-xl border border-landing-border py-2 text-sm text-landing-text-muted transition hover:border-landing-accent/40">Cancel</button>
               <button onClick={goToLocation} className="flex-1 rounded-xl bg-landing-accent py-2 text-sm font-semibold text-white transition hover:bg-landing-accent-secondary">Go</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Narration access modal ─────────────────────────────────── */}
+      {showNarrationModal && narrationAccess && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowNarrationModal(false);
+            }
+          }}
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-landing-border bg-white shadow-2xl">
+            <div className="bg-landing-surface-muted px-5 pb-4 pt-5">
+              <div className="mb-1 flex items-center gap-2">
+                <svg className="h-4 w-4 text-landing-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.8}
+                    d="M4.5 12a7.5 7.5 0 1115 0v4.25A1.75 1.75 0 0117.75 18H16a1 1 0 01-1-1v-3.5a1 1 0 011-1h3.5m-15 0H8a1 1 0 011 1V17a1 1 0 01-1 1H6.25A1.75 1.75 0 014.5 16.25V12z"
+                  />
+                </svg>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-landing-accent">Narrated mode</p>
+              </div>
+              <h3 className="text-base font-semibold text-landing-text">
+                {narrationAccess.hasAccess ? 'Donor narration status' : 'Narrated mode is reserved for donors'}
+              </h3>
+            </div>
+
+            <div className="px-5 py-4">
+              {!narrationAccess.hasAccess ? (
+                <>
+                  <p className="text-sm leading-relaxed text-landing-text-muted">
+                    {narrationAccess.isSignedIn
+                      ? 'Make one completed donation to unlock narrated mode for this book and future donor releases on your account.'
+                      : 'Sign in first, then make one completed donation to unlock narrated mode for your account.'}
+                  </p>
+
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      onClick={() => setShowNarrationModal(false)}
+                      className="flex-1 rounded-xl border border-landing-border py-2.5 text-sm text-landing-text-muted transition hover:border-landing-accent/40"
+                    >
+                      Keep reading
+                    </button>
+                    <a
+                      href={narrationAccess.manageHref}
+                      className="brand-button flex-1 px-4 py-2.5 text-center text-sm"
+                    >
+                      {narrationAccess.isSignedIn ? 'Donate to unlock' : 'Sign in to unlock'}
+                    </a>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="rounded-2xl border border-landing-border bg-landing-surface-muted px-4 py-4">
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]">
+                      <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-700">
+                        {narrationHasReadyPlayer ? 'Ready to stream' : 'Donor unlocked'}
+                      </span>
+                      <span className="rounded-full border border-landing-border bg-white px-2.5 py-1 text-landing-text-muted">
+                        {(narrationStatus?.storageProvider || 'signed').toUpperCase()} delivery
+                      </span>
+                      {narrationHasReadyPlayer && (
+                        <span className="rounded-full border border-landing-border bg-white px-2.5 py-1 text-landing-text-muted">
+                          {activeNarrationVoiceName}
+                        </span>
+                      )}
+                      {narrationHasReadyPlayer && narrationManifest && (
+                        <span className="rounded-full border border-landing-border bg-white px-2.5 py-1 text-landing-text-muted">
+                          {narrationManifest.chapterCount} chapter{narrationManifest.chapterCount === 1 ? '' : 's'}
+                        </span>
+                      )}
+                      {narrationVoiceOptions.length > 1 && (
+                        <span className="rounded-full border border-landing-border bg-white px-2.5 py-1 text-landing-text-muted">
+                          {narrationVoiceOptions.length} voices available
+                        </span>
+                      )}
+                      {narrationStatus?.bookHasLegacyAudiobook && (
+                        <span className="rounded-full border border-landing-border bg-white px-2.5 py-1 text-landing-text-muted">
+                          Legacy audiobook on file
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="mt-3 text-sm leading-relaxed text-landing-text-muted">
+                      {isCheckingNarration
+                        ? 'Checking whether this book’s narrated assets are ready…'
+                        : narrationStatus?.message || narrationError || 'Donor narration is unlocked on your account. Check back soon for the first narrated release.'}
+                    </p>
+
+                    {narrationHasReadyPlayer && narrationManifest && (
+                      <p className="mt-2 text-xs leading-relaxed text-landing-text-muted">
+                        {narrationManifest.totalDurationMs
+                          ? `${formatMediaTime(narrationManifest.totalDurationMs / 1000)} total runtime across ${narrationManifest.chapterCount} chapter${narrationManifest.chapterCount === 1 ? '' : 's'}.`
+                          : `Signed narration assets are ready across ${narrationManifest.chapterCount} chapter${narrationManifest.chapterCount === 1 ? '' : 's'}.`}
+                      </p>
+                    )}
+
+                    {narrationVoiceOptions.length > 0 && (
+                      <div className="mt-4 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-landing-text-muted">
+                            Available voices
+                          </p>
+                          {narrationVoiceOptions.length > 1 && (
+                            <span className="text-[11px] text-landing-text-muted">
+                              Tap a voice to switch instantly
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid gap-2">
+                          {narrationVoiceOptions.map((voiceOption) => {
+                            const isSelected = activeNarrationVoiceOption?.voice.slug === voiceOption.voice.slug;
+                            const runtimeLabel = voiceOption.totalDurationMs
+                              ? formatMediaTime(voiceOption.totalDurationMs / 1000)
+                              : `${voiceOption.chapterCount} chapter${voiceOption.chapterCount === 1 ? '' : 's'}`;
+
+                            return (
+                              <button
+                                key={voiceOption.voice.slug}
+                                onClick={() => handleNarrationVoiceChange(voiceOption.voice.slug)}
+                                className={`rounded-2xl border px-3.5 py-3 text-left transition-colors ${
+                                  isSelected
+                                    ? 'border-landing-accent bg-white shadow-sm'
+                                    : 'border-landing-border bg-white/80 hover:border-landing-accent/40 hover:bg-white'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-semibold text-landing-text">
+                                      {formatNarrationVoiceName(voiceOption.voice.name)}
+                                    </p>
+                                    <p className="mt-1 text-xs leading-relaxed text-landing-text-muted">
+                                      {runtimeLabel}
+                                      {voiceOption.active ? ' • Default voice' : ''}
+                                    </p>
+                                  </div>
+
+                                  <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+                                    isSelected
+                                      ? 'bg-landing-accent text-white'
+                                      : 'border border-landing-border bg-white text-landing-text-muted'
+                                  }`}>
+                                    {isSelected ? 'Selected' : 'Choose'}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      onClick={() => setShowNarrationModal(false)}
+                      className="flex-1 rounded-xl border border-landing-border py-2.5 text-sm text-landing-text-muted transition hover:border-landing-accent/40"
+                    >
+                      Close
+                    </button>
+                    {narrationHasReadyPlayer ? (
+                      <button
+                        onClick={() => {
+                          setShowNarrationModal(false);
+                          void toggleNarrationPlayback();
+                        }}
+                        className="flex-1 rounded-xl bg-landing-accent py-2.5 text-sm font-semibold text-white transition hover:bg-landing-accent-secondary"
+                      >
+                        {isNarrationPlaying ? 'Pause narration' : 'Start narration'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => void loadNarrationStatus(true)}
+                        disabled={isCheckingNarration}
+                        className="flex-1 rounded-xl bg-landing-accent py-2.5 text-sm font-semibold text-white transition hover:bg-landing-accent-secondary disabled:opacity-50"
+                      >
+                        {isCheckingNarration ? 'Checking…' : 'Refresh status'}
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

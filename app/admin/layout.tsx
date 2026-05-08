@@ -1,7 +1,8 @@
-import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { ShieldCheck, Sparkles } from "lucide-react";
+import AdminSidebarNav from "./_components/AdminSidebarNav";
 
 export default async function AdminLayout({
   children,
@@ -14,42 +15,87 @@ export default async function AdminLayout({
     redirect("/api/auth/signin");
   }
 
+  const adminDisplayName = session.user.name || session.user.email || "Administrator";
+
   return (
-    <div className="grid grid-rows-[auto_1fr] md:grid-rows-1 md:grid-cols-[256px_1fr] h-screen overflow-hidden bg-gray-100">
-      <aside className="overflow-y-auto bg-white shadow-md flex flex-col">
-        <div className="p-4 md:p-6 flex items-center justify-between">
-          <h2 className="text-xl md:text-2xl font-bold text-gray-800">Admin Panel</h2>
-        </div>
-        <nav className="flex flex-row overflow-x-auto md:flex-col border-b md:border-b-0 md:mt-6 pb-2 md:pb-0 scrollbar-hide md:flex-1">
-          <Link
-            href="/admin"
-            className="block px-4 md:px-6 py-2 md:py-3 text-gray-700 hover:bg-gray-100 whitespace-nowrap text-sm md:text-base"
-          >
-            Dashboard
-          </Link>
-          <Link
-            href="/admin/books"
-            className="block px-4 md:px-6 py-2 md:py-3 text-gray-700 hover:bg-gray-100 whitespace-nowrap text-sm md:text-base"
-          >
-            Manage Books
-          </Link>
-          <Link
-            href="/admin/books/upload"
-            className="block px-4 md:px-6 py-2 md:py-3 text-gray-700 hover:bg-gray-100 whitespace-nowrap text-sm md:text-base"
-          >
-            Upload Book
-          </Link>
-          <div className="md:mt-auto">
-            <Link
-               href="/"
-               className="block px-4 md:px-6 py-2 md:py-3 text-gray-700 hover:bg-gray-100 whitespace-nowrap text-sm md:text-base md:border-t"
-            >
-              Back to Library
-            </Link>
+    <div className="page-shell">
+      <div className="mx-auto w-full max-w-[1600px] px-4 py-4 sm:px-6 sm:py-6 2xl:px-8 lg:py-8">
+        <div className="grid gap-6 2xl:grid-cols-[312px_minmax(0,1fr)]">
+          <aside className="hidden 2xl:flex 2xl:sticky 2xl:top-8 2xl:h-[calc(100vh-4rem)] 2xl:flex-col 2xl:overflow-hidden surface-card p-5">
+            <div className="rounded-2xl bg-landing-accent px-5 py-5 text-white shadow-sm">
+              <div className="flex items-center gap-3">
+                <span className="rounded-2xl bg-white/15 p-2.5">
+                  <ShieldCheck className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/70">
+                    One Man Revolution
+                  </p>
+                  <h1 className="mt-1 font-playfair text-2xl">Admin studio</h1>
+                </div>
+              </div>
+              <p className="mt-4 text-sm leading-6 text-white/80">
+                Publish books, tune donor access, and generate narrated EPUB experiences without leaving the cockpit.
+              </p>
+            </div>
+
+            <AdminSidebarNav className="mt-6 flex-1 overflow-y-auto pr-1" />
+          </aside>
+
+          <div className="flex min-h-[calc(100vh-4rem)] min-w-0 flex-col gap-6">
+            <section className="surface-card p-4 sm:p-5 2xl:hidden">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">
+                    One Man Revolution
+                  </p>
+                  <h1 className="mt-1 font-playfair text-2xl text-landing-text sm:text-[2rem]">
+                    Admin studio
+                  </h1>
+                  <p className="mt-2 text-sm leading-6 text-landing-text-muted">
+                    Manage the catalog, donor access, and narration generation from a cleaner control surface.
+                  </p>
+                </div>
+                <span className="rounded-2xl bg-landing-accent/10 p-2.5 text-landing-accent">
+                  <Sparkles className="h-5 w-5" />
+                </span>
+              </div>
+
+              <AdminSidebarNav compact className="mt-5" />
+            </section>
+
+            <header className="surface-card grid gap-4 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,360px)] lg:items-center">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-text-muted">
+                  Authenticated as
+                </p>
+                <p className="mt-2 truncate text-xl font-semibold text-landing-text">
+                  {adminDisplayName}
+                </p>
+                {session.user.email ? (
+                  <p className="mt-1 truncate text-sm text-landing-text-muted">{session.user.email}</p>
+                ) : null}
+              </div>
+
+              <div className="rounded-2xl bg-landing-accent/8 px-4 py-4 ring-1 ring-landing-accent/10">
+                <div className="flex items-start gap-3">
+                  <span className="rounded-xl bg-landing-accent/10 p-2 text-landing-accent">
+                    <Sparkles className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-landing-text">Narration-ready workspace</p>
+                    <p className="mt-1 text-sm leading-6 text-landing-text-muted">
+                      Gemini TTS and donor playback can now be managed directly from each book editor without leaving the admin flow.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </header>
+
+            <main className="min-w-0 flex-1">{children}</main>
           </div>
-        </nav>
-      </aside>
-      <main className="overflow-y-auto p-4 md:p-8">{children}</main>
+        </div>
+      </div>
     </div>
   );
 }

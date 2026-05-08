@@ -4,6 +4,25 @@ const { execSync } = require('child_process');
 const archiver = require('archiver');
 
 const ZIP_NAME = 'plesk-deploy.zip';
+const STORAGE_PLACEHOLDER_DIRECTORIES = [
+  'storage',
+  'storage/uploads',
+  'storage/narration'
+];
+
+function addDirectoryPlaceholder(archive, directoryPath) {
+  const normalizedDirectoryPath = String(directoryPath || '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '');
+
+  if (!normalizedDirectoryPath) {
+    return;
+  }
+
+  archive.append('', {
+    name: `${normalizedDirectoryPath}/.gitkeep`
+  });
+}
 
 console.log('🚀 Starting Next.js Production Build for Plesk...');
 
@@ -76,7 +95,13 @@ try {
     }
   });
 
-  // 4. Finalize the archive (ie we are done appending files but streams have to finish yet)
+  // 4. Ensure runtime storage folders exist on first deploy without zipping live uploads/audio.
+  STORAGE_PLACEHOLDER_DIRECTORIES.forEach(directoryPath => {
+    console.log(`Adding storage placeholder: ${directoryPath}/.gitkeep`);
+    addDirectoryPlaceholder(archive, directoryPath);
+  });
+
+  // 5. Finalize the archive (ie we are done appending files but streams have to finish yet)
   console.log('Zipping files, please wait...');
   archive.finalize();
 

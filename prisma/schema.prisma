@@ -16,6 +16,7 @@ model User {
   name      String?
   password  String?
   role      UserRole @default(READER)
+  readerPreferences Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -101,6 +102,7 @@ model Book {
   notes                 Note[]
   donations             Donation[]
   audiobook             Audiobook?
+  narrations            BookNarration[]
   supplementaryContents SupplementaryContent[]
 }
 
@@ -199,7 +201,14 @@ model Donation {
   book      Book?          @relation(fields: [bookId], references: [id], onDelete: SetNull)
   amount    Decimal        @db.Decimal(10, 2)
   currency  String         @default("USD")
-  paypalId  String         @unique
+  donorAmount Decimal?     @db.Decimal(10, 2)
+  donorCurrency String?
+  donorEmail String?
+  gateway   DonationGateway @default(PAYPAL)
+  gatewayAmount Decimal?   @db.Decimal(10, 2)
+  gatewayCurrency String?
+  paypalId  String?        @unique
+  paystackReference String? @unique
   status    DonationStatus
   createdAt DateTime       @default(now())
 }
@@ -229,9 +238,108 @@ model Audiobook {
   users User[]
 }
 
+model NarrationVoice {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  provider    String
+  language    String   @default("en")
+  description String?  @db.Text
+  sampleText  String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  narrations BookNarration[]
+}
+
+model BookNarration {
+  id               String                   @id @default(cuid())
+  bookId           String
+  voiceId          String
+  status           NarrationJobStatus       @default(PENDING)
+  storageProvider  NarrationStorageProvider @default(S3)
+  manifestObjectKey String?
+  audioMimeType    String                   @default("audio/mpeg")
+  totalDurationMs  Int?
+  totalChapters    Int                      @default(0)
+  active           Boolean                  @default(false)
+  readyAt          DateTime?
+  errorMessage     String?                  @db.Text
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  book     Book             @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  voice    NarrationVoice   @relation(fields: [voiceId], references: [id], onDelete: Restrict)
+  chapters NarrationChapter[]
+
+  @@unique([bookId, voiceId])
+  @@index([bookId, active, status])
+}
+
+model NarrationChapter {
+  id            String               @id @default(cuid())
+  narrationId   String
+  chapterIndex  Int
+  title         String?
+  spineHref     String
+  status        NarrationAssetStatus @default(PENDING)
+  audioObjectKey String?
+  audioMimeType String               @default("audio/mpeg")
+  durationMs    Int?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  narration BookNarration @relation(fields: [narrationId], references: [id], onDelete: Cascade)
+  cues      NarrationCue[]
+
+  @@unique([narrationId, chapterIndex])
+  @@unique([narrationId, spineHref])
+  @@index([narrationId, status])
+}
+
+model NarrationCue {
+  id              String   @id @default(cuid())
+  chapterId       String
+  sequence        Int
+  startMs         Int
+  endMs           Int
+  targetHref      String
+  targetElementId String?
+  targetCfi       String?
+  excerpt         String?  @db.Text
+  createdAt       DateTime @default(now())
+
+  chapter NarrationChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@unique([chapterId, sequence])
+  @@index([chapterId, startMs])
+}
+
 enum PrintFormat {
   PAPERBACK
   HARDCOVER
+}
+
+enum NarrationJobStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+  ARCHIVED
+}
+
+enum NarrationAssetStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum NarrationStorageProvider {
+  S3
+  R2
+  B2
+  LOCAL
 }
 
 enum DonationStatus {
@@ -239,6 +347,11 @@ enum DonationStatus {
   COMPLETED
   FAILED
   REFUNDED
+}
+
+enum DonationGateway {
+  PAYPAL
+  PAYSTACK
 }
 
 model SiteSettings {

@@ -15,32 +15,37 @@ export default function ReaderGrowthChart({
   data: { date: string; count: number }[];
 }) {
   return (
-    <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-      <h3 className="text-gray-500 text-sm font-medium mb-4">Reader Growth (Last 30 Days)</h3>
-      <div className="h-[300px] w-full">
+    <div className="surface-card min-w-0 p-6">
+      <div className="mb-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-text-muted">
+          Reader growth
+        </p>
+        <h3 className="mt-2 text-lg font-semibold text-landing-text">New reader accounts over the last 30 days</h3>
+      </div>
+      <div className="h-[300px] w-full min-w-0">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
             <XAxis
               dataKey="date"
-              stroke="#888888"
+              stroke="#5f6b76"
               fontSize={12}
               tickLine={false}
               axisLine={false}
             />
             <YAxis
-              stroke="#888888"
+              stroke="#5f6b76"
               fontSize={12}
               tickLine={false}
               axisLine={false}
             />
             <Tooltip 
-                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                contentStyle={{ borderRadius: '16px', border: '1px solid rgba(216, 224, 228, 0.8)', boxShadow: '0 10px 30px rgba(17, 24, 39, 0.08)' }}
             />
             <Line
               type="monotone"
               dataKey="count"
-              stroke="#2563eb"
-              strokeWidth={2}
+              stroke="#3D737A"
+              strokeWidth={3}
               dot={false}
             />
           </LineChart>

@@ -6,8 +6,9 @@ An independent digital library and reader platform combining ePub reading, audio
 
 - 📚 **ePub Reader** - Full-featured reader with Google Play Books-level polish
 - 🎧 **Audiobook Support** - Optional audio for each book with playback controls
+- 🎙️ **Multi-Voice Narration Studio** - Admin can sample Gemini voices, generate multiple narration options, and publish a default reader voice
 - 🖨️ **Print-on-Demand Links** - Connect readers to physical copies
-- ❤️ **Donation-Based** - Voluntary support, no paywalls
+- ❤️ **Donation-Based** - Voluntary support with PayPal + Paystack and a USD-normalized multi-currency flow
 - 🔐 **Admin Panel** - Complete content management system
 - 📱 **Responsive** - Works on desktop and mobile
 
@@ -16,9 +17,11 @@ An independent digital library and reader platform combining ePub reading, audio
 - **Framework**: Next.js 15 with App Router
 - **Database**: PostgreSQL with Prisma ORM
 - **Auth**: NextAuth.js
-- **Storage**: UploadThing
+- **Book uploads**: UploadThing
+- **Narration storage**: Local disk or S3-compatible object storage (S3 / R2 / B2)
+- **AI narration**: Gemini TTS
 - **ePub**: epub.js
-- **Payments**: PayPal
+- **Payments**: PayPal + Paystack
 - **UI**: Tailwind CSS + shadcn/ui
 
 ## Getting Started
@@ -29,6 +32,8 @@ An independent digital library and reader platform combining ePub reading, audio
 - PostgreSQL database
 - UploadThing account (free tier available)
 - PayPal developer account (optional for development)
+- Paystack secret key (required if you want Paystack checkout)
+- CurrencyBeacon API key (required for non-USD donation entry and Paystack conversion)
 
 ### Installation
 
@@ -49,7 +54,11 @@ Edit `.env` and add your configuration:
 - `DATABASE_URL` - PostgreSQL connection string
 - `NEXTAUTH_SECRET` - Random secret for NextAuth
 - `UPLOADTHING_SECRET` and `UPLOADTHING_APP_ID` - Get from [uploadthing.com/dashboard](https://uploadthing.com/dashboard)
+- `GEMINI_API_KEY` - Required for Gemini voice sampling and narration generation
+- `NARRATION_STORAGE_PROVIDER` and `NARRATION_STORAGE_LOCAL_DIR` - Use `local` for single-server/Plesk installs; cloud vars can stay blank in local mode
 - PayPal credentials (if testing donations)
+- `PAYSTACK_SECRET_KEY` - Required for Paystack donation checkout
+- `CURRENCYBEACON_API_KEY` - Required for currency normalization and Paystack ZAR conversion
 
 3. Set up the database:
 
@@ -69,7 +78,7 @@ npx prisma db seed
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3001](http://localhost:3001) in your browser.
 
 ## Project Structure
 
@@ -115,11 +124,14 @@ npx prisma studio
 ## Deployment
 
 1. Set up a PostgreSQL database (Supabase, Railway, Neon, etc.)
-2. Create an UploadThing account and get API keys
-3. Configure environment variables in your hosting platform
-4. Deploy to Vercel, Netlify, or your preferred platform
+2. Configure UploadThing API keys for EPUB/admin uploads
+3. Choose narration storage: local disk for single-server/Plesk installs, or S3-compatible object storage if you want cloud delivery
+4. Configure environment variables in your hosting platform
+5. Deploy to Vercel, Plesk, or your preferred platform
 
-For detailed UploadThing setup, see [docs/UPLOADTHING.md](file:///c:/Users/Mobatly/Google%20Drive/Mobatly%20Web%20Dev/One%20Man%20Revolution/EPUB%20reader/docs/UPLOADTHING.md)
+For Plesk and persistent local narration storage guidance, see [docs/PLESK_DEPLOYMENT.md](docs/PLESK_DEPLOYMENT.md).
+
+For detailed UploadThing setup, see [docs/UPLOADTHING.md](docs/UPLOADTHING.md).
 
 ## License
 

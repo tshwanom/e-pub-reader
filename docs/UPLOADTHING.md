@@ -15,7 +15,7 @@
 
 4. **Restart the dev server** to load the new environment variables
 
-5. **Test uploads** at `http://localhost:3000` using the File Upload Demo section
+5. **Test uploads** at `http://localhost:3001` using the File Upload Demo section
 
 ## Available Upload Endpoints
 

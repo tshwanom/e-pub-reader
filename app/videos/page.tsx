@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import Image from 'next/image';
 import Link from 'next/link';
 import { Metadata } from 'next';
 import Header from '@/components/landing/Header';
@@ -75,7 +76,16 @@ export default async function VideosPage() {
                   <div className="mt-auto border-t border-landing-border pt-4">
                     <Link href={`/books/${video.book.slug || video.bookId}`} className="group flex items-center gap-3">
                         {video.book.coverUrl && (
-                          <img src={video.book.coverUrl} alt="" className="h-10 w-8 rounded object-cover shadow-sm transition-opacity group-hover:opacity-80" />
+                          <div className="relative h-10 w-8 overflow-hidden rounded shadow-sm">
+                            <Image
+                              src={video.book.coverUrl}
+                              alt=""
+                              fill
+                              unoptimized
+                              sizes="32px"
+                              className="object-cover transition-opacity group-hover:opacity-80"
+                            />
+                          </div>
                         )}
                         <div className="flex-1 overflow-hidden">
                           <p className="text-xs font-medium uppercase tracking-wider text-landing-text-muted">Related Book</p>

@@ -2,6 +2,8 @@
 
 This guide covers deploying the ePub Reader Platform to a Plesk server.
 
+> The automated Plesk packaging/deploy scripts use the **root** application files (`package.json`, `server.js`, and `prisma/`), not the legacy `plesk-deploy/` folder.
+
 ## Quick Start (One Command)
 
 If your Plesk app and SSH access are already configured, deploy with:
@@ -71,16 +73,36 @@ NEXTAUTH_SECRET="your-production-secret-key"
 UPLOADTHING_SECRET="sk_live_..."
 UPLOADTHING_APP_ID="your_app_id"
 
+# Narration object storage (local disk example for single-server Plesk installs)
+NARRATION_STORAGE_PROVIDER="local"
+NARRATION_STORAGE_REGION=""
+NARRATION_STORAGE_ENDPOINT=""
+NARRATION_STORAGE_ACCESS_KEY_ID=""
+NARRATION_STORAGE_SECRET_ACCESS_KEY=""
+NARRATION_STORAGE_BUCKET_NAME=""
+NARRATION_STORAGE_FORCE_PATH_STYLE="false"
+NARRATION_STORAGE_PREFIX="narration"
+NARRATION_STORAGE_SIGNED_URL_TTL_SECONDS="900"
+NARRATION_STORAGE_LOCAL_DIR="storage"
+
 # PayPal
 PAYPAL_CLIENT_ID="your_client_id"
 PAYPAL_CLIENT_SECRET="your_client_secret"
 PAYPAL_MODE="live"
 
+# Paystack
+PAYSTACK_SECRET_KEY="your_paystack_secret_key"
+
+# Currency conversion for multi-currency donations
+CURRENCYBEACON_API_KEY="your_currencybeacon_api_key"
+
 # Server
 NODE_ENV="production"
-PORT=3000
+PORT=3001
 HOSTNAME="0.0.0.0"
 ```
+
+> In local mode, leave the cloud endpoint, key, bucket, and any `R2_*` / `B2_*` compatibility variables blank. They are inactive unless you intentionally switch `NARRATION_STORAGE_PROVIDER` away from `local`.
 
 ### 5. Set Up Database
 
@@ -90,6 +112,12 @@ Run Prisma migrations:
 npx prisma migrate deploy
 npx prisma generate
 ```
+
+If you are deploying donor narration support, make sure your production database has the latest narration schema before restart. The current schema includes narration voices, chapters, cues, and `NarrationStorageProvider` values for `S3`, `R2`, `B2`, and `LOCAL`.
+
+If you choose `NARRATION_STORAGE_PROVIDER="local"`, generated narration audio and manifests are written under `NARRATION_STORAGE_LOCAL_DIR` using the object key path (for example `storage/narration/...`). Keep that directory persistent between deployments.
+
+The deployment package only creates empty placeholders for `storage/`, `storage/uploads/`, and `storage/narration/`. It does not carry forward live uploads or generated narration audio, so use a persistent writable location if your deployment process replaces the extracted app directory on each release.
 
 ### 6. Build the Application
 
@@ -112,7 +140,7 @@ Plesk should automatically configure the reverse proxy. Verify:
 
 - **Document root**: Points to your application directory
 - **Proxy mode**: Enabled
-- **Port**: 3000 (or your configured PORT)
+- **Port**: 3001 (or your configured PORT)
 
 ### 9. Start the Application
 
@@ -170,7 +198,7 @@ The `package.json` includes:
 The application reads the port from:
 
 1. `PORT` environment variable (set in Plesk)
-2. Default: 3000
+2. Default: 3001
 
 Make sure Plesk's reverse proxy is configured to forward to this port.
 
@@ -218,6 +246,23 @@ PORT=3001
 1. Verify UploadThing credentials are set
 2. Check file permissions in upload directory
 3. Ensure `UPLOADTHING_SECRET` and `UPLOADTHING_APP_ID` are correct
+
+### Narration Storage Issues
+
+1. Verify the `NARRATION_STORAGE_*` variables are set for your chosen provider
+2. Confirm the bucket/container exists and the access keys can read private objects
+3. For R2 or B2, ensure the endpoint/account settings match your provider dashboard
+4. If donor narration reports `storage-not-configured`, compare the Plesk environment values against `.env.example`
+
+### Local Narration Storage Notes
+
+If you run donor narration storage locally on Plesk:
+
+1. Set `NARRATION_STORAGE_PROVIDER="local"`
+2. Point `NARRATION_STORAGE_LOCAL_DIR` at a persistent writable path (for example `storage` or a shared directory outside the release folder if deployments replace the app root)
+3. Make sure the Node.js app user can create and read files there
+4. Preserve that directory across deployments, backups, and restores
+5. Remember the deployment package only restores empty placeholders under `storage/`; it does not restore your previously generated narration files
 
 ### Build Errors
 
@@ -290,6 +335,8 @@ pm2 restart epub-reader
 
 - [ ] Set strong `NEXTAUTH_SECRET`
 - [ ] Use production PayPal credentials
+- [ ] Use a production Paystack secret key
+- [ ] Add a valid CurrencyBeacon API key for multi-currency donation conversion
 - [ ] Enable HTTPS/SSL in Plesk
 - [ ] Set proper file permissions (644 for files, 755 for directories)
 - [ ] Don't commit `.env` to git

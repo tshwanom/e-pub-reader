@@ -1,4 +1,4 @@
-import { isPrivilegedUser, getBookAccessState } from '@/lib/book-access';
+import { isPrivilegedUser, getBookAccessState, getDonorFeatureAccessState } from '@/lib/book-access';
 
 // Mock prisma so we don't hit the database
 jest.mock('@/lib/prisma', () => ({
@@ -85,6 +85,47 @@ describe('getBookAccessState', () => {
     prisma.donation.findFirst.mockResolvedValue(null);
     const result = await getBookAccessState(publishedDonorBook, { id: 'admin1', role: 'ADMIN' });
     expect(result.hasAccess).toBe(true);
+    expect(prisma.donation.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe('getDonorFeatureAccessState', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prisma.donation.findFirst.mockResolvedValue(null); // default: not a donor
+  });
+
+  it('denies donor features to anonymous readers of free books', async () => {
+    const result = await getDonorFeatureAccessState(publishedFreeBook, null);
+    expect(result.hasBookAccess).toBe(true);
+    expect(result.hasAccess).toBe(false);
+    expect(result.requiresBookAccess).toBe(false);
+    expect(result.requiresDonation).toBe(true);
+    expect(result.isSignedIn).toBe(false);
+  });
+
+  it('grants donor features to donors on published free books', async () => {
+    prisma.donation.findFirst.mockResolvedValue({ id: 'donation1' });
+    const result = await getDonorFeatureAccessState(publishedFreeBook, { id: 'user1', role: 'USER' });
+    expect(result.hasBookAccess).toBe(true);
+    expect(result.hasAccess).toBe(true);
+    expect(result.requiresDonation).toBe(false);
+    expect(result.isDonor).toBe(true);
+  });
+
+  it('keeps donor features locked when the user cannot open a donor-only book', async () => {
+    const result = await getDonorFeatureAccessState(publishedDonorBook, { id: 'user1', role: 'USER' });
+    expect(result.hasBookAccess).toBe(false);
+    expect(result.hasAccess).toBe(false);
+    expect(result.requiresBookAccess).toBe(true);
+    expect(result.requiresDonation).toBe(true);
+  });
+
+  it('grants donor features to privileged users without donation checks', async () => {
+    const result = await getDonorFeatureAccessState(draftBook, { id: 'admin1', role: 'ADMIN' });
+    expect(result.hasBookAccess).toBe(true);
+    expect(result.hasAccess).toBe(true);
+    expect(result.requiresDonation).toBe(false);
     expect(prisma.donation.findFirst).not.toHaveBeenCalled();
   });
 });

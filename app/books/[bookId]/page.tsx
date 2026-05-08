@@ -208,7 +208,7 @@ export default async function BookDetailsPage({
 
             {donationStatus === 'failed' && (
               <div className="rounded-2xl border border-red-200 bg-red-50/80 px-5 py-4 text-sm text-red-700">
-                We couldn’t confirm the donation. Please try again, and if PayPal already charged you, we can reconcile it from the admin side.
+                We couldn’t confirm the donation. Please try again, and if the payment provider already charged you, we can reconcile it from the admin side.
               </div>
             )}
 
@@ -325,6 +325,7 @@ export default async function BookDetailsPage({
                   <DonationSection
                     bookId={book.id}
                     bookTitle={book.title}
+                    currentUserEmail={session?.user?.email ?? null}
                     message={
                       book.donationMessage ||
                       (book.donorOnly
@@ -395,7 +396,7 @@ export default async function BookDetailsPage({
                       {item.type === 'QUOTE' && (
                         <div className="my-2 border-l-4 border-landing-accent pl-6 py-2">
                            <blockquote className="mb-2 text-xl font-medium italic text-landing-text">
-                             "{item.content}"
+                             &ldquo;{item.content}&rdquo;
                            </blockquote>
                            {item.author && (
                              <cite className="text-sm font-medium not-italic text-landing-text-muted">

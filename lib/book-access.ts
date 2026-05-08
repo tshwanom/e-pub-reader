@@ -46,3 +46,20 @@ export async function getBookAccessState(book: BookAccessLike, user?: SessionUse
     requiresDonation: book.donorOnly,
   };
 }
+
+export async function getDonorFeatureAccessState(book: BookAccessLike, user?: SessionUserLike) {
+  const bookAccess = await getBookAccessState(book, user);
+  const isSignedIn = Boolean(user?.id);
+  const hasAccess = bookAccess.hasAccess && (bookAccess.isPrivileged || bookAccess.isDonor);
+
+  return {
+    hasAccess,
+    hasBookAccess: bookAccess.hasAccess,
+    isDonor: bookAccess.isDonor,
+    isPrivileged: bookAccess.isPrivileged,
+    isPublished: bookAccess.isPublished,
+    isSignedIn,
+    requiresDonation: !hasAccess,
+    requiresBookAccess: !bookAccess.hasAccess,
+  };
+}
