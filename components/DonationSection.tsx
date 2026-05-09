@@ -35,7 +35,7 @@ function detectLocaleCurrency(): string {
           currency: 'USD',
         }).resolvedOptions().currency
       : null;
-    const candidate = regionCurrency ?? resolved.currency;
+    const candidate = regionCurrency ?? resolved.currency ?? DEFAULT_DONATION_CURRENCY;
     return isSupportedDonationCurrency(candidate) ? candidate : DEFAULT_DONATION_CURRENCY;
   } catch {
     return DEFAULT_DONATION_CURRENCY;
