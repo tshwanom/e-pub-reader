@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AudioLines,
   Bot,
@@ -217,6 +217,31 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
     ));
   }, [selectedVoiceNames]);
 
+  // Tracks whether the component is still mounted so polling loops can bail out cleanly
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // Fetches the latest summary and returns the status of a specific narration ID
+  const pollNarrationStatus = useCallback(async (narrationId: string): Promise<NarrationStatus> => {
+    try {
+      const response = await fetch(`/api/admin/books/${bookId}/narration`, { cache: "no-store" });
+      const payload = await response.json();
+      if (response.ok) {
+        setSummary(payload);
+      }
+      const found = (payload.narrations as Array<{ id: string; status: NarrationStatus }> | undefined)
+        ?.find((n) => n.id === narrationId);
+      return found?.status ?? "PROCESSING";
+    } catch {
+      return "PROCESSING";
+    }
+  }, [bookId]);
+
   const narrationByVoiceName = useMemo(() => {
     const map = new Map<string, NarrationSummaryResponse["narrations"][number]>();
 
@@ -342,11 +367,10 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
       });
 
       try {
+        // POST returns 202 immediately — job runs in background on server
         const response = await fetch(`/api/admin/books/${bookId}/narration`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "generate",
             voiceName,
@@ -361,14 +385,32 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
         const payload = await response.json();
 
         if (!response.ok) {
-          const message = payload.details
-            || payload.error
-            || payload.missingRequirements?.join(" ")
-            || `Failed to generate ${voiceName}.`;
+          const message =
+            payload.details ||
+            payload.error ||
+            payload.missingRequirements?.join(" ") ||
+            `Failed to start generation for ${voiceName}.`;
           throw new Error(message);
         }
 
-        completed += 1;
+        // Poll every 4 s until this narration finishes (READY or FAILED)
+        const narrationId: string = payload.narrationId;
+        let status: NarrationStatus = "PROCESSING";
+
+        while (
+          (status === "PROCESSING" || status === "PENDING") &&
+          isMountedRef.current
+        ) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 4000));
+          if (!isMountedRef.current) break;
+          status = await pollNarrationStatus(narrationId);
+        }
+
+        if (status === "READY") {
+          completed += 1;
+        } else {
+          failures.push(`${voiceName}: Generation failed on the server.`);
+        }
       } catch (generationError) {
         failures.push(
           `${voiceName}: ${generationError instanceof Error ? generationError.message : "Generation failed."}`

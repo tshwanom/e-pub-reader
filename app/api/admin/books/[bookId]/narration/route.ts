@@ -36,7 +36,6 @@ import { NextResponse } from "next/server";
 import { z, ZodError } from "zod";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
 
 const narrationActionSchema = z.object({
   action: z.enum(["generate", "sample", "set-default"]).default("generate"),
@@ -221,6 +220,147 @@ function formatNarrationForAdmin(
     })),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Background job — runs detached from the HTTP request to avoid proxy timeouts
+// ---------------------------------------------------------------------------
+async function runNarrationJob(params: {
+  book: { id: string; title: string; slug: string };
+  draftNarration: { id: string };
+  selectedChapters: Awaited<ReturnType<typeof extractEpubNarrationChapters>>;
+  voiceName: string;
+  voiceLabel: string;
+  model: string;
+  languageCode: string;
+  stylePrompt: string | null | undefined;
+  shouldActivateAsDefault: boolean;
+  storageProvider: ReturnType<typeof getNarrationStorageProvider>;
+  manifestKey: string;
+}) {
+  const {
+    book, draftNarration, selectedChapters,
+    voiceName, voiceLabel, model, languageCode, stylePrompt,
+    shouldActivateAsDefault, storageProvider, manifestKey,
+  } = params;
+
+  try {
+    // Clear chapters from any previous run so polling sees fresh incremental progress
+    await prisma.narrationChapter.deleteMany({ where: { narrationId: draftNarration.id } });
+
+    let generatedCount = 0;
+    let totalDurationMs = 0;
+
+    for (const chapter of selectedChapters) {
+      const chunks = buildNarrationGenerationChunks(chapter.blocks);
+      if (chunks.length === 0) continue;
+
+      const chunkAudio: Awaited<ReturnType<typeof synthesizeGeminiSpeech>>[] = [];
+      for (const chunk of chunks) {
+        chunkAudio.push(
+          await synthesizeGeminiSpeech({ transcript: chunk.transcript, voiceName, model, stylePrompt, languageCode })
+        );
+      }
+
+      const mergedAudio = mergeGeminiPcmAudio(chunkAudio);
+      const { chapterKey } = buildNarrationObjectKeys(book.id, draftNarration.id, chapter.chapterIndex);
+      await uploadNarrationObject(chapterKey, mergedAudio.wavBuffer, mergedAudio.audioMimeType);
+
+      const cues = buildNarrationCueTimelineFromBlocks(chapter.blocks, mergedAudio.durationMs);
+
+      // Write chapter record immediately — visible on next poll refresh
+      await prisma.narrationChapter.create({
+        data: {
+          narrationId: draftNarration.id,
+          chapterIndex: chapter.chapterIndex,
+          title: chapter.title,
+          spineHref: chapter.spineHref,
+          status: "READY",
+          audioObjectKey: chapterKey,
+          audioMimeType: mergedAudio.audioMimeType,
+          durationMs: mergedAudio.durationMs,
+          cues: {
+            create: cues.map((cue) => ({
+              sequence: cue.sequence,
+              startMs: cue.startMs,
+              endMs: cue.endMs,
+              targetHref: cue.targetHref,
+              targetElementId: cue.targetElementId,
+              targetCfi: cue.targetCfi,
+              excerpt: cue.excerpt,
+            })),
+          },
+        },
+      });
+
+      generatedCount += 1;
+      totalDurationMs += mergedAudio.durationMs;
+    }
+
+    if (generatedCount === 0) {
+      throw new Error("Gemini generation did not produce any chapter audio.");
+    }
+
+    // Fetch persisted chapters to build the manifest
+    const persistedNarration = await prisma.bookNarration.findUniqueOrThrow({
+      where: { id: draftNarration.id },
+      select: {
+        id: true, totalDurationMs: true, manifestObjectKey: true, updatedAt: true,
+        voice: { select: { id: true, name: true, slug: true, provider: true, language: true } },
+        chapters: {
+          orderBy: { chapterIndex: "asc" },
+          select: {
+            id: true, chapterIndex: true, title: true, spineHref: true,
+            audioObjectKey: true, audioMimeType: true, durationMs: true,
+            cues: {
+              orderBy: { sequence: "asc" },
+              select: { sequence: true, startMs: true, endMs: true, targetHref: true, targetElementId: true, targetCfi: true, excerpt: true },
+            },
+          },
+        },
+      },
+    });
+
+    const manifest = buildNarrationManifest(
+      book.id,
+      { id: persistedNarration.id, totalDurationMs, manifestObjectKey: manifestKey, updatedAt: persistedNarration.updatedAt, voice: persistedNarration.voice, chapters: persistedNarration.chapters },
+      storageProvider
+    );
+    await uploadNarrationObject(manifestKey, Buffer.from(JSON.stringify(manifest, null, 2), "utf8"), "application/json");
+
+    await prisma.$transaction(async (tx) => {
+      if (shouldActivateAsDefault) {
+        await tx.bookNarration.updateMany({
+          where: { bookId: book.id, NOT: { id: draftNarration.id } },
+          data: { active: false },
+        });
+      }
+      await tx.bookNarration.update({
+        where: { id: draftNarration.id },
+        data: {
+          status: "READY",
+          active: shouldActivateAsDefault,
+          readyAt: new Date(),
+          errorMessage: null,
+          totalDurationMs,
+          totalChapters: generatedCount,
+          manifestObjectKey: manifestKey,
+          audioMimeType: "audio/wav",
+        },
+      });
+    });
+
+    console.log(`[narration-job] Done: book=${book.id} narration=${draftNarration.id} voice=${voiceLabel} chapters=${generatedCount}`);
+  } catch (jobError) {
+    const errorMessage = jobError instanceof Error ? jobError.message : String(jobError);
+    console.error("[narration-job] Failed:", { book: book.id, narration: draftNarration.id, error: errorMessage });
+    await prisma.bookNarration.update({
+      where: { id: draftNarration.id },
+      data: { status: "FAILED", active: false, errorMessage },
+    }).catch((dbErr) => console.error("[narration-job] Failed to write FAILED status:", dbErr));
+  }
+}
+
+// ---------------------------------------------------------------------------
 
 async function getBookNarrationSummary(bookId: string) {
   return prisma.book.findUnique({
@@ -532,221 +672,32 @@ export async function POST(
       || currentActiveNarration.id === draftNarration.id
     );
 
-    try {
-      const generatedChapters = [] as Array<{
-        chapterIndex: number;
-        title: string;
-        spineHref: string;
-        status: "READY";
-        audioObjectKey: string;
-        audioMimeType: string;
-        durationMs: number;
-        cues: Array<{
-          sequence: number;
-          startMs: number;
-          endMs: number;
-          targetHref: string;
-          targetElementId: string | null;
-          targetCfi: null;
-          excerpt: string;
-        }>;
-      }>;
+    const { manifestKey } = buildNarrationObjectKeys(book.id, draftNarration.id, 0);
 
-      for (const chapter of selectedChapters) {
-        const chunks = buildNarrationGenerationChunks(chapter.blocks);
+    // Fire the pipeline as a detached background task — HTTP responds immediately.
+    void runNarrationJob({
+      book,
+      draftNarration,
+      selectedChapters,
+      voiceName,
+      voiceLabel,
+      model,
+      languageCode,
+      stylePrompt: payload.stylePrompt,
+      shouldActivateAsDefault,
+      storageProvider,
+      manifestKey,
+    });
 
-        if (chunks.length === 0) {
-          continue;
-        }
+    return NextResponse.json(
+      {
+        message: `Narration generation has started for "${book.title}". The studio will update as chapters complete.`,
+        narrationId: draftNarration.id,
+        status: "PROCESSING",
+      },
+      { status: 202 }
+    );
 
-        const chunkAudio = [] as Awaited<ReturnType<typeof synthesizeGeminiSpeech>>[];
-
-        for (const chunk of chunks) {
-          chunkAudio.push(
-            await synthesizeGeminiSpeech({
-              transcript: chunk.transcript,
-              voiceName,
-              model,
-              stylePrompt: payload.stylePrompt,
-              languageCode,
-            })
-          );
-        }
-
-        const mergedAudio = mergeGeminiPcmAudio(chunkAudio);
-        const { chapterKey } = buildNarrationObjectKeys(book.id, draftNarration.id, chapter.chapterIndex);
-
-        await uploadNarrationObject(chapterKey, mergedAudio.wavBuffer, mergedAudio.audioMimeType);
-
-        generatedChapters.push({
-          chapterIndex: chapter.chapterIndex,
-          title: chapter.title,
-          spineHref: chapter.spineHref,
-          status: "READY",
-          audioObjectKey: chapterKey,
-          audioMimeType: mergedAudio.audioMimeType,
-          durationMs: mergedAudio.durationMs,
-          cues: buildNarrationCueTimelineFromBlocks(chapter.blocks, mergedAudio.durationMs),
-        });
-      }
-
-      if (generatedChapters.length === 0) {
-        throw new Error("Gemini generation did not produce any chapter audio.");
-      }
-
-      const totalDurationMs = generatedChapters.reduce((sum, chapter) => sum + chapter.durationMs, 0);
-      const { manifestKey } = buildNarrationObjectKeys(book.id, draftNarration.id, 0);
-
-      const persistedNarration = await prisma.$transaction(async (tx) => {
-        await tx.narrationChapter.deleteMany({
-          where: { narrationId: draftNarration.id },
-        });
-
-        for (const chapter of generatedChapters) {
-          await tx.narrationChapter.create({
-            data: {
-              narrationId: draftNarration.id,
-              chapterIndex: chapter.chapterIndex,
-              title: chapter.title,
-              spineHref: chapter.spineHref,
-              status: chapter.status,
-              audioObjectKey: chapter.audioObjectKey,
-              audioMimeType: chapter.audioMimeType,
-              durationMs: chapter.durationMs,
-              cues: {
-                create: chapter.cues.map((cue) => ({
-                  sequence: cue.sequence,
-                  startMs: cue.startMs,
-                  endMs: cue.endMs,
-                  targetHref: cue.targetHref,
-                  targetElementId: cue.targetElementId,
-                  targetCfi: cue.targetCfi,
-                  excerpt: cue.excerpt,
-                })),
-              },
-            },
-          });
-        }
-
-        return tx.bookNarration.update({
-          where: { id: draftNarration.id },
-          data: {
-            totalDurationMs,
-            totalChapters: generatedChapters.length,
-            manifestObjectKey: manifestKey,
-            audioMimeType: "audio/wav",
-            errorMessage: null,
-          },
-          select: {
-            id: true,
-            totalDurationMs: true,
-            manifestObjectKey: true,
-            updatedAt: true,
-            voice: {
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-                provider: true,
-                language: true,
-              },
-            },
-            chapters: {
-              orderBy: { chapterIndex: "asc" },
-              select: {
-                id: true,
-                chapterIndex: true,
-                title: true,
-                spineHref: true,
-                audioObjectKey: true,
-                audioMimeType: true,
-                durationMs: true,
-                cues: {
-                  orderBy: { sequence: "asc" },
-                  select: {
-                    sequence: true,
-                    startMs: true,
-                    endMs: true,
-                    targetHref: true,
-                    targetElementId: true,
-                    targetCfi: true,
-                    excerpt: true,
-                  },
-                },
-              },
-            },
-          },
-        });
-      });
-
-      const manifest = buildNarrationManifest(
-        book.id,
-        {
-          id: persistedNarration.id,
-          totalDurationMs: persistedNarration.totalDurationMs,
-          manifestObjectKey: persistedNarration.manifestObjectKey,
-          updatedAt: persistedNarration.updatedAt,
-          voice: persistedNarration.voice,
-          chapters: persistedNarration.chapters,
-        },
-        storageProvider
-      );
-
-      await uploadNarrationObject(
-        manifestKey,
-        Buffer.from(JSON.stringify(manifest, null, 2), "utf8"),
-        "application/json"
-      );
-
-      const finalNarration = await prisma.$transaction(async (tx) => {
-        if (shouldActivateAsDefault) {
-          await tx.bookNarration.updateMany({
-            where: {
-              bookId: book.id,
-              NOT: { id: draftNarration.id },
-            },
-            data: {
-              active: false,
-            },
-          });
-        }
-
-        await tx.bookNarration.update({
-          where: { id: draftNarration.id },
-          data: {
-            status: "READY",
-            active: shouldActivateAsDefault,
-            readyAt: new Date(),
-            errorMessage: null,
-          },
-        });
-
-        return tx.bookNarration.findUniqueOrThrow({
-          where: { id: draftNarration.id },
-          select: adminNarrationSelect,
-        });
-      });
-
-      return NextResponse.json({
-        message: shouldActivateAsDefault
-          ? `${voiceLabel} is ready and is now the default narration voice for “${book.title}”.`
-          : `${voiceLabel} is ready for “${book.title}”.`,
-        narration: formatNarrationForAdmin(finalNarration),
-      });
-    } catch (generationError) {
-      const errorMessage = generationError instanceof Error ? generationError.message : String(generationError);
-
-      await prisma.bookNarration.update({
-        where: { id: draftNarration.id },
-        data: {
-          status: "FAILED",
-          active: false,
-          errorMessage,
-        },
-      });
-
-      throw generationError;
-    }
   } catch (error) {
     if (error instanceof ZodError) {
       return NextResponse.json(
