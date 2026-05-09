@@ -25,6 +25,7 @@ interface ReaderNarrationAccess {
   isSignedIn: boolean;
   manageHref: string;
   statusEndpoint: string;
+  isEnabled?: boolean;
 }
 
 type NarrationStatusPayload = NarrationFeatureResponse;
@@ -415,7 +416,6 @@ export default function Reader({
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
-  const [wordCount, setWordCount] = useState(0);
   const [progressPct, setProgressPct] = useState(0);
   const [editingHighlight, setEditingHighlight] = useState<Highlight | null>(null);
   const [editNote, setEditNote] = useState('');
@@ -427,6 +427,7 @@ export default function Reader({
   const [goToInput, setGoToInput] = useState('');
   const [showGoTo, setShowGoTo] = useState(false);
   const [currentBookmark, setCurrentBookmark] = useState<string | null>(null);
+  const [wordCount, setWordCount] = useState(0);
   const [standaloneNotes, setStandaloneNotes] = useState<StandaloneNote[]>([]);
   const [showQuickNote, setShowQuickNote] = useState(false);
   const [quickNoteText, setQuickNoteText] = useState('');
@@ -735,7 +736,7 @@ export default function Reader({
   }, [bookId]);
 
   const loadNarrationStatus = useCallback(async (force = false) => {
-    if (!narrationAccess?.hasAccess || isCheckingNarration) return;
+    if (!narrationAccess?.isEnabled || !narrationAccess?.hasAccess || isCheckingNarration) return;
     if (narrationStatus && !force) return;
 
     setIsCheckingNarration(true);
@@ -1275,15 +1276,9 @@ export default function Reader({
     setReaderLoadError(null);
 
     const initBook = async () => {
-      // Pre-fetch as ArrayBuffer so epub.js doesn't misdetect the URL as a
-      // directory (it triggers directory mode when the URL has no .epub extension)
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Failed to fetch epub: ${response.status}`);
-      const buffer = await response.arrayBuffer();
-
       if (destroyed || !viewerRef.current) return;
 
-      const book = ePub(buffer as any) as unknown as Book;
+      const book = ePub(url, { openAs: 'epub' }) as unknown as Book;
       bookRef.current = book;
 
       // Use explicit pixel dimensions so epub.js paginates correctly
@@ -1340,19 +1335,38 @@ export default function Reader({
         isFirstRelocate.current = true;
       }
 
-      // Estimate word count for time-to-finish.
-      // Deferred by 3 s so per-chapter network requests don't compete with the
-      // initial page render — the reader is already visible before this runs.
-      book.ready.then(() => {
-        setTimeout(() => {
+      // Deferred word-count — runs after the reader is visible so it never
+      // blocks the critical rendering path. Uses requestIdleCallback where
+      // available, falls back to setTimeout.
+      const scheduleWordCount = (cb: () => void) => {
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(cb, { timeout: 5000 });
+        } else {
+          setTimeout(cb, 500);
+        }
+      };
+
+      scheduleWordCount(async () => {
+        if (destroyed) return;
+        try {
+          const spineItems = (book as any).spine?.spineItems as any[] | undefined;
+          if (!spineItems?.length) return;
+
           let total = 0;
-          book.spine.each((item: any) => {
-            item.load(book.load.bind(book)).then((doc: Document) => {
-              total += (doc.body?.textContent || '').split(/\s+/).filter(Boolean).length;
-              setWordCount(total);
-            }).catch(() => {});
-          });
-        }, 3000);
+          for (const item of spineItems) {
+            if (destroyed) return;
+            await item.load((book as any).load.bind(book));
+            const text: string = item.document?.body?.textContent ?? '';
+            total += text.split(/\s+/).filter(Boolean).length;
+            item.unload();
+          }
+
+          if (!destroyed) {
+            setWordCount(total);
+          }
+        } catch (err) {
+          console.warn('Word count calculation failed', err);
+        }
       });
 
       // Swipe navigation via epub.js relay (works across the iframe boundary)
@@ -1863,7 +1877,7 @@ export default function Reader({
             </svg>
           </button>
 
-          {narrationAccess && (
+          {narrationAccess?.isEnabled && (
             <button
               onClick={narrationHasReadyPlayer ? () => void toggleNarrationPlayback() : openNarrationModal}
               aria-label={
@@ -1919,7 +1933,7 @@ export default function Reader({
         </div>
       </div>
 
-      {narrationAccess && <audio ref={audioRef} preload="metadata" data-testid="narration-audio" className="hidden" />}
+      {narrationAccess?.isEnabled && <audio ref={audioRef} preload="metadata" data-testid="narration-audio" className="hidden" />}
 
       {narrationHasReadyPlayer && activeNarrationChapter && (
         <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-3 sm:px-4">
@@ -2217,7 +2231,7 @@ export default function Reader({
             </button>
           </div>
 
-          {narrationAccess && (
+          {narrationAccess?.isEnabled && (
             <div className="mb-5 rounded-2xl border border-landing-border bg-landing-surface-muted px-4 py-4">
               <div className="flex items-start justify-between gap-3">
                 <div>

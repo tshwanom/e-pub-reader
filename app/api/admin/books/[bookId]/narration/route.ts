@@ -57,6 +57,7 @@ const generationRequestSchema = z.object({
     },
     z.number().int().positive().max(200).nullable()
   ).optional().default(null),
+  chapterIndexes: z.array(z.number().int().nonnegative()).optional().nullable(),
   activateAsDefault: z.boolean().optional().default(false),
 });
 
@@ -244,8 +245,13 @@ async function runNarrationJob(params: {
   } = params;
 
   try {
-    // Clear chapters from any previous run so polling sees fresh incremental progress
-    await prisma.narrationChapter.deleteMany({ where: { narrationId: draftNarration.id } });
+    // Clear only the chapters we are regenerating so we don't wipe out the rest of the book
+    await prisma.narrationChapter.deleteMany({
+      where: {
+        narrationId: draftNarration.id,
+        chapterIndex: { in: selectedChapters.map((c) => c.chapterIndex) },
+      },
+    });
 
     let generatedCount = 0;
     let totalDurationMs = 0;
@@ -320,9 +326,22 @@ async function runNarrationJob(params: {
       },
     });
 
+    const updatedTotalDurationMs = persistedNarration.chapters.reduce(
+      (sum, ch) => sum + (ch.durationMs || 0),
+      0
+    );
+    const updatedTotalChapters = persistedNarration.chapters.length;
+
     const manifest = buildNarrationManifest(
       book.id,
-      { id: persistedNarration.id, totalDurationMs, manifestObjectKey: manifestKey, updatedAt: persistedNarration.updatedAt, voice: persistedNarration.voice, chapters: persistedNarration.chapters },
+      {
+        id: persistedNarration.id,
+        totalDurationMs: updatedTotalDurationMs,
+        manifestObjectKey: manifestKey,
+        updatedAt: persistedNarration.updatedAt,
+        voice: persistedNarration.voice,
+        chapters: persistedNarration.chapters,
+      },
       storageProvider
     );
     await uploadNarrationObject(manifestKey, Buffer.from(JSON.stringify(manifest, null, 2), "utf8"), "application/json");
@@ -341,8 +360,8 @@ async function runNarrationJob(params: {
           active: shouldActivateAsDefault,
           readyAt: new Date(),
           errorMessage: null,
-          totalDurationMs,
-          totalChapters: generatedCount,
+          totalDurationMs: updatedTotalDurationMs,
+          totalChapters: updatedTotalChapters,
           manifestObjectKey: manifestKey,
           audioMimeType: "audio/wav",
         },
@@ -577,9 +596,15 @@ export async function POST(
 
     const resolvedBookFilePath = await resolveStoredBookFilePath(book.epubFile!.fileUrl);
     const extractedChapters = await extractEpubNarrationChapters(resolvedBookFilePath);
-    const selectedChapters = payload.maxChapters
-      ? extractedChapters.slice(0, payload.maxChapters)
-      : extractedChapters;
+    let selectedChapters = extractedChapters;
+
+    if (payload.chapterIndexes && payload.chapterIndexes.length > 0) {
+      selectedChapters = extractedChapters.filter((c) =>
+        payload.chapterIndexes!.includes(c.chapterIndex)
+      );
+    } else if (payload.maxChapters) {
+      selectedChapters = extractedChapters.slice(0, payload.maxChapters);
+    }
 
     if (selectedChapters.length === 0) {
       return NextResponse.json(
@@ -644,11 +669,6 @@ export async function POST(
           data: {
             status: "PROCESSING",
             storageProvider: persistedStorageProvider,
-            manifestObjectKey: null,
-            audioMimeType: "audio/wav",
-            totalDurationMs: null,
-            totalChapters: selectedChapters.length,
-            readyAt: null,
             errorMessage: null,
           },
         })

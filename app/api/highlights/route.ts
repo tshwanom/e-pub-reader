@@ -30,29 +30,44 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { bookId, cfi, text, color, note } = await req.json();
+
+    if (!bookId || !cfi || !text) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    // Verify book exists to prevent foreign key constraint errors (e.g. after DB seed)
+    const book = await prisma.book.findUnique({
+      where: { id: bookId },
+      select: { id: true }
+    });
+
+    if (!book) {
+      return NextResponse.json({ error: 'Book not found. Please refresh the page.' }, { status: 404 });
+    }
+
+    const highlight = await prisma.highlight.create({
+      data: {
+        userId: session.user.id,
+        bookId,
+        cfi,
+        text,
+        color: color || 'yellow',
+        note,
+      },
+    });
+
+    return NextResponse.json(highlight);
+  } catch (error) {
+    console.error('[HIGHLIGHTS_POST]', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-
-  const { bookId, cfi, text, color, note } = await req.json();
-
-  if (!bookId || !cfi || !text) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-  }
-
-  const highlight = await prisma.highlight.create({
-    data: {
-      userId: session.user.id,
-      bookId,
-      cfi,
-      text,
-      color: color || 'yellow',
-      note,
-    },
-  });
-
-  return NextResponse.json(highlight);
 }
 
 export async function DELETE(req: NextRequest) {

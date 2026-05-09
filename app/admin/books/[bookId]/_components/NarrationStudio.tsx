@@ -157,7 +157,7 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
   const [selectedModel, setSelectedModel] = useState("");
   const [languageCode, setLanguageCode] = useState("en");
   const [stylePrompt, setStylePrompt] = useState(DEFAULT_STYLE_PROMPT);
-  const [maxChapters, setMaxChapters] = useState("");
+  const [chaptersToGenerate, setChaptersToGenerate] = useState("");
   const [sampleText, setSampleText] = useState(DEFAULT_SAMPLE_TEXT);
   const [samplePreview, setSamplePreview] = useState<{
     voiceName: string;
@@ -377,7 +377,12 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
             model: selectedModel,
             languageCode: languageCode.trim() || null,
             stylePrompt: stylePrompt.trim() || null,
-            maxChapters: maxChapters.trim() ? Number(maxChapters) : null,
+            chapterIndexes: chaptersToGenerate.trim()
+              ? chaptersToGenerate
+                  .split(",")
+                  .map((val) => parseInt(val.trim(), 10))
+                  .filter((val) => !isNaN(val) && val >= 0)
+              : null,
             activateAsDefault: voiceName === preferredDefaultVoiceName,
           }),
         });
@@ -862,12 +867,11 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
                 </label>
 
                 <label className="block text-sm text-landing-text-muted">
-                  <span className="mb-2 block font-medium text-landing-text">Max chapters (optional)</span>
+                  <span className="mb-2 block font-medium text-landing-text">Chapters to generate (optional)</span>
                   <input
-                    value={maxChapters}
-                    onChange={(event) => setMaxChapters(event.target.value)}
-                    inputMode="numeric"
-                    placeholder="Leave blank to narrate the full book"
+                    value={chaptersToGenerate}
+                    onChange={(event) => setChaptersToGenerate(event.target.value)}
+                    placeholder="e.g. 0, 1, 2 (leave blank for full book)"
                     className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
                   />
                 </label>

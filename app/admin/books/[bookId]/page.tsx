@@ -30,6 +30,7 @@ interface BookForm {
   description: string;
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   donorOnly: boolean;
+  narrationEnabled: boolean;
   donationEnabled: boolean;
   donationMessage?: string;
   donationGoal?: number;
@@ -49,6 +50,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
   const { register, handleSubmit, reset, control, watch } = useForm<BookForm>({
     defaultValues: {
       donorOnly: false,
+      narrationEnabled: false,
       printLinks: [],
       supplementaryContents: [],
     },
@@ -79,6 +81,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
         description: data.description,
         status: data.status,
         donorOnly: data.donorOnly || false,
+        narrationEnabled: data.narrationEnabled || false,
         donationEnabled: data.donationEnabled || false,
         donationMessage: data.donationMessage || '',
         donationGoal: data.donationGoal ? Number(data.donationGoal) : undefined,
@@ -327,6 +330,24 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
                     </label>
                     <p className="mt-2 text-sm leading-6 text-landing-text-muted">
                       Readers must be signed in and have at least one completed donation before they can open this title. The narration player will follow the same donor gate.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-white/70 p-4 ring-1 ring-white/65 mt-4">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    {...register('narrationEnabled')}
+                    className="mt-1 h-4 w-4 rounded border-landing-border text-landing-accent focus:ring-landing-accent"
+                  />
+                  <div>
+                    <label className="block text-sm font-semibold text-landing-text">
+                      Enable Narration Feature
+                    </label>
+                    <p className="mt-2 text-sm leading-6 text-landing-text-muted">
+                      Show the narration headphones icon and allow users to stream AI-generated audio. Hide this if narration is not yet confirmed.
                     </p>
                   </div>
                 </div>

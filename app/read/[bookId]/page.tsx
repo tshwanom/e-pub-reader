@@ -100,6 +100,7 @@ export default async function ReadBookPage({ params }: { params: Promise<{ bookI
               isSignedIn: donorFeatureAccess.isSignedIn,
               manageHref: narrationManageHref,
               statusEndpoint: `/api/books/${book.id}/narration`,
+              isEnabled: book.narrationEnabled,
             }}
         />
     </div>

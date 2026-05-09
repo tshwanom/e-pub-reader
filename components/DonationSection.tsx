@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   DEFAULT_DONATION_CURRENCY,
   DEFAULT_DONATION_GATEWAY,
@@ -8,8 +8,39 @@ import {
   DONATION_CURRENCY_OPTIONS,
   DONATION_GATEWAYS,
   formatCurrencyAmount,
+  isSupportedDonationCurrency,
   type DonationGateway,
 } from '@/lib/donations';
+
+/**
+ * Infer the visitor's most likely currency from their browser locale.
+ * Uses Intl.NumberFormat to extract the currency symbol resolution — zero
+ * extra dependencies and no network request required.
+ */
+function detectLocaleCurrency(): string {
+  try {
+    if (typeof navigator === 'undefined') return DEFAULT_DONATION_CURRENCY;
+    const locale = navigator.language || navigator.languages?.[0];
+    if (!locale) return DEFAULT_DONATION_CURRENCY;
+    // Format a dummy amount; the resolved options carry the currency code.
+    const resolved = new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: 'USD', // seed value – overridden by locale resolution below
+    }).resolvedOptions();
+    // Try to get the currency from the locale region tag (e.g. en-ZA → ZAR)
+    const region = locale.split('-')[1]?.toUpperCase();
+    const regionCurrency = region
+      ? new Intl.NumberFormat(`en-${region}`, {
+          style: 'currency',
+          currency: 'USD',
+        }).resolvedOptions().currency
+      : null;
+    const candidate = regionCurrency ?? resolved.currency;
+    return isSupportedDonationCurrency(candidate) ? candidate : DEFAULT_DONATION_CURRENCY;
+  } catch {
+    return DEFAULT_DONATION_CURRENCY;
+  }
+}
 
 interface DonationSectionProps {
   bookId: string;
@@ -28,6 +59,12 @@ export default function DonationSection({
 }: DonationSectionProps) {
   const [amount, setAmount] = useState('10');
   const [currency, setCurrency] = useState(DEFAULT_DONATION_CURRENCY);
+
+  // Auto-detect the donor's local currency once on mount (client-side only)
+  useEffect(() => {
+    const detected = detectLocaleCurrency();
+    setCurrency(detected);
+  }, []);
   const [gateway, setGateway] = useState<DonationGateway>(DEFAULT_DONATION_GATEWAY);
   const [donorEmail, setDonorEmail] = useState(currentUserEmail ?? '');
   const [loading, setLoading] = useState(false);
@@ -148,23 +185,22 @@ export default function DonationSection({
         </div>
 
         <div>
-          <label htmlFor="donation-currency" className="mb-2 block text-sm font-medium text-landing-text">
+          <p className="mb-2 block text-sm font-medium text-landing-text">
             Donation currency
-          </label>
-          <select
-            id="donation-currency"
-            value={currency}
-            onChange={(event) => setCurrency(event.target.value)}
-            className="w-full rounded-xl border border-landing-border bg-white px-4 py-3 text-landing-text focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/30"
-          >
-            {DONATION_CURRENCY_OPTIONS.map((option) => (
-              <option key={option.code} value={option.code}>
-                {option.code} — {option.name}
-              </option>
-            ))}
-          </select>
+          </p>
+          <div className="flex items-center gap-3 rounded-xl border border-landing-border bg-white/70 px-4 py-3">
+            <span className="rounded-full bg-landing-accent/10 px-3 py-1 text-sm font-bold tracking-wide text-landing-accent">
+              {currency}
+            </span>
+            <span className="text-sm text-landing-text-muted">
+              {DONATION_CURRENCY_OPTIONS.find((o) => o.code === currency)?.name ?? currency}
+            </span>
+            <span className="ml-auto rounded-full bg-landing-surface-muted px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-landing-text-muted">
+              Auto-detected
+            </span>
+          </div>
           <p className="mt-2 text-xs leading-5 text-landing-text-muted">
-            We store every donation in {DONATION_BASE_CURRENCY}. PayPal is charged in USD, while Paystack is charged in ZAR after live conversion.
+            Detected from your browser locale. We store every donation in {DONATION_BASE_CURRENCY}; PayPal charges USD, Paystack charges ZAR after live conversion.
           </p>
         </div>
       </div>
