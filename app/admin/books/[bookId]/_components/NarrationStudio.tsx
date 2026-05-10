@@ -294,6 +294,7 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
     setSamplingVoiceName(voiceName);
     setNotice(null);
     setError(null);
+    setSamplePreview(null);
 
     try {
       const response = await fetch(`/api/admin/books/${bookId}/narration`, {
@@ -354,6 +355,7 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
     });
     setNotice(null);
     setError(null);
+    setSamplePreview(null);
 
     let completed = 0;
     const failures: string[] = [];
@@ -447,6 +449,7 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
     setSettingDefaultNarrationId(narrationId);
     setNotice(null);
     setError(null);
+    setSamplePreview(null);
 
     try {
       const response = await fetch(`/api/admin/books/${bookId}/narration`, {
@@ -631,7 +634,19 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
           ) : (
             <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
           )}
-          <p>{notice.message}</p>
+          <div className="w-full">
+            <p>{notice.message}</p>
+            {notice.type === "success" && samplePreview ? (
+              <div className="mt-3">
+                <audio
+                  src={samplePreview.audioDataUrl}
+                  controls
+                  autoPlay
+                  className="h-10 w-full max-w-md rounded-lg"
+                />
+              </div>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
