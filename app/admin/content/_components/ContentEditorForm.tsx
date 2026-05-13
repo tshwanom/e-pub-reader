@@ -1,8 +1,10 @@
 "use client";
 
+import type { OurFileRouter } from "@/app/api/uploadthing/core";
+import { UploadButton } from "@uploadthing/react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ArrowLeft, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, ImageIcon, Save, Trash2, X } from "lucide-react";
 import Link from "next/link";
 
 type ContentType = "ARTICLE" | "VIDEO" | "POEM" | "QUOTE";
@@ -110,6 +112,7 @@ export default function ContentEditorForm({ mode, initialContent, books }: Conte
 
   const isEditMode = mode === "edit" && Boolean(initialContent?.id);
   const typeHint = useMemo(() => getTypeHint(form.type), [form.type]);
+  const hasCoverPreview = Boolean(form.coverUrl.trim());
 
   const updateField = <K extends keyof ContentFormState>(key: K, value: ContentFormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -311,15 +314,86 @@ export default function ContentEditorForm({ mode, initialContent, books }: Conte
               />
             </label>
 
-            <label className="block text-sm text-landing-text-muted">
-              <span className="mb-2 block font-medium text-landing-text">Cover / thumbnail URL</span>
-              <input
-                value={form.coverUrl}
-                onChange={(event) => updateField("coverUrl", event.target.value)}
-                placeholder="/covers/example.jpg"
-                className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
-              />
-            </label>
+            <div className="space-y-3 text-sm text-landing-text-muted">
+              <div>
+                <span className="mb-2 block font-medium text-landing-text">Cover / thumbnail</span>
+                <p className="text-xs leading-5 text-landing-text-muted">
+                  Paste an existing image URL or upload a new file directly for articles, videos, poems, and quote artwork.
+                </p>
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border border-landing-border bg-white shadow-sm">
+                <div className="relative aspect-[16/10] w-full bg-landing-surface-muted">
+                  {hasCoverPreview ? (
+                    <img
+                      src={form.coverUrl}
+                      alt={form.title ? `${form.title} cover preview` : "Content cover preview"}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center text-landing-text-muted">
+                      <ImageIcon className="h-8 w-8" />
+                      <p className="text-sm">No cover uploaded yet</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-landing-border/70 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-landing-text">Upload image</p>
+                      <p className="mt-1 text-xs leading-5 text-landing-text-muted">Accepted: JPG, PNG, GIF, or WEBP up to 4 MB.</p>
+                    </div>
+
+                    {hasCoverPreview ? (
+                      <button
+                        type="button"
+                        onClick={() => updateField("coverUrl", "")}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-200"
+                      >
+                        <X className="h-4 w-4" />
+                        Clear image
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4">
+                    <UploadButton<OurFileRouter, "coverImageUploader">
+                      endpoint="coverImageUploader"
+                      onClientUploadComplete={(files) => {
+                        const uploadedUrl = files?.[0]?.serverData?.url ?? files?.[0]?.ufsUrl;
+
+                        if (!uploadedUrl) {
+                          setError("Upload completed, but no cover URL was returned.");
+                          return;
+                        }
+
+                        updateField("coverUrl", uploadedUrl);
+                        setError(null);
+                      }}
+                      onUploadError={(uploadError: Error) => {
+                        setError(uploadError.message || "Failed to upload the cover image.");
+                      }}
+                      appearance={{
+                        container: "w-full items-stretch",
+                        button: "w-full rounded-xl bg-landing-accent px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-landing-accent-secondary ut-uploading:cursor-not-allowed ut-uploading:bg-landing-accent/70",
+                        allowedContent: "mt-2 text-xs text-landing-text-muted",
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <label className="block text-sm text-landing-text-muted">
+                <span className="mb-2 block font-medium text-landing-text">Cover / thumbnail URL</span>
+                <input
+                  value={form.coverUrl}
+                  onChange={(event) => updateField("coverUrl", event.target.value)}
+                  placeholder="https://... or upload above"
+                  className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+                />
+              </label>
+            </div>
 
             <label className="block text-sm text-landing-text-muted">
               <span className="mb-2 block font-medium text-landing-text">Sort order</span>
