@@ -16,8 +16,11 @@ Since you are managing Git yourself, simply ensure the latest version of your co
 
 This single script (`scripts/deploy-plesk.js`) will execute the following steps locally on your server:
 1. `npm install` (Installs/updates packages)
-2. `npx prisma generate` (Generates the database client for the server's OS)
-3. `npm run build` (Compiles the Next.js production build)
+2. `npx prisma migrate deploy` (Applies any pending production database migrations)
+3. `npx prisma generate` (Generates the database client for the server's OS)
+4. `npm run build` (Compiles the Next.js production build)
+
+The production startup entrypoints (`server.js` and `app.js`) also run `prisma migrate deploy` automatically before boot unless you explicitly set `AUTO_RUN_PRISMA_MIGRATIONS=false`.
 
 ## 3) Restart the App
 

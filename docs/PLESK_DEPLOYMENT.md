@@ -12,7 +12,9 @@ If your Plesk app and SSH access are already configured, deploy with:
 npm run deploy:plesk
 ```
 
-This command builds, uploads, extracts, installs dependencies, runs Prisma steps, and restarts the app automatically.
+When run from the Plesk Node.js UI on the server, this command installs dependencies, applies Prisma migrations, generates the Prisma client, and builds the application in place. After it completes, restart the app from Plesk.
+
+The production startup entrypoints (`server.js` and `app.js`) also run `prisma migrate deploy` automatically before boot by default, which protects Plesk restarts from serving code against a stale schema. Set `AUTO_RUN_PRISMA_MIGRATIONS="false"` only if you already run migrations elsewhere in your release process.
 
 If `PLESK_*` deploy variables are missing, the command prompts for them on first run and can persist them to your local `.env`.
 
@@ -184,6 +186,8 @@ Plesk expects one of these files:
 - `index.js`
 
 Both `server.js` and `app.js` are identical and serve as entry points.
+
+Both entrypoints use the shared `server-runtime.js` bootstrap so restarts apply pending Prisma migrations before Next.js begins serving traffic.
 
 ### Scripts Configuration
 

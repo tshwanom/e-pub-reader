@@ -37,10 +37,13 @@ try {
   // 1. Install Dependencies
   runCommand(NPM_CMD, ['install']);
 
-  // 2. Generate Prisma Client
+  // 2. Apply pending Prisma migrations
+  runCommand(NPX_CMD, ['prisma', 'migrate', 'deploy']);
+
+  // 3. Generate Prisma Client
   runCommand(NPX_CMD, ['prisma', 'generate']);
 
-  // 3. Build Next.js App
+  // 4. Build Next.js App
   // Force production mode to ensure optimized build
   runCommand(NPM_CMD, ['run', 'build'], { NODE_ENV: 'production' });
 

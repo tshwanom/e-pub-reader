@@ -84,7 +84,7 @@ try {
   });
 
   // Individual files to include
-  const filesToInclude = ['package.json', 'package-lock.json', 'server.js'];
+  const filesToInclude = ['package.json', 'package-lock.json', 'server.js', 'app.js', 'server-runtime.js'];
   filesToInclude.forEach(file => {
     const filePath = path.join(rootDir, file);
     if (fs.existsSync(filePath)) {
