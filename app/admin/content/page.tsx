@@ -1,5 +1,5 @@
+import { getContentTypeLabel, withContentFeatureFallback } from "@/lib/content";
 import { prisma } from "@/lib/prisma";
-import { getContentTypeLabel } from "@/lib/content";
 import { format } from "date-fns";
 import { FileText, Headphones, Plus, Video } from "lucide-react";
 import Link from "next/link";
@@ -19,32 +19,36 @@ function getStatusClasses(status: string) {
 }
 
 export default async function AdminContentPage() {
-  const content = await prisma.supplementaryContent.findMany({
-    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    include: {
-      book: {
-        select: {
-          id: true,
-          title: true,
-          slug: true,
+  const content = await withContentFeatureFallback(
+    () => prisma.supplementaryContent.findMany({
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      include: {
+        book: {
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+          },
         },
-      },
-      narrations: {
-        where: { active: true },
-        take: 1,
-        select: {
-          id: true,
-          status: true,
-          durationMs: true,
-          voice: {
-            select: {
-              name: true,
+        narrations: {
+          where: { active: true },
+          take: 1,
+          select: {
+            id: true,
+            status: true,
+            durationMs: true,
+            voice: {
+              select: {
+                name: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    }),
+    [],
+    'admin content dashboard'
+  );
 
   const publishedCount = content.filter((item) => item.status === "PUBLISHED").length;
   const standaloneCount = content.filter((item) => !item.bookId).length;

@@ -1,5 +1,12 @@
 import { authOptions } from "@/lib/auth";
-import { CONTENT_STATUSES, CONTENT_TYPES, normalizeNullableText, slugifyContentTitle } from "@/lib/content";
+import {
+  CONTENT_FEATURE_UNAVAILABLE_MESSAGE,
+  CONTENT_STATUSES,
+  CONTENT_TYPES,
+  isContentFeatureUnavailableError,
+  normalizeNullableText,
+  slugifyContentTitle,
+} from "@/lib/content";
 import {
   backfillContentNarrationSourceHashes,
   scheduleContentNarrationAutoSync,
@@ -30,6 +37,10 @@ const contentPayloadSchema = z.object({
 
 function isAdmin(session: Session | null) {
   return session?.user?.role === "ADMIN";
+}
+
+function createContentFeatureUnavailableResponse() {
+  return NextResponse.json({ error: CONTENT_FEATURE_UNAVAILABLE_MESSAGE }, { status: 503 });
 }
 
 async function buildUniqueContentSlug(contentId: string, title: string, requestedSlug?: string | null) {
@@ -68,45 +79,54 @@ export async function GET(
   }
 
   const { contentId } = await params;
-  const content = await prisma.supplementaryContent.findUnique({
-    where: { id: contentId },
-    include: {
-      book: {
-        select: {
-          id: true,
-          title: true,
-          slug: true,
-          coverUrl: true,
+  try {
+    const content = await prisma.supplementaryContent.findUnique({
+      where: { id: contentId },
+      include: {
+        book: {
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+            coverUrl: true,
+          },
         },
-      },
-      narrations: {
-        orderBy: [{ active: "desc" }, { updatedAt: "desc" }],
-        select: {
-          id: true,
-          status: true,
-          active: true,
-          durationMs: true,
-          readyAt: true,
-          errorMessage: true,
-          voice: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              provider: true,
-              language: true,
+        narrations: {
+          orderBy: [{ active: "desc" }, { updatedAt: "desc" }],
+          select: {
+            id: true,
+            status: true,
+            active: true,
+            durationMs: true,
+            readyAt: true,
+            errorMessage: true,
+            voice: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                provider: true,
+                language: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    });
 
-  if (!content) {
-    return NextResponse.json({ error: "Content not found" }, { status: 404 });
+    if (!content) {
+      return NextResponse.json({ error: "Content not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(content);
+  } catch (error) {
+    if (isContentFeatureUnavailableError(error)) {
+      console.error("Get content error (content feature unavailable):", error);
+      return createContentFeatureUnavailableResponse();
+    }
+
+    throw error;
   }
-
-  return NextResponse.json(content);
 }
 
 export async function PATCH(
@@ -192,6 +212,11 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid content payload", issues: error.flatten() }, { status: 400 });
     }
 
+    if (isContentFeatureUnavailableError(error)) {
+      console.error("Update content error (content feature unavailable):", error);
+      return createContentFeatureUnavailableResponse();
+    }
+
     console.error("Update content error:", error);
     return NextResponse.json(
       { error: "Failed to update content", details: error instanceof Error ? error.message : String(error) },
@@ -216,6 +241,10 @@ export async function DELETE(
     await prisma.supplementaryContent.delete({ where: { id: contentId } });
     return NextResponse.json({ message: "Content deleted" });
   } catch (error) {
+    if (isContentFeatureUnavailableError(error)) {
+      return createContentFeatureUnavailableResponse();
+    }
+
     return NextResponse.json({ error: "Failed to delete content" }, { status: 500 });
   }
 }

@@ -1,3 +1,4 @@
+import { withContentFeatureFallback } from '@/lib/content';
 import { prisma } from '@/lib/prisma';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -30,24 +31,28 @@ type ArticleListItem = {
 };
 
 export default async function BlogPage() {
-  const articles = await prisma.supplementaryContent.findMany({
-    where: {
-      type: 'ARTICLE',
-      status: 'PUBLISHED',
-    },
-    include: {
-      book: {
-        select: {
-          title: true,
-          slug: true,
-          coverUrl: true,
+  const articles = await withContentFeatureFallback(
+    async () => prisma.supplementaryContent.findMany({
+      where: {
+        type: 'ARTICLE',
+        status: 'PUBLISHED',
+      },
+      include: {
+        book: {
+          select: {
+            title: true,
+            slug: true,
+            coverUrl: true,
+          },
         },
       },
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  }) as unknown as ArticleListItem[];
+      orderBy: {
+        createdAt: 'desc',
+      },
+    }) as unknown as ArticleListItem[],
+    [] as ArticleListItem[],
+    'blog articles'
+  );
 
   return (
     <main className="page-shell">

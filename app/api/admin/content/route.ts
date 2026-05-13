@@ -1,5 +1,12 @@
 import { authOptions } from "@/lib/auth";
-import { CONTENT_STATUSES, CONTENT_TYPES, normalizeNullableText, slugifyContentTitle } from "@/lib/content";
+import {
+  CONTENT_FEATURE_UNAVAILABLE_MESSAGE,
+  CONTENT_STATUSES,
+  CONTENT_TYPES,
+  isContentFeatureUnavailableError,
+  normalizeNullableText,
+  slugifyContentTitle,
+} from "@/lib/content";
 import { buildContentNarrationSourceHash } from "@/lib/content-narration-sync";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
@@ -28,6 +35,10 @@ function isAdmin(session: Session | null) {
   return session?.user?.role === "ADMIN";
 }
 
+function createContentFeatureUnavailableResponse() {
+  return NextResponse.json({ error: CONTENT_FEATURE_UNAVAILABLE_MESSAGE }, { status: 503 });
+}
+
 async function buildUniqueContentSlug(title: string, requestedSlug?: string | null) {
   const baseSlug = slugifyContentTitle(requestedSlug || title);
 
@@ -53,35 +64,44 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const content = await prisma.supplementaryContent.findMany({
-    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    include: {
-      book: {
-        select: {
-          id: true,
-          title: true,
-          slug: true,
-          coverUrl: true,
+  try {
+    const content = await prisma.supplementaryContent.findMany({
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      include: {
+        book: {
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+            coverUrl: true,
+          },
         },
-      },
-      narrations: {
-        where: { active: true },
-        take: 1,
-        select: {
-          id: true,
-          status: true,
-          durationMs: true,
-          voice: {
-            select: {
-              name: true,
+        narrations: {
+          where: { active: true },
+          take: 1,
+          select: {
+            id: true,
+            status: true,
+            durationMs: true,
+            voice: {
+              select: {
+                name: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    });
 
-  return NextResponse.json({ content });
+    return NextResponse.json({ content });
+  } catch (error) {
+    if (isContentFeatureUnavailableError(error)) {
+      console.error("List content error (content feature unavailable):", error);
+      return createContentFeatureUnavailableResponse();
+    }
+
+    throw error;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -126,6 +146,11 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     if (error instanceof ZodError) {
       return NextResponse.json({ error: "Invalid content payload", issues: error.flatten() }, { status: 400 });
+    }
+
+    if (isContentFeatureUnavailableError(error)) {
+      console.error("Create content error (content feature unavailable):", error);
+      return createContentFeatureUnavailableResponse();
     }
 
     console.error("Create content error:", error);

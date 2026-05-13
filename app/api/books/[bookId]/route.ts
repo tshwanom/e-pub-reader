@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { isPrivilegedUser } from '@/lib/book-access';
 import { authOptions } from '@/lib/auth';
+import { CONTENT_FEATURE_UNAVAILABLE_MESSAGE, isContentFeatureUnavailableError } from '@/lib/content';
 import { prisma } from '@/lib/prisma';
+
+function createContentFeatureUnavailableResponse() {
+  return NextResponse.json({ error: CONTENT_FEATURE_UNAVAILABLE_MESSAGE }, { status: 503 });
+}
 
 export async function GET(
   req: NextRequest,
@@ -15,14 +20,38 @@ export async function GET(
     const includePrintLinks = searchParams.get('include')?.includes('printLinks');
     const includeSupplementary = searchParams.get('include')?.includes('supplementaryContents');
 
-    const include: any = {};
-    if (includePrintLinks) include.printLinks = true;
-    if (includeSupplementary) include.supplementaryContents = true;
+    const baseInclude: any = {};
+    if (includePrintLinks) baseInclude.printLinks = true;
 
-    const book = await prisma.book.findUnique({
-      where: { id: bookId },
-      ...(Object.keys(include).length > 0 ? { include } : {}),
-    });
+    let book: any;
+
+    try {
+      const include: any = { ...baseInclude };
+      if (includeSupplementary) include.supplementaryContents = true;
+
+      book = await prisma.book.findUnique({
+        where: { id: bookId },
+        ...(Object.keys(include).length > 0 ? { include } : {}),
+      });
+    } catch (error) {
+      if (!includeSupplementary || !isContentFeatureUnavailableError(error)) {
+        throw error;
+      }
+
+      console.warn(
+        `[content-feature] supplementary contents are unavailable for book ${bookId}. Returning the book without supplementary content data.`,
+        error
+      );
+
+      book = await prisma.book.findUnique({
+        where: { id: bookId },
+        ...(Object.keys(baseInclude).length > 0 ? { include: baseInclude } : {}),
+      });
+
+      if (book) {
+        book = { ...book, supplementaryContents: [] };
+      }
+    }
 
     if (!book) return NextResponse.json({ error: 'Book not found' }, { status: 404 });
     if (book.status !== 'PUBLISHED' && !isPrivilegedUser(session?.user)) {
@@ -128,6 +157,11 @@ export async function PATCH(
 
     return NextResponse.json(bookWithRelations);
   } catch (error) {
+    if (isContentFeatureUnavailableError(error)) {
+      console.error('Book update error (content feature unavailable):', error);
+      return createContentFeatureUnavailableResponse();
+    }
+
     console.error('Book update error:', error);
     return NextResponse.json(
       { error: 'Failed to update book', details: error instanceof Error ? error.message : 'Unknown error' },

@@ -1,5 +1,12 @@
+import { Prisma } from "@prisma/client";
+
 export const CONTENT_TYPES = ["ARTICLE", "VIDEO", "POEM", "QUOTE"] as const;
 export const CONTENT_STATUSES = ["DRAFT", "PUBLISHED", "ARCHIVED"] as const;
+
+const CONTENT_FEATURE_ERROR_CODES = new Set(["P2021", "P2022"]);
+const CONTENT_FEATURE_ERROR_PATTERN = /(supplementary[_\s]?content|supplementarycontents|content[_\s]?narration|narration[_\s]?source[_\s]?hash)/i;
+
+export const CONTENT_FEATURE_UNAVAILABLE_MESSAGE = "Platform content is temporarily unavailable until the latest database migrations are applied.";
 
 export type ContentTypeValue = (typeof CONTENT_TYPES)[number];
 export type ContentStatusValue = (typeof CONTENT_STATUSES)[number];
@@ -17,6 +24,34 @@ export type ContentNarrationTranscriptSource = Pick<
   ContentNarrationSource,
   "title" | "summary" | "content" | "author" | "type"
 >;
+
+export function isContentFeatureUnavailableError(error: unknown) {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return CONTENT_FEATURE_ERROR_CODES.has(error.code) && CONTENT_FEATURE_ERROR_PATTERN.test(error.message);
+  }
+
+  if (error instanceof Prisma.PrismaClientUnknownRequestError || error instanceof Prisma.PrismaClientValidationError) {
+    return CONTENT_FEATURE_ERROR_PATTERN.test(error.message);
+  }
+
+  return error instanceof Error ? CONTENT_FEATURE_ERROR_PATTERN.test(error.message) : false;
+}
+
+export async function withContentFeatureFallback<T>(operation: () => Promise<T>, fallback: T, context: string) {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isContentFeatureUnavailableError(error)) {
+      console.warn(
+        `[content-feature] ${context} is unavailable. Falling back to a safe default until database migrations are applied.`,
+        error
+      );
+      return fallback;
+    }
+
+    throw error;
+  }
+}
 
 export function slugifyContentTitle(value: string) {
   return String(value || "")

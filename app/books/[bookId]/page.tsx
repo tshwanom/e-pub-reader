@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getBookAccessState } from '@/lib/book-access';
+import { withContentFeatureFallback } from '@/lib/content';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -27,10 +28,6 @@ export default async function BookDetailsPage({
       epubFile: true,
       audiobook: true,
       printLinks: true,
-      supplementaryContents: {
-        where: { status: 'PUBLISHED' },
-        orderBy: { order: 'asc' }
-      },
       readingProgress: session?.user?.id
         ? {
             where: { userId: session.user.id },
@@ -49,6 +46,20 @@ export default async function BookDetailsPage({
   if (!access.isPublished && !access.isPrivileged) {
     notFound();
   }
+
+  const supplementaryContents = await withContentFeatureFallback(
+    () => prisma.supplementaryContent.findMany({
+      where: {
+        bookId: book.id,
+        status: 'PUBLISHED',
+      },
+      orderBy: {
+        order: 'asc',
+      },
+    }),
+    [],
+    `book supplementary content ${book.id}`
+  );
 
   const progress = access.hasAccess && session?.user?.id ? book.readingProgress?.[0] : null;
   const donationStatus = resolvedSearchParams?.donation;
@@ -340,11 +351,11 @@ export default async function BookDetailsPage({
               </section>
             )}
 
-            {book.supplementaryContents && book.supplementaryContents.length > 0 && (
+            {supplementaryContents.length > 0 && (
               <div className="space-y-4">
                 <h2 className="font-playfair text-3xl font-semibold text-landing-text">Explore More</h2>
                 <div className="grid gap-4">
-                  {book.supplementaryContents.map((item) => (
+                  {supplementaryContents.map((item) => (
                     <div key={item.id} className="surface-card p-6">
                       {item.type === 'VIDEO' && (
                         <div>

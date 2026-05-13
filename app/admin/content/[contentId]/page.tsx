@@ -1,3 +1,4 @@
+import { withContentFeatureFallback } from "@/lib/content";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import ContentEditorForm from "../_components/ContentEditorForm";
@@ -9,24 +10,28 @@ export default async function EditContentPage({ params }: { params: Promise<{ co
   const { contentId } = await params;
 
   const [content, books] = await Promise.all([
-    prisma.supplementaryContent.findUnique({
-      where: { id: contentId },
-      select: {
-        id: true,
-        type: true,
-        status: true,
-        title: true,
-        slug: true,
-        summary: true,
-        content: true,
-        url: true,
-        author: true,
-        coverUrl: true,
-        bookId: true,
-        narrationEnabled: true,
-        order: true,
-      },
-    }),
+    withContentFeatureFallback(
+      () => prisma.supplementaryContent.findUnique({
+        where: { id: contentId },
+        select: {
+          id: true,
+          type: true,
+          status: true,
+          title: true,
+          slug: true,
+          summary: true,
+          content: true,
+          url: true,
+          author: true,
+          coverUrl: true,
+          bookId: true,
+          narrationEnabled: true,
+          order: true,
+        },
+      }),
+      null,
+      `admin content editor ${contentId}`
+    ),
     prisma.book.findMany({
       orderBy: { title: "asc" },
       select: {

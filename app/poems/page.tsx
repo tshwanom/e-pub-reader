@@ -1,3 +1,4 @@
+import { withContentFeatureFallback } from '@/lib/content';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { Metadata } from 'next';
@@ -13,23 +14,27 @@ export const metadata: Metadata = {
 };
 
 export default async function PoemsPage() {
-  const poems = await prisma.supplementaryContent.findMany({
-    where: {
-      type: 'POEM',
-      status: 'PUBLISHED',
-    },
-    include: {
-      book: {
-        select: {
-          title: true,
-          slug: true,
+  const poems = await withContentFeatureFallback(
+    () => prisma.supplementaryContent.findMany({
+      where: {
+        type: 'POEM',
+        status: 'PUBLISHED',
+      },
+      include: {
+        book: {
+          select: {
+            title: true,
+            slug: true,
+          },
         },
       },
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
+      orderBy: {
+        createdAt: 'desc',
+      },
+    }),
+    [],
+    'poems listing'
+  );
 
   return (
     <main className="page-shell">

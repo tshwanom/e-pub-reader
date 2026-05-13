@@ -1,3 +1,4 @@
+import { withContentFeatureFallback } from '@/lib/content';
 import { prisma } from '@/lib/prisma';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -28,24 +29,28 @@ type VideoListItem = {
 };
 
 export default async function VideosPage() {
-  const videos = await prisma.supplementaryContent.findMany({
-    where: {
-      type: 'VIDEO',
-      status: 'PUBLISHED',
-    },
-    include: {
-      book: {
-        select: {
-          title: true,
-          slug: true,
-          coverUrl: true,
+  const videos = await withContentFeatureFallback(
+    async () => prisma.supplementaryContent.findMany({
+      where: {
+        type: 'VIDEO',
+        status: 'PUBLISHED',
+      },
+      include: {
+        book: {
+          select: {
+            title: true,
+            slug: true,
+            coverUrl: true,
+          },
         },
       },
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  }) as unknown as VideoListItem[];
+      orderBy: {
+        createdAt: 'desc',
+      },
+    }) as unknown as VideoListItem[],
+    [] as VideoListItem[],
+    'videos listing'
+  );
 
   return (
     <main className="page-shell">
