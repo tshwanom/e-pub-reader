@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Metadata } from 'next';
 import Header from '@/components/landing/Header';
 import Footer from '@/components/landing/Footer';
+import ContentNarrationPlayer from '@/components/ContentNarrationPlayer';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,10 +13,27 @@ export const metadata: Metadata = {
   description: 'Articles and essays from our collection.',
 };
 
+type ArticleListItem = {
+  id: string;
+  title: string;
+  content: string | null;
+  summary: string | null;
+  url: string | null;
+  author: string | null;
+  bookId: string | null;
+  createdAt: Date;
+  book: {
+    title: string;
+    slug: string | null;
+    coverUrl: string | null;
+  } | null;
+};
+
 export default async function BlogPage() {
   const articles = await prisma.supplementaryContent.findMany({
     where: {
       type: 'ARTICLE',
+      status: 'PUBLISHED',
     },
     include: {
       book: {
@@ -29,7 +47,7 @@ export default async function BlogPage() {
     orderBy: {
       createdAt: 'desc',
     },
-  });
+  }) as unknown as ArticleListItem[];
 
   return (
     <main className="page-shell">
@@ -67,11 +85,13 @@ export default async function BlogPage() {
                     )}
                   </h2>
 
-                  {article.content && (
+                  {(article.summary || article.content) && (
                     <p className="mb-4 line-clamp-3 text-sm leading-relaxed text-landing-text-muted">
-                      {article.content}
+                      {article.summary || article.content}
                     </p>
                   )}
+
+                  <ContentNarrationPlayer contentId={article.id} compact />
                   
                   {article.url && (
                     <a href={article.url} target="_blank" rel="noopener noreferrer" className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-landing-accent hover:text-landing-accent-secondary">
@@ -81,7 +101,8 @@ export default async function BlogPage() {
                </div>
 
                <div className="mt-auto border-t border-landing-border bg-landing-surface-muted px-6 py-4">
-                 <Link href={`/books/${article.book.slug || article.bookId}`} className="group flex items-center gap-3">
+                  {article.book ? (
+                  <Link href={`/books/${article.book.slug || article.bookId || article.id}`} className="group flex items-center gap-3">
                     {article.book.coverUrl && (
                       <div className="relative h-10 w-8 overflow-hidden rounded shadow-sm">
                         <Image
@@ -101,6 +122,11 @@ export default async function BlogPage() {
                        </p>
                     </div>
                  </Link>
+                 ) : (
+                  <div className="text-sm text-landing-text-muted">
+                    Standalone article from the One Man Revolution platform.
+                  </div>
+                 )}
                </div>
             </article>
           ))}

@@ -8,6 +8,7 @@ import Image from 'next/image';
 import DonationSection from '@/components/DonationSection';
 import Header from '@/components/landing/Header';
 import Footer from '@/components/landing/Footer';
+import ContentNarrationPlayer from '@/components/ContentNarrationPlayer';
 
 export default async function BookDetailsPage({
   params,
@@ -27,6 +28,7 @@ export default async function BookDetailsPage({
       audiobook: true,
       printLinks: true,
       supplementaryContents: {
+        where: { status: 'PUBLISHED' },
         orderBy: { order: 'asc' }
       },
       readingProgress: session?.user?.id
@@ -347,6 +349,11 @@ export default async function BookDetailsPage({
                       {item.type === 'VIDEO' && (
                         <div>
                           <h3 className="mb-3 text-lg font-semibold text-landing-text">{item.title}</h3>
+                          {item.summary || item.content ? (
+                            <p className="mb-3 text-sm leading-relaxed text-landing-text-muted">
+                              {item.summary || item.content}
+                            </p>
+                          ) : null}
                           {item.url && (
                              <div className="aspect-video overflow-hidden rounded-xl border border-landing-border bg-landing-surface-muted">
                                 {item.url.includes('youtube.com') || item.url.includes('youtu.be') ? (
@@ -368,9 +375,9 @@ export default async function BookDetailsPage({
                       {item.type === 'ARTICLE' && (
                         <div>
                           <h3 className="mb-2 text-lg font-semibold text-landing-text">{item.title}</h3>
-                          {item.content && (
+                          {(item.summary || item.content) && (
                             <div className="mb-3 whitespace-pre-wrap text-sm leading-relaxed text-landing-text-muted">
-                              {item.content.length > 300 ? `${item.content.slice(0, 300)}...` : item.content}
+                              {(item.summary || item.content || '').length > 300 ? `${(item.summary || item.content || '').slice(0, 300)}...` : (item.summary || item.content)}
                             </div>
                           )}
                           {item.url && (
@@ -406,6 +413,8 @@ export default async function BookDetailsPage({
                            {item.title && <p className="mt-1 text-xs text-landing-text-muted">{item.title}</p>}
                         </div>
                       )}
+
+                      <ContentNarrationPlayer contentId={item.id} compact />
                     </div>
                   ))}
                 </div>

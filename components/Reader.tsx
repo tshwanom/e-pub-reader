@@ -528,6 +528,7 @@ export default function Reader({
     || narrationStatus?.message
     || 'Narrated mode is ready to stream.';
   const narrationPlayerTitle = activeNarrationChapter?.title || `Chapter ${narrationChapterIndex + 1}`;
+  const narrationFeatureEnabled = Boolean(narrationAccess && narrationAccess.isEnabled !== false);
   const narrationPlaybackProgressPct = narrationPlaybackMax > 0
     ? Math.min(Math.max((narrationCurrentTime / narrationPlaybackMax) * 100, 0), 100)
     : 0;
@@ -736,7 +737,7 @@ export default function Reader({
   }, [bookId]);
 
   const loadNarrationStatus = useCallback(async (force = false) => {
-    if (!narrationAccess?.isEnabled || !narrationAccess?.hasAccess || isCheckingNarration) return;
+    if (!narrationFeatureEnabled || !narrationAccess?.hasAccess || isCheckingNarration) return;
     if (narrationStatus && !force) return;
 
     setIsCheckingNarration(true);
@@ -764,7 +765,7 @@ export default function Reader({
     } finally {
       setIsCheckingNarration(false);
     }
-  }, [isCheckingNarration, narrationAccess, narrationStatus]);
+  }, [isCheckingNarration, narrationAccess, narrationFeatureEnabled, narrationStatus]);
 
   const openNarrationModal = useCallback(() => {
     setShowNarrationModal(true);
@@ -1087,14 +1088,39 @@ export default function Reader({
   }, [bookId, narrationStatus?.defaultVoiceSlug, narrationVoiceOptions, selectedNarrationVoiceSlug]);
 
   useEffect(() => {
-    if (!narrationHasReadyPlayer || isNarrationPlaying) {
+    if (!narrationHasReadyPlayer) {
       return;
     }
 
     const nextChapterIndex = resolveNarrationChapterIndex(currentHref);
 
-    setNarrationChapterIndex((previousIndex) => (previousIndex === nextChapterIndex ? previousIndex : nextChapterIndex));
-  }, [currentHref, isNarrationPlaying, narrationHasReadyPlayer, resolveNarrationChapterIndex]);
+    if (nextChapterIndex === narrationChapterIndex) {
+      return;
+    }
+
+    if (isNarrationPlaying) {
+      pendingNarrationAutoplayRef.current = true;
+      audioRef.current?.pause();
+    }
+
+    setNarrationPlaybackError(null);
+    setNarrationChapterIndex(nextChapterIndex);
+    setNarrationCurrentTime(0);
+    setNarrationDuration(
+      narrationChapters[nextChapterIndex]?.durationMs
+        ? narrationChapters[nextChapterIndex].durationMs / 1000
+        : 0
+    );
+    setActiveNarrationCue(null);
+    lastNarrationDisplayTargetRef.current = null;
+  }, [
+    currentHref,
+    isNarrationPlaying,
+    narrationChapterIndex,
+    narrationChapters,
+    narrationHasReadyPlayer,
+    resolveNarrationChapterIndex,
+  ]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -1278,7 +1304,22 @@ export default function Reader({
     const initBook = async () => {
       if (destroyed || !viewerRef.current) return;
 
-      const book = ePub(url, { openAs: 'epub' }) as unknown as Book;
+      let bookSource: ArrayBuffer;
+
+      try {
+        const response = await fetch(url);
+
+        if (!response.ok) {
+          throw new Error(`EPUB fetch failed with status ${response.status}`);
+        }
+
+        bookSource = await response.arrayBuffer();
+      } catch (error) {
+        console.error('Failed to fetch the EPUB file for the reader', error);
+        throw error;
+      }
+
+      const book = ePub(bookSource, { openAs: 'epub' }) as unknown as Book;
       bookRef.current = book;
 
       // Use explicit pixel dimensions so epub.js paginates correctly
@@ -1877,7 +1918,7 @@ export default function Reader({
             </svg>
           </button>
 
-          {narrationAccess?.isEnabled && (
+          {narrationFeatureEnabled && (
             <button
               onClick={narrationHasReadyPlayer ? () => void toggleNarrationPlayback() : openNarrationModal}
               aria-label={
@@ -1885,12 +1926,12 @@ export default function Reader({
                   ? isNarrationPlaying
                     ? 'Pause narration'
                     : 'Play narration'
-                  : narrationAccess.hasAccess
+                  : narrationAccess?.hasAccess
                     ? 'Open narrated mode status'
                     : 'Narrated mode reserved for donors'
               }
               className={`relative flex h-9 w-9 items-center justify-center rounded-full backdrop-blur-sm transition focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
-                narrationHasReadyPlayer || narrationAccess.hasAccess
+                narrationHasReadyPlayer || narrationAccess?.hasAccess
                   ? 'bg-landing-accent text-white hover:bg-landing-accent-secondary'
                   : 'bg-black/25 text-white hover:bg-black/45'
               }`}
@@ -1911,12 +1952,12 @@ export default function Reader({
               )}
               <span
                 className={`absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full border border-white text-[9px] font-bold ${
-                  narrationHasReadyPlayer || narrationAccess.hasAccess
+                  narrationHasReadyPlayer || narrationAccess?.hasAccess
                     ? 'bg-white text-landing-accent'
                     : 'bg-amber-400 text-amber-950'
                 }`}
               >
-                {narrationHasReadyPlayer ? '▶' : narrationAccess.hasAccess ? '✓' : '★'}
+                {narrationHasReadyPlayer ? '▶' : narrationAccess?.hasAccess ? '✓' : '★'}
               </span>
             </button>
           )}
@@ -1933,7 +1974,7 @@ export default function Reader({
         </div>
       </div>
 
-      {narrationAccess?.isEnabled && <audio ref={audioRef} preload="metadata" data-testid="narration-audio" className="hidden" />}
+      {narrationFeatureEnabled && <audio ref={audioRef} preload="metadata" data-testid="narration-audio" className="hidden" />}
 
       {narrationHasReadyPlayer && activeNarrationChapter && (
         <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-3 sm:px-4">
@@ -2231,7 +2272,7 @@ export default function Reader({
             </button>
           </div>
 
-          {narrationAccess?.isEnabled && (
+          {narrationFeatureEnabled && (
             <div className="mb-5 rounded-2xl border border-landing-border bg-landing-surface-muted px-4 py-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -2239,21 +2280,21 @@ export default function Reader({
                   <h3 className="mt-1 text-sm font-semibold text-landing-text">
                     {narrationHasReadyPlayer
                       ? 'Narrated mode is ready'
-                      : narrationAccess.hasAccess
+                      : narrationAccess?.hasAccess
                         ? 'Unlocked for your donor account'
                         : 'Reserved for donors'}
                   </h3>
                 </div>
                 <span
                   className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${
-                    narrationHasReadyPlayer || narrationAccess.hasAccess
+                    narrationHasReadyPlayer || narrationAccess?.hasAccess
                       ? 'bg-emerald-100 text-emerald-700'
                       : 'bg-amber-100 text-amber-700'
                   }`}
                 >
                   {narrationHasReadyPlayer
                     ? 'Ready to stream'
-                    : narrationAccess.hasAccess
+                    : narrationAccess?.hasAccess
                       ? 'Donor unlocked'
                       : 'Donors only'}
                 </span>
@@ -2262,9 +2303,9 @@ export default function Reader({
               <p className="mt-3 text-xs leading-relaxed text-landing-text-muted">
                 {narrationHasReadyPlayer
                   ? 'Signed narration audio is ready. Play it here and the reader will follow the text as each cue advances.'
-                  : narrationAccess.hasAccess
+                  : narrationAccess?.hasAccess
                     ? 'We will stream narrated audio securely once this book’s signed narration assets are ready.'
-                    : narrationAccess.isSignedIn
+                    : narrationAccess?.isSignedIn
                       ? 'Due to the cost of running narration, this feature is reserved for donors only. Make one completed donation to unlock it on your account.'
                       : 'Due to the cost of running narration, this feature is reserved for donors only. Sign in to unlock it with your donation.'}
               </p>
@@ -2294,7 +2335,7 @@ export default function Reader({
               <button
                 onClick={narrationHasReadyPlayer ? () => void toggleNarrationPlayback() : openNarrationModal}
                 className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${
-                  narrationHasReadyPlayer || narrationAccess.hasAccess
+                  narrationHasReadyPlayer || narrationAccess?.hasAccess
                     ? 'bg-landing-accent text-white hover:bg-landing-accent-secondary'
                     : 'border border-landing-border bg-white text-landing-text hover:border-landing-accent/40 hover:text-landing-accent'
                 }`}
@@ -2303,9 +2344,9 @@ export default function Reader({
                   ? isNarrationPlaying
                     ? 'Pause narrated mode'
                     : 'Start narrated mode'
-                  : narrationAccess.hasAccess
+                  : narrationAccess?.hasAccess
                     ? 'Check narrated mode'
-                    : narrationAccess.isSignedIn
+                    : narrationAccess?.isSignedIn
                       ? 'Unlock with donation'
                       : 'Sign in to unlock'}
               </button>

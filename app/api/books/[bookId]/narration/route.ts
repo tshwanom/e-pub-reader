@@ -1,5 +1,6 @@
 import { getDonorFeatureAccessState } from "@/lib/book-access";
 import { authOptions } from "@/lib/auth";
+import { ensureBookNarrationBackgroundProcessing } from "@/lib/book-narration-jobs";
 import {
   buildNarrationManifest,
   createNarrationFeatureResponse,
@@ -139,6 +140,10 @@ export async function GET(
     const primaryStorageProvider = primaryNarration
       ? toNarrationObjectStorageProvider(primaryNarration.storageProvider)
       : activeStorageProvider;
+
+    if (narrations.some((narration) => narration.status === "PENDING" || narration.status === "PROCESSING")) {
+      ensureBookNarrationBackgroundProcessing(book.id);
+    }
 
     if (primaryNarration && !isNarrationStorageConfigured(primaryStorageProvider)) {
       return NextResponse.json(

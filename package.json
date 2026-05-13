@@ -5,8 +5,8 @@
   "main": "server.js",
   "scripts": {
     "dev": "next dev -p 3001",
-    "build": "next build",
-    "start": "NODE_ENV=production node server.js",
+    "build": "node scripts/build-next.js",
+    "start": "node server.js",
     "start:custom": "node server.js",
     "test": "jest",
     "test:watch": "jest --watch",

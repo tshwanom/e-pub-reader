@@ -1,0 +1,388 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+import { ArrowLeft, Save, Trash2 } from "lucide-react";
+import Link from "next/link";
+
+type ContentType = "ARTICLE" | "VIDEO" | "POEM" | "QUOTE";
+type ContentStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+
+type BookOption = {
+  id: string;
+  title: string;
+  slug: string;
+};
+
+type ContentFormState = {
+  type: ContentType;
+  status: ContentStatus;
+  title: string;
+  slug: string;
+  summary: string;
+  content: string;
+  url: string;
+  author: string;
+  coverUrl: string;
+  bookId: string;
+  narrationEnabled: boolean;
+  order: number;
+};
+
+type InitialContent = {
+  id?: string;
+  type?: ContentType;
+  status?: ContentStatus;
+  title?: string | null;
+  slug?: string | null;
+  summary?: string | null;
+  content?: string | null;
+  url?: string | null;
+  author?: string | null;
+  coverUrl?: string | null;
+  bookId?: string | null;
+  narrationEnabled?: boolean | null;
+  order?: number | null;
+};
+
+type ContentEditorFormProps = {
+  mode: "create" | "edit";
+  initialContent?: InitialContent | null;
+  books: BookOption[];
+};
+
+const emptyContent: ContentFormState = {
+  type: "ARTICLE",
+  status: "DRAFT",
+  title: "",
+  slug: "",
+  summary: "",
+  content: "",
+  url: "",
+  author: "",
+  coverUrl: "",
+  bookId: "",
+  narrationEnabled: false,
+  order: 0,
+};
+
+function toFormState(initialContent?: InitialContent | null): ContentFormState {
+  if (!initialContent) {
+    return emptyContent;
+  }
+
+  return {
+    type: initialContent.type || "ARTICLE",
+    status: initialContent.status || "DRAFT",
+    title: initialContent.title || "",
+    slug: initialContent.slug || "",
+    summary: initialContent.summary || "",
+    content: initialContent.content || "",
+    url: initialContent.url || "",
+    author: initialContent.author || "",
+    coverUrl: initialContent.coverUrl || "",
+    bookId: initialContent.bookId || "",
+    narrationEnabled: Boolean(initialContent.narrationEnabled),
+    order: Number(initialContent.order || 0),
+  };
+}
+
+function getTypeHint(type: ContentType) {
+  switch (type) {
+    case "VIDEO":
+      return "Add a YouTube/Vimeo/external URL and optional show notes for narration.";
+    case "POEM":
+      return "Use the body field for line-broken poetry. Narration can read the poem directly.";
+    case "QUOTE":
+      return "Use the body field for the quote and author for attribution.";
+    case "ARTICLE":
+    default:
+      return "Use summary for cards and body for the full article/narration transcript.";
+  }
+}
+
+export default function ContentEditorForm({ mode, initialContent, books }: ContentEditorFormProps) {
+  const router = useRouter();
+  const [form, setForm] = useState<ContentFormState>(() => toFormState(initialContent));
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isEditMode = mode === "edit" && Boolean(initialContent?.id);
+  const typeHint = useMemo(() => getTypeHint(form.type), [form.type]);
+
+  const updateField = <K extends keyof ContentFormState>(key: K, value: ContentFormState[K]) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+
+    try {
+      const response = await fetch(isEditMode ? `/api/admin/content/${initialContent!.id}` : "/api/admin/content", {
+        method: isEditMode ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          bookId: form.bookId || null,
+          slug: form.slug || null,
+          summary: form.summary || null,
+          content: form.content || null,
+          url: form.url || null,
+          author: form.author || null,
+          coverUrl: form.coverUrl || null,
+        }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.details || payload.error || "Failed to save content.");
+      }
+
+      router.push(isEditMode ? `/admin/content/${payload.id}` : `/admin/content/${payload.id}`);
+      router.refresh();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Failed to save content.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!isEditMode || !initialContent?.id) {
+      return;
+    }
+
+    if (!confirm("Delete this content item? This also deletes its generated narration assets from the database record.")) {
+      return;
+    }
+
+    setDeleting(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/admin/content/${initialContent.id}`, { method: "DELETE" });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to delete content.");
+      }
+
+      router.push("/admin/content");
+      router.refresh();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Failed to delete content.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {error ? (
+        <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-200">
+          {error}
+        </div>
+      ) : null}
+
+      <section className="surface-card p-6 sm:p-8">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)]">
+          <div className="space-y-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">Content details</p>
+              <h2 className="mt-2 text-xl font-semibold text-landing-text">Publish platform-wide content</h2>
+              <p className="mt-2 text-sm leading-6 text-landing-text-muted">
+                Articles, videos, poems, and quotes can stand alone or be connected to a book. If narration is enabled, the saved title, summary, and body become the sync-tracked narration transcript.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block text-sm text-landing-text-muted">
+                <span className="mb-2 block font-medium text-landing-text">Content type</span>
+                <select
+                  value={form.type}
+                  onChange={(event) => updateField("type", event.target.value as ContentType)}
+                  className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+                >
+                  <option value="ARTICLE">Article / Blog</option>
+                  <option value="VIDEO">Video</option>
+                  <option value="POEM">Poem</option>
+                  <option value="QUOTE">Quote</option>
+                </select>
+              </label>
+
+              <label className="block text-sm text-landing-text-muted">
+                <span className="mb-2 block font-medium text-landing-text">Status</span>
+                <select
+                  value={form.status}
+                  onChange={(event) => updateField("status", event.target.value as ContentStatus)}
+                  className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+                >
+                  <option value="DRAFT">Draft</option>
+                  <option value="PUBLISHED">Published</option>
+                  <option value="ARCHIVED">Archived</option>
+                </select>
+              </label>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-landing-text">Title</label>
+              <input
+                value={form.title}
+                onChange={(event) => updateField("title", event.target.value)}
+                required
+                className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-landing-text">Slug</label>
+              <input
+                value={form.slug}
+                onChange={(event) => updateField("slug", event.target.value)}
+                placeholder="Auto-generated from the title if blank"
+                className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-landing-text">Summary</label>
+              <textarea
+                value={form.summary}
+                onChange={(event) => updateField("summary", event.target.value)}
+                rows={3}
+                className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm leading-6 text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-landing-text">Body / transcript</label>
+              <textarea
+                value={form.content}
+                onChange={(event) => updateField("content", event.target.value)}
+                rows={12}
+                placeholder={typeHint}
+                className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm leading-6 text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+              />
+            </div>
+          </div>
+
+          <aside className="space-y-5">
+            <div className="surface-muted p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">Workflow</p>
+              <h3 className="mt-2 text-lg font-semibold text-landing-text">Production controls</h3>
+              <p className="mt-2 text-sm leading-6 text-landing-text-muted">
+                Draft first, publish when approved, then generate narration from the content editor. Later text edits automatically trigger a fresh sync pass so old audio does not linger on the public page like an accidental director's cut.
+              </p>
+            </div>
+
+            <label className="block text-sm text-landing-text-muted">
+              <span className="mb-2 block font-medium text-landing-text">Related book (optional)</span>
+              <select
+                value={form.bookId}
+                onChange={(event) => updateField("bookId", event.target.value)}
+                className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+              >
+                <option value="">Standalone platform content</option>
+                {books.map((book) => (
+                  <option key={book.id} value={book.id}>{book.title}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block text-sm text-landing-text-muted">
+              <span className="mb-2 block font-medium text-landing-text">Author / attribution</span>
+              <input
+                value={form.author}
+                onChange={(event) => updateField("author", event.target.value)}
+                className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+              />
+            </label>
+
+            <label className="block text-sm text-landing-text-muted">
+              <span className="mb-2 block font-medium text-landing-text">External URL</span>
+              <input
+                value={form.url}
+                onChange={(event) => updateField("url", event.target.value)}
+                placeholder="https://..."
+                className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+              />
+            </label>
+
+            <label className="block text-sm text-landing-text-muted">
+              <span className="mb-2 block font-medium text-landing-text">Cover / thumbnail URL</span>
+              <input
+                value={form.coverUrl}
+                onChange={(event) => updateField("coverUrl", event.target.value)}
+                placeholder="/covers/example.jpg"
+                className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+              />
+            </label>
+
+            <label className="block text-sm text-landing-text-muted">
+              <span className="mb-2 block font-medium text-landing-text">Sort order</span>
+              <input
+                type="number"
+                value={form.order}
+                onChange={(event) => updateField("order", Number(event.target.value))}
+                className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+              />
+            </label>
+
+            <div className="rounded-2xl bg-white/70 p-4 ring-1 ring-white/65">
+              <div className="flex items-start gap-3">
+                <input
+                  id="narrationEnabled"
+                  type="checkbox"
+                  checked={form.narrationEnabled}
+                  onChange={(event) => updateField("narrationEnabled", event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-landing-border text-landing-accent focus:ring-landing-accent"
+                />
+                <div>
+                  <label htmlFor="narrationEnabled" className="block text-sm font-semibold text-landing-text">
+                    Enable public narration player
+                  </label>
+                  <p className="mt-2 text-sm leading-6 text-landing-text-muted">
+                    Generate audio below first, then keep this on when the public article/video/poem should show playback. If the script changes later, older audio stays hidden until the fresh sync finishes.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <div className="surface-card flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-landing-text">Save content changes</p>
+          <p className="mt-1 text-sm text-landing-text-muted">
+            Publishing state, platform placement, and narration visibility are saved together. Transcript edits also mark existing narration for automatic re-sync.
+          </p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Link href="/admin/content" className="ghost-button gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Back to content
+          </Link>
+          {isEditMode ? (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-100 px-5 py-3 text-sm font-semibold text-rose-700 transition-colors hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Trash2 className="h-4 w-4" />
+              {deleting ? "Deleting..." : "Delete"}
+            </button>
+          ) : null}
+          <button type="submit" disabled={saving} className="brand-button gap-2 disabled:cursor-not-allowed disabled:bg-landing-accent/50">
+            <Save className="h-4 w-4" />
+            {saving ? "Saving..." : "Save content"}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
+}

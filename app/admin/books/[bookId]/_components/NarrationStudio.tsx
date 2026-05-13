@@ -94,6 +94,8 @@ interface NarrationStudioProps {
   bookId: string;
 }
 
+type NarrationSummaryItem = NarrationSummaryResponse["narrations"][number];
+
 const DEFAULT_STYLE_PROMPT =
   "Warm, immersive single-speaker audiobook narration with clear diction, subtle emotional shading, and natural pauses between paragraphs.";
 const DEFAULT_SAMPLE_TEXT =
@@ -136,6 +138,22 @@ function getStatusClasses(status: NarrationStatus, active: boolean) {
 
 function formatVoiceLabel(name: string, optionName?: string) {
   return optionName || name;
+}
+
+function getNarrationChapterCounts(narration: NarrationSummaryItem) {
+  const ready = narration.chapters.filter((chapter) => chapter.status === "READY").length;
+  const processing = narration.chapters.filter((chapter) => chapter.status === "PROCESSING").length;
+  const pending = narration.chapters.filter((chapter) => chapter.status === "PENDING").length;
+  const failed = narration.chapters.filter((chapter) => chapter.status === "FAILED").length;
+  const total = narration.chapters.length || narration.totalChapters || 0;
+
+  return {
+    ready,
+    processing,
+    pending,
+    failed,
+    total,
+  };
 }
 
 export default function NarrationStudio({ bookId }: NarrationStudioProps) {
@@ -217,31 +235,6 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
     ));
   }, [selectedVoiceNames]);
 
-  // Tracks whether the component is still mounted so polling loops can bail out cleanly
-  const isMountedRef = useRef(true);
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  // Fetches the latest summary and returns the status of a specific narration ID
-  const pollNarrationStatus = useCallback(async (narrationId: string): Promise<NarrationStatus> => {
-    try {
-      const response = await fetch(`/api/admin/books/${bookId}/narration`, { cache: "no-store" });
-      const payload = await response.json();
-      if (response.ok) {
-        setSummary(payload);
-      }
-      const found = (payload.narrations as Array<{ id: string; status: NarrationStatus }> | undefined)
-        ?.find((n) => n.id === narrationId);
-      return found?.status ?? "PROCESSING";
-    } catch {
-      return "PROCESSING";
-    }
-  }, [bookId]);
-
   const narrationByVoiceName = useMemo(() => {
     const map = new Map<string, NarrationSummaryResponse["narrations"][number]>();
 
@@ -273,6 +266,36 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
   const processingVoiceCount = (summary?.narrations || []).filter(
     (narration) => narration.status === "PROCESSING" || narration.status === "PENDING"
   ).length;
+  const chapterQueueSummary = useMemo(() => {
+    return (summary?.narrations || []).reduce(
+      (totals, narration) => {
+        const chapterCounts = getNarrationChapterCounts(narration);
+
+        totals.ready += chapterCounts.ready;
+        totals.processing += chapterCounts.processing;
+        totals.pending += chapterCounts.pending;
+        totals.failed += chapterCounts.failed;
+        totals.total += chapterCounts.total;
+        return totals;
+      },
+      { ready: 0, processing: 0, pending: 0, failed: 0, total: 0 }
+    );
+  }, [summary]);
+  const hasActiveQueue = processingVoiceCount > 0;
+
+  useEffect(() => {
+    if (!hasActiveQueue) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void loadSummary({ quiet: true });
+    }, 5000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [hasActiveQueue, loadSummary]);
 
   const toggleVoiceSelection = (voiceName: string) => {
     setSelectedVoiceNames((current) => (
@@ -357,7 +380,8 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
     setError(null);
     setSamplePreview(null);
 
-    let completed = 0;
+    let queuedVoices = 0;
+    let queuedChapters = 0;
     const failures: string[] = [];
 
     for (let index = 0; index < selectedVoiceNames.length; index += 1) {
@@ -400,24 +424,8 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
           throw new Error(message);
         }
 
-        // Poll every 4 s until this narration finishes (READY or FAILED)
-        const narrationId: string = payload.narrationId;
-        let status: NarrationStatus = "PROCESSING";
-
-        while (
-          (status === "PROCESSING" || status === "PENDING") &&
-          isMountedRef.current
-        ) {
-          await new Promise<void>((resolve) => setTimeout(resolve, 4000));
-          if (!isMountedRef.current) break;
-          status = await pollNarrationStatus(narrationId);
-        }
-
-        if (status === "READY") {
-          completed += 1;
-        } else {
-          failures.push(`${voiceName}: Generation failed on the server.`);
-        }
+        queuedVoices += 1;
+        queuedChapters += Number(payload.queuedChapterCount || 0);
       } catch (generationError) {
         failures.push(
           `${voiceName}: ${generationError instanceof Error ? generationError.message : "Generation failed."}`
@@ -432,15 +440,15 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
     if (failures.length === 0) {
       setNotice({
         type: "success",
-        message: `Generated ${completed} voice${completed === 1 ? "" : "s"} for “${summary?.book.title || "this book"}”.`,
+        message: `Queued ${queuedVoices} voice${queuedVoices === 1 ? "" : "s"} covering ${queuedChapters} chapter${queuedChapters === 1 ? "" : "s"}. The background worker will keep the studio updated as each chapter finishes.`,
       });
       return;
     }
 
     setNotice({
       type: "error",
-      message: completed > 0
-        ? `Generated ${completed} voice${completed === 1 ? "" : "s"}, but ${failures.length} run${failures.length === 1 ? "" : "s"} failed. ${failures.join(" ")}`
+      message: queuedVoices > 0
+        ? `Queued ${queuedVoices} voice${queuedVoices === 1 ? "" : "s"}, but ${failures.length} request${failures.length === 1 ? "" : "s"} failed. ${failures.join(" ")}`
         : failures.join(" "),
     });
   };
@@ -511,7 +519,7 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
             Multi-voice Gemini TTS studio
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-landing-text-muted sm:text-[15px]">
-            Sample voices, batch-generate multiple narration options for this book, and choose which ready voice the reader should publish by default. The admin page is now your little audio control room — minus the intimidating sliders.
+            Sample voices, queue multiple narration options for this book, and choose which ready voice the reader should publish by default. Long books are broken into background chapter jobs so the browser is no longer stuck babysitting one heroic request.
           </p>
         </div>
 
@@ -693,7 +701,7 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
                 <div>
                   <h3 className="text-base font-semibold text-landing-text">Voice casting & batch generation</h3>
                   <p className="mt-1 text-sm text-landing-text-muted">
-                    Choose as many Gemini voices as you want, sample them instantly, then generate the book in one sequential batch.
+                    Choose as many Gemini voices as you want, sample them instantly, then queue the book. Each voice is processed chapter-by-chapter in the background so very long EPUBs behave like civilized citizens.
                   </p>
                 </div>
               </div>
@@ -706,7 +714,7 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
                     </p>
                     <p className="mt-1 text-sm text-landing-text-muted">
                       {selectedVoiceNames.length > 0
-                        ? `${selectedVoiceNames.length} voice${selectedVoiceNames.length === 1 ? "" : "s"} queued for generation.`
+                        ? `${selectedVoiceNames.length} voice${selectedVoiceNames.length === 1 ? "" : "s"} ready to queue for background generation.`
                         : "Pick one or more voices below to build your book-level voice library."}
                     </p>
                   </div>
@@ -747,13 +755,14 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
                 ) : null}
               </div>
 
-              <div className="mt-5 grid max-h-[28rem] gap-3 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="mt-5 grid max-h-[28rem] grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-3 overflow-y-auto pr-1">
                 {summary.gemini.voices.map((voice) => {
                   const narration = narrationByVoiceName.get(voice.name);
                   const isSelected = selectedVoiceNames.includes(voice.name);
                   const isReady = narration?.status === "READY";
                   const isActive = Boolean(narration?.active && narration?.status === "READY");
                   const isSampling = samplingVoiceName === voice.name;
+                  const chapterCounts = narration ? getNarrationChapterCounts(narration) : null;
 
                   return (
                     <article
@@ -814,11 +823,21 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
                       </button>
 
                       <div className="mt-4 flex items-center justify-between gap-3">
-                        <p className="text-xs text-landing-text-muted">
-                          {narration
-                            ? `Last updated ${new Date(narration.updatedAt).toLocaleString()}`
-                            : "Not generated for this book yet"}
-                        </p>
+                        <div className="text-xs text-landing-text-muted">
+                          <p>
+                            {narration
+                              ? `Last updated ${new Date(narration.updatedAt).toLocaleString()}`
+                              : "Not generated for this book yet"}
+                          </p>
+                          {chapterCounts ? (
+                            <p className="mt-1">
+                              {chapterCounts.ready}/{chapterCounts.total} chapter{chapterCounts.total === 1 ? "" : "s"} ready
+                              {chapterCounts.processing > 0 ? ` · ${chapterCounts.processing} processing` : ""}
+                              {chapterCounts.pending > 0 ? ` · ${chapterCounts.pending} queued` : ""}
+                              {chapterCounts.failed > 0 ? ` · ${chapterCounts.failed} failed` : ""}
+                            </p>
+                          ) : null}
+                        </div>
                         <button
                           type="button"
                           onClick={() => void handleSampleVoice(voice.name)}
@@ -896,8 +915,8 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
                   <div className="rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm">
                     <p>
                       {processingVoiceCount > 0
-                        ? `${processingVoiceCount} narration run${processingVoiceCount === 1 ? " is" : "s are"} still processing.`
-                        : "No active narration jobs right now."}
+                        ? `${processingVoiceCount} voice queue${processingVoiceCount === 1 ? " is" : "s are"} active · ${chapterQueueSummary.processing} chapter${chapterQueueSummary.processing === 1 ? "" : "s"} processing · ${chapterQueueSummary.pending} queued.`
+                        : "No active narration chapter jobs right now."}
                     </p>
                   </div>
                 </label>
@@ -917,11 +936,11 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
                 <div>
                   <p className="text-sm font-semibold text-landing-text">
                     {generationProgress
-                      ? `Generating ${generationProgress.voiceName} (${generationProgress.current}/${generationProgress.total})`
-                      : `Generate ${selectedVoiceNames.length || 0} selected voice${selectedVoiceNames.length === 1 ? "" : "s"}`}
+                      ? `Queueing ${generationProgress.voiceName} (${generationProgress.current}/${generationProgress.total})`
+                      : `Queue ${selectedVoiceNames.length || 0} selected voice${selectedVoiceNames.length === 1 ? "" : "s"}`}
                   </p>
                   <p className="mt-1 text-sm text-landing-text-muted">
-                    Runs are processed one voice at a time for stability. Use a chapter limit first if you want a quick pilot pass.
+                    Jobs are broken into background chapter tasks and the studio auto-refreshes while they run. Use a chapter limit first if you want a quick pilot pass.
                   </p>
                 </div>
 
@@ -934,12 +953,12 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
                   {isGenerating ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Generating...
+                      Queueing...
                     </>
                   ) : (
                     <>
                       <Sparkles className="h-4 w-4" />
-                      Generate selected voices
+                      Queue selected voices
                     </>
                   )}
                 </button>
@@ -1094,50 +1113,76 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
             <div className="mt-4 grid gap-4 xl:grid-cols-2">
               {summary.narrations.map((narration) => (
                 <article key={narration.id} className="surface-muted p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold text-landing-text">
-                          {formatVoiceLabel(narration.voice.name, narration.voice.optionName)}
-                        </p>
-                        <span
-                          className={[
-                            "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
-                            getStatusClasses(narration.status, narration.active),
-                          ].join(" ")}
-                        >
-                          {narration.active ? "Default · " : ""}
-                          {narration.status}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-sm text-landing-text-muted">
-                        Updated {new Date(narration.updatedAt).toLocaleString()}
-                      </p>
-                    </div>
+                  {(() => {
+                    const chapterCounts = getNarrationChapterCounts(narration);
 
-                    <div className="text-right text-sm">
-                      <p className="font-semibold text-landing-text">{formatDuration(narration.totalDurationMs)}</p>
-                      <p className="text-landing-text-muted">{narration.totalChapters} chapters</p>
-                    </div>
-                  </div>
+                    return (
+                      <>
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold text-landing-text">
+                                {formatVoiceLabel(narration.voice.name, narration.voice.optionName)}
+                              </p>
+                              <span
+                                className={[
+                                  "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
+                                  getStatusClasses(narration.status, narration.active),
+                                ].join(" ")}
+                              >
+                                {narration.active ? "Default · " : ""}
+                                {narration.status}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-sm text-landing-text-muted">
+                              Updated {new Date(narration.updatedAt).toLocaleString()}
+                            </p>
+                          </div>
 
-                  {narration.errorMessage ? (
-                    <p className="mt-3 rounded-2xl bg-rose-50 px-3 py-3 text-sm text-rose-700 ring-1 ring-rose-200">
-                      {narration.errorMessage}
-                    </p>
-                  ) : null}
+                          <div className="text-right text-sm">
+                            <p className="font-semibold text-landing-text">{formatDuration(narration.totalDurationMs)}</p>
+                            <p className="text-landing-text-muted">{chapterCounts.total} chapters</p>
+                          </div>
+                        </div>
 
-                  <div className="mt-4 flex flex-wrap gap-2 text-xs text-landing-text-muted">
-                    <span className="rounded-full bg-white px-3 py-1 ring-1 ring-landing-border/70">
-                      {narration.storageProvider.toUpperCase()}
-                    </span>
-                    <span className="rounded-full bg-white px-3 py-1 ring-1 ring-landing-border/70">
-                      {narration.voice.language}
-                    </span>
-                    <span className="rounded-full bg-white px-3 py-1 ring-1 ring-landing-border/70">
-                      {narration.voice.provider}
-                    </span>
-                  </div>
+                        {narration.errorMessage ? (
+                          <p className="mt-3 rounded-2xl bg-rose-50 px-3 py-3 text-sm text-rose-700 ring-1 ring-rose-200">
+                            {narration.errorMessage}
+                          </p>
+                        ) : null}
+
+                        <div className="mt-4 flex flex-wrap gap-2 text-xs text-landing-text-muted">
+                          <span className="rounded-full bg-white px-3 py-1 ring-1 ring-landing-border/70">
+                            {narration.storageProvider.toUpperCase()}
+                          </span>
+                          <span className="rounded-full bg-white px-3 py-1 ring-1 ring-landing-border/70">
+                            {narration.voice.language}
+                          </span>
+                          <span className="rounded-full bg-white px-3 py-1 ring-1 ring-landing-border/70">
+                            {narration.voice.provider}
+                          </span>
+                          <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 ring-1 ring-emerald-200">
+                            {chapterCounts.ready} ready
+                          </span>
+                          {chapterCounts.processing > 0 ? (
+                            <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700 ring-1 ring-amber-200">
+                              {chapterCounts.processing} processing
+                            </span>
+                          ) : null}
+                          {chapterCounts.pending > 0 ? (
+                            <span className="rounded-full bg-sky-50 px-3 py-1 text-sky-700 ring-1 ring-sky-200">
+                              {chapterCounts.pending} queued
+                            </span>
+                          ) : null}
+                          {chapterCounts.failed > 0 ? (
+                            <span className="rounded-full bg-rose-50 px-3 py-1 text-rose-700 ring-1 ring-rose-200">
+                              {chapterCounts.failed} failed
+                            </span>
+                          ) : null}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </article>
               ))}
 

@@ -63,14 +63,14 @@ export default function AnalyticsStats({
   ];
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {cards.map((card) => {
         const Icon = card.icon;
 
         return (
-          <article key={card.label} className="surface-card p-5 sm:p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
+          <article key={card.label} className="surface-card min-w-0 p-5 sm:p-6">
+            <div className="flex min-w-0 items-start justify-between gap-4">
+              <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-text-muted">
                   {card.label}
                 </p>

@@ -2,7 +2,7 @@
   "version": 1,
   "bookId": "cmor24ift0000vb9cwgg831fc",
   "narrationId": "cmovyb7gc0004vb5s5fpjou7s",
-  "generatedAt": "2026-05-08T10:41:17.074Z",
+  "generatedAt": "2026-05-11T07:33:45.045Z",
   "totalDurationMs": 6000,
   "chapterCount": 1,
   "storage": {
@@ -18,7 +18,7 @@
   },
   "chapters": [
     {
-      "id": "cmowsboka000ovbqsqnxggdpu",
+      "id": "cmp0vy22a000evbd8vcd3zozc",
       "chapterIndex": 0,
       "title": "Foreword",
       "spineHref": "5_foreword.xhtml",

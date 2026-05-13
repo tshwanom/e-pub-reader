@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Metadata } from 'next';
 import Header from '@/components/landing/Header';
 import Footer from '@/components/landing/Footer';
+import ContentNarrationPlayer from '@/components/ContentNarrationPlayer';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,7 @@ export default async function PoemsPage() {
   const poems = await prisma.supplementaryContent.findMany({
     where: {
       type: 'POEM',
+      status: 'PUBLISHED',
     },
     include: {
       book: {
@@ -53,13 +55,21 @@ export default async function PoemsPage() {
                 {poem.content}
               </div>
 
+              <div className="mx-auto max-w-xl">
+                <ContentNarrationPlayer contentId={poem.id} />
+              </div>
+
               <div className="mt-8 text-center">
+                 {poem.book ? (
                  <Link 
                    href={`/books/${poem.book.slug || poem.bookId}`}
                    className="inline-block border-b border-transparent pb-1 text-xs uppercase tracking-[0.16em] text-landing-text-muted transition-colors hover:border-landing-accent/40 hover:text-landing-accent"
                  >
                    From: {poem.book.title}
                  </Link>
+                 ) : (
+                  <span className="text-xs uppercase tracking-[0.16em] text-landing-text-muted">Standalone poem</span>
+                 )}
               </div>
             </article>
           ))}

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   ArrowLeft,
   BookCopy,
+  Newspaper,
   LayoutDashboard,
   UploadCloud,
 } from "lucide-react";
@@ -21,6 +22,12 @@ const navigationItems = [
     label: "Books",
     description: "Metadata, donor access, and narration control",
     icon: BookCopy,
+  },
+  {
+    href: "/admin/content",
+    label: "Content",
+    description: "Blog, videos, poems, quotes, and content narration",
+    icon: Newspaper,
   },
   {
     href: "/admin/books/upload",
@@ -47,7 +54,7 @@ export default function AdminSidebarNav({
 
   if (compact) {
     return (
-      <div className={["grid gap-3 md:grid-cols-3", className].filter(Boolean).join(" ")}>
+      <div className={["grid gap-3 sm:grid-cols-2 xl:grid-cols-4", className].filter(Boolean).join(" ")}>
         {navigationItems.map((item) => {
           const Icon = item.icon;
           const active = isCurrentPath(pathname, item.href);
@@ -88,7 +95,7 @@ export default function AdminSidebarNav({
           );
         })}
 
-        <div className="rounded-2xl bg-landing-accent/8 p-4 ring-1 ring-landing-accent/10 md:col-span-3">
+        <div className="rounded-2xl bg-landing-accent/8 p-4 ring-1 ring-landing-accent/10 sm:col-span-2 xl:col-span-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">

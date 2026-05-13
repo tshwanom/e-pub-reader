@@ -252,7 +252,8 @@ model NarrationVoice {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  narrations BookNarration[]
+  narrations        BookNarration[]
+  contentNarrations ContentNarration[]
 }
 
 model BookNarration {
@@ -261,6 +262,8 @@ model BookNarration {
   voiceId          String
   status           NarrationJobStatus       @default(PENDING)
   storageProvider  NarrationStorageProvider @default(S3)
+  stylePrompt      String?                  @db.Text
+  jobKey           String?
   manifestObjectKey String?
   audioMimeType    String                   @default("audio/mpeg")
   totalDurationMs  Int?
@@ -364,17 +367,26 @@ model SiteSettings {
 }
 
 model SupplementaryContent {
-  id        String      @id @default(cuid())
-  bookId    String
-  book      Book        @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  type      ContentType
-  title     String
-  content   String?     @db.Text // For POEM, QUOTE, ARTICLE (text body)
-  url       String? // For VIDEO, ARTICLE (external link)
-  author    String? // For QUOTE or POEM attribution
-  order     Int         @default(0)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  id               String        @id @default(cuid())
+  bookId           String?
+  book             Book?         @relation(fields: [bookId], references: [id], onDelete: SetNull)
+  type             ContentType
+  status           ContentStatus @default(DRAFT)
+  title            String
+  slug             String?       @unique
+  summary          String?       @db.Text
+  content          String?       @db.Text // For POEM, QUOTE, ARTICLE (text body)
+  url              String? // For VIDEO, ARTICLE (external link)
+  author           String? // For QUOTE or POEM attribution
+  coverUrl         String?
+  narrationEnabled Boolean       @default(false)
+  narrationSourceHash String?
+  publishedAt      DateTime?
+  order            Int           @default(0)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  narrations ContentNarration[]
 }
 
 enum ContentType {
@@ -382,4 +394,34 @@ enum ContentType {
   ARTICLE
   POEM
   QUOTE
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model ContentNarration {
+  id              String                   @id @default(cuid())
+  contentId       String
+  voiceId         String
+  status          NarrationJobStatus       @default(PENDING)
+  storageProvider NarrationStorageProvider @default(S3)
+  sourceHash      String?
+  stylePrompt     String?                  @db.Text
+  audioObjectKey  String?
+  audioMimeType   String                   @default("audio/wav")
+  durationMs      Int?
+  active          Boolean                  @default(false)
+  readyAt         DateTime?
+  errorMessage    String?                  @db.Text
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  content SupplementaryContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  voice   NarrationVoice       @relation(fields: [voiceId], references: [id], onDelete: Restrict)
+
+  @@unique([contentId, voiceId])
+  @@index([contentId, active, status])
 }

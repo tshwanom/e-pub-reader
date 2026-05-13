@@ -11,15 +11,27 @@ import { getServerSession } from 'next-auth';
 export const dynamic = 'force-dynamic';
 
 export default async function LandingPage() {
-  const session = await getServerSession(authOptions);
-  const isDonor = await isUserDonor(session?.user?.id);
+  let session = null;
+  let isDonor = false;
+  let books: Awaited<ReturnType<typeof prisma.book.findMany>> = [];
 
-  // Fetch published books
-  const books = await prisma.book.findMany({
-    where: { status: 'PUBLISHED' },
-    orderBy: { createdAt: 'desc' },
-    take: 8, // Show max 8 books on landing page
-  });
+  try {
+    session = await getServerSession(authOptions);
+    isDonor = await isUserDonor(session?.user?.id);
+  } catch (err) {
+    console.error('[LandingPage] Failed to resolve session:', err);
+  }
+
+  try {
+    // Fetch published books
+    books = await prisma.book.findMany({
+      where: { status: 'PUBLISHED' },
+      orderBy: { createdAt: 'desc' },
+      take: 8, // Show max 8 books on landing page
+    });
+  } catch (err) {
+    console.error('[LandingPage] Failed to fetch books:', err);
+  }
 
   return (
     <main className="page-shell">

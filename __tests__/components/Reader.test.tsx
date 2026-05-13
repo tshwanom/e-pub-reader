@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Reader from '@/components/Reader';
 
@@ -540,6 +540,101 @@ describe('Reader component', () => {
     await waitFor(() => {
       expect((screen.getByTestId('narration-audio') as HTMLAudioElement).getAttribute('src')).toBe(
         'https://signed.example/narration/test-book-id/studio/chapters/0.mp3'
+      );
+    });
+  });
+
+  it('switches to the matching narration chapter when the reader jumps chapters during playback', async () => {
+    const user = userEvent.setup();
+    const twoChapterManifest = {
+      ...readyNarrationPayload.manifest,
+      totalDurationMs: 401000,
+      chapterCount: 2,
+      chapters: [
+        readyNarrationPayload.manifest.chapters[0],
+        {
+          id: 'chapter-2',
+          chapterIndex: 1,
+          title: 'The Crossing',
+          spineHref: 'Text/chapter-2.xhtml',
+          durationMs: 180000,
+          audio: {
+            objectKey: 'narration/test-book-id/classic/chapters/1.mp3',
+            mimeType: 'audio/mpeg',
+            url: 'https://signed.example/narration/test-book-id/classic/chapters/1.mp3',
+          },
+          cueCount: 1,
+          cues: [
+            {
+              sequence: 0,
+              startMs: 0,
+              endMs: 4800,
+              targetHref: 'Text/chapter-2.xhtml#p2',
+              targetElementId: 'p2',
+              targetCfi: '/6/4[p2]',
+              excerpt: 'The river answered back',
+            },
+          ],
+        },
+      ],
+    };
+
+    global.fetch = buildFetchMock({
+      narrationPayload: {
+        ...readyNarrationPayload,
+        manifest: twoChapterManifest,
+        voices: [
+          {
+            ...readyNarrationPayload.voices[0],
+            totalDurationMs: 401000,
+            chapterCount: 2,
+            manifest: twoChapterManifest,
+          },
+          readyNarrationPayload.voices[1],
+        ],
+      } as any,
+    }) as jest.Mock;
+
+    render(
+      <Reader
+        {...DEFAULT_PROPS}
+        narrationAccess={{
+          hasAccess: true,
+          isSignedIn: true,
+          manageHref: '/books/test-book-id#support-this-book',
+          statusEndpoint: '/api/books/test-book-id/narration',
+        }}
+      />
+    );
+
+    await screen.findByText('Donor narration');
+
+    const audio = screen.getByTestId('narration-audio') as HTMLAudioElement;
+    expect(audio.getAttribute('src')).toBe(
+      'https://signed.example/narration/test-book-id/classic/chapters/0.mp3'
+    );
+
+    await user.click(screen.getAllByLabelText('Play narration')[0]);
+    fireEvent(audio, new Event('play'));
+
+    await act(async () => {
+      renditionEventHandlers.relocated?.({
+        start: {
+          cfi: 'epubcfi(/6/4[p2])',
+          href: 'Text/chapter-2.xhtml',
+          index: 1,
+          percentage: 0.5,
+        },
+        end: {
+          index: 1,
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(HTMLMediaElement.prototype.pause).toHaveBeenCalled();
+      expect(audio.getAttribute('src')).toBe(
+        'https://signed.example/narration/test-book-id/classic/chapters/1.mp3'
       );
     });
   });

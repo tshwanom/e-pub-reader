@@ -8,7 +8,7 @@ export default function RecentActivity({
   recentUsers: any[];
 }) {
   return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+    <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
       <div className="surface-card min-w-0 p-6">
         <div className="mb-4">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-text-muted">Recent donations</p>
@@ -16,22 +16,22 @@ export default function RecentActivity({
         </div>
         <div className="space-y-4">
           {recentDonations.map((donation) => (
-            <div key={donation.id} className="flex items-center justify-between rounded-2xl bg-white/70 px-4 py-3 ring-1 ring-white/65">
-              <div className="flex items-center gap-3">
+            <div key={donation.id} className="flex min-w-0 flex-col gap-3 rounded-2xl bg-white/70 px-4 py-3 ring-1 ring-white/65 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-landing-accent/10 text-sm font-medium text-landing-accent">
                   {donation.user?.name?.[0] || donation.donorEmail?.[0]?.toUpperCase() || "A"}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-medium leading-none text-landing-text">
                     {donation.user?.name || "Anonymous"}
                   </p>
-                  <p className="text-xs text-landing-text-muted">
+                  <p className="truncate text-xs text-landing-text-muted">
                     {donation.user?.email || donation.donorEmail || "No email"}
                     {donation.gateway ? ` • ${formatDonationGatewayLabel(donation.gateway)}` : ''}
                   </p>
                 </div>
               </div>
-              <div className="text-right">
+              <div className="shrink-0 text-left sm:text-right">
                 <div className="font-medium text-landing-text">
                   +{formatCurrencyAmount(Number(donation.amount), 'USD')}
                 </div>
@@ -55,21 +55,21 @@ export default function RecentActivity({
         </div>
         <div className="space-y-4">
            {recentUsers.map((user) => (
-            <div key={user.id} className="flex items-center justify-between rounded-2xl bg-white/70 px-4 py-3 ring-1 ring-white/65">
-              <div className="flex items-center gap-3">
+            <div key={user.id} className="flex min-w-0 flex-col gap-3 rounded-2xl bg-white/70 px-4 py-3 ring-1 ring-white/65 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-landing-accent/10 text-sm font-medium text-landing-accent">
                   {user.name?.[0] || "U"}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-medium leading-none text-landing-text">
                     {user.name || "Unknown User"}
                   </p>
-                  <p className="text-xs text-landing-text-muted">
+                  <p className="truncate text-xs text-landing-text-muted">
                     {user.email}
                   </p>
                 </div>
               </div>
-              <div className="text-xs text-landing-text-muted">
+              <div className="shrink-0 text-xs text-landing-text-muted">
                 Joined {new Date(user.createdAt).toLocaleDateString()}
               </div>
             </div>

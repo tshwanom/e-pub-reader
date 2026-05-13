@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Metadata } from 'next';
 import Header from '@/components/landing/Header';
 import Footer from '@/components/landing/Footer';
+import ContentNarrationPlayer from '@/components/ContentNarrationPlayer';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,10 +13,25 @@ export const metadata: Metadata = {
   description: 'Video content from our books.',
 };
 
+type VideoListItem = {
+  id: string;
+  title: string;
+  content: string | null;
+  summary: string | null;
+  url: string | null;
+  bookId: string | null;
+  book: {
+    title: string;
+    slug: string | null;
+    coverUrl: string | null;
+  } | null;
+};
+
 export default async function VideosPage() {
   const videos = await prisma.supplementaryContent.findMany({
     where: {
       type: 'VIDEO',
+      status: 'PUBLISHED',
     },
     include: {
       book: {
@@ -29,7 +45,7 @@ export default async function VideosPage() {
     orderBy: {
       createdAt: 'desc',
     },
-  });
+  }) as unknown as VideoListItem[];
 
   return (
     <main className="page-shell">
@@ -72,9 +88,18 @@ export default async function VideosPage() {
                   <h2 className="line-clamp-2 font-playfair text-2xl font-semibold text-landing-text">
                     {video.title}
                   </h2>
+
+                  {video.summary || video.content ? (
+                    <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-landing-text-muted">
+                      {video.summary || video.content}
+                    </p>
+                  ) : null}
+
+                  <ContentNarrationPlayer contentId={video.id} compact />
                   
                   <div className="mt-auto border-t border-landing-border pt-4">
-                    <Link href={`/books/${video.book.slug || video.bookId}`} className="group flex items-center gap-3">
+                    {video.book ? (
+                    <Link href={`/books/${video.book.slug || video.bookId || video.id}`} className="group flex items-center gap-3">
                         {video.book.coverUrl && (
                           <div className="relative h-10 w-8 overflow-hidden rounded shadow-sm">
                             <Image
@@ -94,6 +119,9 @@ export default async function VideosPage() {
                           </p>
                         </div>
                     </Link>
+                    ) : (
+                      <div className="text-sm text-landing-text-muted">Standalone platform video</div>
+                    )}
                   </div>
                </div>
             </div>

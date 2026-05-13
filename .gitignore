@@ -40,9 +40,6 @@ next-env.d.ts
 .DS_Store
 Thumbs.db
 
-# Prisma
-prisma/migrations/
-
 # Plesk Deployment Artifacts
 plesk-deploy/
 plesk-deploy.zip

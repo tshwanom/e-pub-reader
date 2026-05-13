@@ -14,13 +14,13 @@ export default function BookPerformance({
   }[];
 }) {
   return (
-    <div className="surface-card p-6">
+    <div className="surface-card min-w-0 p-6">
       <div className="mb-4">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-text-muted">Book performance</p>
         <h3 className="mt-2 text-lg font-semibold text-landing-text">Reading and support trends by title</h3>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm text-landing-text-muted">
+        <table className="min-w-[720px] w-full text-left text-sm text-landing-text-muted">
           <thead className="bg-white/80 text-xs uppercase tracking-[0.16em] text-landing-text-muted">
             <tr>
               <th scope="col" className="px-6 py-3">Title</th>

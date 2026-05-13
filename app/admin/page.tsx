@@ -103,9 +103,9 @@ export default async function AdminDashboard() {
 
 
   return (
-    <div className="space-y-8">
+    <div className="w-full min-w-0 space-y-8">
       <section className="surface-card overflow-hidden p-6 sm:p-8">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.9fr)] xl:items-end">
+        <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.9fr)] xl:items-end">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">
               Dashboard overview
@@ -127,7 +127,7 @@ export default async function AdminDashboard() {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-3 xl:grid-cols-1">
             <div className="surface-muted p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-text-muted">
                 Active readers
@@ -170,7 +170,7 @@ export default async function AdminDashboard() {
         readyNarratedBooks={readyNarratedBooks}
       />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
         <RevenueChart data={revenueData} />
         <ReaderGrowthChart data={readerGrowthData} />
       </div>
