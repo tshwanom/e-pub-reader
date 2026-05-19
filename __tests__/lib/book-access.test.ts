@@ -1,4 +1,4 @@
-import { isPrivilegedUser, getBookAccessState, getDonorFeatureAccessState } from '@/lib/book-access';
+import { isPrivilegedUser, getBookAccessState, getDonorAccessState, getDonorFeatureAccessState } from '@/lib/book-access';
 
 // Mock prisma so we don't hit the database
 jest.mock('@/lib/prisma', () => ({
@@ -126,6 +126,39 @@ describe('getDonorFeatureAccessState', () => {
     expect(result.hasBookAccess).toBe(true);
     expect(result.hasAccess).toBe(true);
     expect(result.requiresDonation).toBe(false);
+    expect(prisma.donation.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe('getDonorAccessState', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prisma.donation.findFirst.mockResolvedValue(null); // default: not a donor
+  });
+
+  it('keeps donor narration locked for anonymous visitors', async () => {
+    const result = await getDonorAccessState(null);
+
+    expect(result.hasAccess).toBe(false);
+    expect(result.isSignedIn).toBe(false);
+    expect(result.requiresDonation).toBe(true);
+  });
+
+  it('grants donor narration access to donors', async () => {
+    prisma.donation.findFirst.mockResolvedValue({ id: 'donation1' });
+
+    const result = await getDonorAccessState({ id: 'user1', role: 'USER' });
+
+    expect(result.hasAccess).toBe(true);
+    expect(result.isDonor).toBe(true);
+    expect(result.requiresDonation).toBe(false);
+  });
+
+  it('grants donor narration access to privileged users without donation checks', async () => {
+    const result = await getDonorAccessState({ id: 'admin1', role: 'ADMIN' });
+
+    expect(result.hasAccess).toBe(true);
+    expect(result.isPrivileged).toBe(true);
     expect(prisma.donation.findFirst).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,5 @@
 import { authOptions } from "@/lib/auth";
-import { getDonorFeatureAccessState } from "@/lib/book-access";
+import { getDonorAccessState, getDonorFeatureAccessState } from "@/lib/book-access";
 import {
   normalizeNarrationObjectKey,
   resolveLocalNarrationObjectFilePath,
@@ -13,14 +13,24 @@ import { Readable } from "stream";
 
 export const runtime = "nodejs";
 
-type NarrationObjectLookupResult = {
-  contentType: string;
-  book: {
-    id: string;
-    status: string;
-    donorOnly: boolean;
-  };
-};
+type NarrationObjectLookupResult =
+  | {
+      resourceType: "book";
+      contentType: string;
+      book: {
+        id: string;
+        status: string;
+        donorOnly: boolean;
+      };
+    }
+  | {
+      resourceType: "content";
+      contentType: string;
+      content: {
+        id: string;
+        status: string;
+      };
+    };
 
 function inferContentTypeFromObjectKey(objectKey: string) {
   if (objectKey.endsWith(".json")) {
@@ -67,8 +77,30 @@ async function findNarrationObject(objectKey: string): Promise<NarrationObjectLo
 
   if (chapter) {
     return {
+      resourceType: "book",
       contentType: chapter.audioMimeType || inferContentTypeFromObjectKey(objectKey),
       book: chapter.narration.book,
+    };
+  }
+
+  const contentNarration = await prisma.contentNarration.findFirst({
+    where: { audioObjectKey: objectKey },
+    select: {
+      audioMimeType: true,
+      content: {
+        select: {
+          id: true,
+          status: true,
+        },
+      },
+    },
+  });
+
+  if (contentNarration) {
+    return {
+      resourceType: "content",
+      contentType: contentNarration.audioMimeType || inferContentTypeFromObjectKey(objectKey),
+      content: contentNarration.content,
     };
   }
 
@@ -90,6 +122,7 @@ async function findNarrationObject(objectKey: string): Promise<NarrationObjectLo
   }
 
   return {
+    resourceType: "book",
     contentType: inferContentTypeFromObjectKey(objectKey),
     book: manifest.book,
   };
@@ -193,16 +226,29 @@ export async function GET(req: NextRequest) {
   }
 
   const session = await getServerSession(authOptions);
-  const featureAccess = await getDonorFeatureAccessState(narrationObject.book, session?.user);
+  if (narrationObject.resourceType === "book") {
+    const featureAccess = await getDonorFeatureAccessState(narrationObject.book, session?.user);
 
-  if (!featureAccess.hasBookAccess) {
-    return new NextResponse("Narration object not found.", {
-      status: featureAccess.isPublished ? 403 : 404,
-    });
-  }
+    if (!featureAccess.hasBookAccess) {
+      return new NextResponse("Narration object not found.", {
+        status: featureAccess.isPublished ? 403 : 404,
+      });
+    }
 
-  if (!featureAccess.hasAccess) {
-    return new NextResponse("Narration access is restricted.", { status: 403 });
+    if (!featureAccess.hasAccess) {
+      return new NextResponse("Narration access is restricted.", { status: 403 });
+    }
+  } else {
+    const donorAccess = await getDonorAccessState(session?.user);
+    const isPublished = narrationObject.content.status === "PUBLISHED";
+
+    if (!isPublished && !donorAccess.isPrivileged) {
+      return new NextResponse("Narration object not found.", { status: 404 });
+    }
+
+    if (!donorAccess.hasAccess) {
+      return new NextResponse("Narration access is restricted.", { status: 403 });
+    }
   }
 
   try {

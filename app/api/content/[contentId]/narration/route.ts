@@ -1,3 +1,5 @@
+import { authOptions } from "@/lib/auth";
+import { getDonorAccessState } from "@/lib/book-access";
 import { createPresignedNarrationObjectUrl, getNarrationStorageProvider, getNarrationStorageProviderLabel, isNarrationStorageConfigured } from "@/lib/narration-storage";
 import {
   getContentNarrationSourceHash,
@@ -6,6 +8,7 @@ import {
   isContentNarrationCurrent,
 } from "@/lib/content-narration-sync";
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -70,8 +73,30 @@ export async function GET(
     },
   });
 
-  if (!content || content.status !== "PUBLISHED") {
+  if (!content) {
     return NextResponse.json({ available: false, reason: "not-found", message: "Content not found." }, { status: 404 });
+  }
+
+  const session = await getServerSession(authOptions);
+  const donorAccess = await getDonorAccessState(session?.user);
+
+  if (content.status !== "PUBLISHED" && !donorAccess.isPrivileged) {
+    return NextResponse.json({ available: false, reason: "not-found", message: "Content not found." }, { status: 404 });
+  }
+
+  if (!donorAccess.hasAccess) {
+    return NextResponse.json(
+      {
+        available: false,
+        reason: donorAccess.isSignedIn ? "donor-required" : "sign-in-required",
+        message: donorAccess.isSignedIn
+          ? "Due to the cost of running narration, this feature is reserved for donors only. Make one completed donation to unlock it on your account."
+          : "Due to the cost of running narration, this feature is reserved for donors only. Sign in to unlock it with your donation.",
+        voices: [],
+        storageProvider: activeStorageProvider,
+      },
+      { status: 403 }
+    );
   }
 
   if (!content.narrationEnabled) {
@@ -155,8 +180,8 @@ export async function GET(
     available: true,
     reason: "ready",
     message: availableVoices.length > 1
-      ? `Narration for “${content.title}” is ready in ${availableVoices.length} synced voices.`
-      : `Narration for “${content.title}” is ready to play.`,
+      ? `Donor narration for “${content.title}” is ready in ${availableVoices.length} synced voices.`
+      : `Donor narration for “${content.title}” is ready to play.`,
     defaultVoiceSlug: defaultVoice?.voice.slug ?? null,
     voices: availableVoices,
   });
