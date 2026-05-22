@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Playfair_Display, Crimson_Pro } from "next/font/google";
 import "./globals.css";
+import OfflineSupport from "@/components/OfflineSupport";
 
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -32,6 +33,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} ${playfair.variable} ${crimson.variable} ${inter.className}`}>
+        <OfflineSupport />
         {children}
       </body>
     </html>

@@ -59,30 +59,41 @@ export default async function ReadBookPage({ params }: { params: Promise<{ bookI
   }
 
   const donorFeatureAccess = await getDonorFeatureAccessState(book, session?.user);
+  const sessionUserId = typeof session?.user?.id === 'string' && session.user.id.trim().length > 0
+    ? session.user.id
+    : null;
   const loginHref = `/login?callbackUrl=${encodeURIComponent(`/books/${book.id}`)}`;
-  const narrationManageHref = session ? `/books/${book.id}#support-this-book` : loginHref;
+  const narrationManageHref = sessionUserId ? `/books/${book.id}#support-this-book` : loginHref;
 
   // TODO: Fetch saved progress if user is logged in
   let initialLocation = null;
+  let progressSaveEndpoint: string | null = null;
   let initialNarrationPlayerExpanded: boolean | null = null;
-  if (session) {
+  let canSyncNarrationPlayerPreference = false;
+
+  if (sessionUserId) {
     const [progress, user] = await Promise.all([
       prisma.readingProgress.findUnique({
         where: {
           userId_bookId: {
-            userId: session.user.id,
+            userId: sessionUserId,
             bookId: book.id
           }
         }
       }),
       prisma.user.findUnique({
-        where: { id: session.user.id },
+        where: { id: sessionUserId },
         select: { readerPreferences: true },
       }),
     ]);
 
     if (progress) initialLocation = progress.cfi;
     initialNarrationPlayerExpanded = normalizeReaderPreferences(user?.readerPreferences).narrationPlayerExpanded ?? null;
+
+    if (user) {
+      progressSaveEndpoint = '/api/progress';
+      canSyncNarrationPlayerPreference = true;
+    }
   }
 
   return (
@@ -93,8 +104,9 @@ export default async function ReadBookPage({ params }: { params: Promise<{ bookI
             initialLocation={initialLocation}
             bookId={book.id}
             title={book.title}
+            progressSaveEndpoint={progressSaveEndpoint}
             initialNarrationPlayerExpanded={initialNarrationPlayerExpanded}
-            narrationPlayerPreferenceEndpoint={session ? '/api/reader/preferences' : null}
+            narrationPlayerPreferenceEndpoint={canSyncNarrationPlayerPreference ? '/api/reader/preferences' : null}
             narrationAccess={{
               hasAccess: donorFeatureAccess.hasAccess,
               isSignedIn: donorFeatureAccess.isSignedIn,

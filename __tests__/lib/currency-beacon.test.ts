@@ -43,7 +43,7 @@ describe('CurrencyBeacon conversions', () => {
     ).resolves.toBe(18.25);
 
     expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('api.currencybeacon.com/convert'),
+      expect.stringContaining('api.currencybeacon.com/v1/convert'),
       expect.objectContaining({ cache: 'no-store' })
     );
   });

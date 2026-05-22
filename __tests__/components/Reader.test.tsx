@@ -61,7 +61,47 @@ jest.mock('epubjs', () =>
   jest.fn(() => mockBook)
 );
 
-const epubArrayBuffer = new ArrayBuffer(8);
+const mockEpubFactory = jest.requireMock('epubjs') as jest.Mock;
+
+const epubArrayBytes = Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8]);
+
+function cloneArrayBuffer(value?: ArrayBuffer | null) {
+  return value ? value.slice(0) : new ArrayBuffer(0);
+}
+
+function createMockResponse({
+  status = 200,
+  body,
+  headers = {},
+  json,
+}: {
+  status?: number;
+  body?: ArrayBuffer;
+  headers?: Record<string, string>;
+  json?: unknown;
+} = {}): Response {
+  const normalizedHeaders = new Map(
+    Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value])
+  );
+
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: {
+      get(name: string) {
+        return normalizedHeaders.get(name.toLowerCase()) ?? null;
+      },
+    },
+    arrayBuffer: jest.fn().mockResolvedValue(cloneArrayBuffer(body)),
+    json: jest.fn().mockResolvedValue(json),
+    clone: jest.fn(() => createMockResponse({
+      status,
+      body: cloneArrayBuffer(body),
+      headers,
+      json,
+    })),
+  } as unknown as Response;
+}
 
 const readyNarrationPayload = {
   feature: 'narration',
@@ -246,13 +286,23 @@ const DEFAULT_PROPS = {
   initialLocation: null,
 };
 
-function buildFetchMock({ narrationPayload }: { narrationPayload?: typeof readyNarrationPayload } = {}) {
+function buildFetchMock({
+  narrationPayload,
+  narrationPreferenceStatus = 200,
+}: {
+  narrationPayload?: typeof readyNarrationPayload;
+  narrationPreferenceStatus?: number;
+} = {}) {
   return jest.fn((url: string) => {
     if (typeof url === 'string' && url.includes('/file')) {
-      return Promise.resolve({
-        ok: true,
-        arrayBuffer: () => Promise.resolve(epubArrayBuffer),
-      } as Response);
+      return Promise.resolve(createMockResponse({
+        status: 200,
+        body: epubArrayBytes.slice().buffer,
+        headers: {
+          ETag: '"reader-test-book"',
+          'Content-Type': 'application/epub+zip',
+        },
+      }));
     }
 
     if (typeof url === 'string' && /highlights|bookmarks|notes/.test(url)) {
@@ -270,10 +320,12 @@ function buildFetchMock({ narrationPayload }: { narrationPayload?: typeof readyN
     }
 
     if (typeof url === 'string' && url.includes('/api/reader/preferences')) {
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ preferences: {} }),
-      } as Response);
+      return Promise.resolve(createMockResponse({
+        status: narrationPreferenceStatus,
+        json: narrationPreferenceStatus >= 200 && narrationPreferenceStatus < 300
+          ? { preferences: {} }
+          : { error: narrationPreferenceStatus === 404 ? 'User not found' : 'Preference sync failed' },
+      }));
     }
 
     if (typeof url === 'string' && url.includes('/progress')) {
@@ -285,6 +337,46 @@ function buildFetchMock({ narrationPayload }: { narrationPayload?: typeof readyN
       json: () => Promise.resolve({}),
     } as Response);
   });
+}
+
+function setNavigatorOnline(value: boolean) {
+  Object.defineProperty(window.navigator, 'onLine', {
+    configurable: true,
+    value,
+  });
+}
+
+function createCacheStorageMock() {
+  const stores = new Map<string, Map<string, Response>>();
+
+  return {
+    async open(name: string) {
+      if (!stores.has(name)) {
+        stores.set(name, new Map());
+      }
+
+      const store = stores.get(name)!;
+
+      return {
+        async match(request: string | Request) {
+          const key = typeof request === 'string' ? request : request.url;
+          return store.get(key)?.clone();
+        },
+        async delete(request: string | Request) {
+          const key = typeof request === 'string' ? request : request.url;
+          return store.delete(key);
+        },
+        async put(request: string | Request, response: Response) {
+          const key = typeof request === 'string' ? request : request.url;
+          store.set(key, response.clone());
+        },
+      };
+    },
+    async seed(name: string, request: string, response: Response) {
+      const cache = await this.open(name);
+      await cache.put(request, response);
+    },
+  };
 }
 
 const originalPlay = HTMLMediaElement.prototype.play;
@@ -337,6 +429,7 @@ describe('Reader component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     Object.keys(renditionEventHandlers).forEach((key) => delete renditionEventHandlers[key]);
+    mockEpubFactory.mockImplementation(() => mockBook);
     mockOn.mockImplementation((event: string, handler: (...args: any[]) => void) => {
       renditionEventHandlers[event] = handler;
     });
@@ -345,16 +438,87 @@ describe('Reader component', () => {
     localStorage.clear();
     localStorage.setItem('reader-tour-seen', '1');
     global.fetch = buildFetchMock() as jest.Mock;
+    setNavigatorOnline(true);
+    Reflect.deleteProperty(global, 'caches');
   });
 
   it('renders the current reader chrome and loads the epub file as an ArrayBuffer', async () => {
     render(<Reader {...DEFAULT_PROPS} />);
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/books/test-book-id/file'));
+    expect(mockEpubFactory).toHaveBeenCalledWith(expect.any(ArrayBuffer), { openAs: 'binary' });
     expect(screen.getByLabelText('Search in book')).toBeInTheDocument();
     expect(screen.getByLabelText('Open reading menu')).toBeInTheDocument();
     expect(screen.getByLabelText('Table of contents')).toBeInTheDocument();
     expect(mockRenderTo).toHaveBeenCalled();
+  });
+
+  it('loads a previously cached book while offline without refetching the epub file', async () => {
+    const cacheStorageMock = createCacheStorageMock();
+    (global as any).caches = cacheStorageMock;
+    await cacheStorageMock.seed(
+      'omr-book-files-v1',
+      '/api/books/test-book-id/file',
+      createMockResponse({
+        status: 200,
+        headers: {
+          ETag: '"cached-book"',
+          'Content-Type': 'application/epub+zip',
+        },
+        body: new Uint8Array([5, 4, 3, 2]).buffer,
+      })
+    );
+    setNavigatorOnline(false);
+
+    render(<Reader {...DEFAULT_PROPS} />);
+
+    await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
+    expect((global.fetch as jest.Mock).mock.calls.some(([url]) => url === '/api/books/test-book-id/file')).toBe(false);
+    expect(screen.queryByText('The page needs another try')).not.toBeInTheDocument();
+  });
+
+  it('clears a corrupted cached book and retries the network copy automatically', async () => {
+    const cacheStorageMock = createCacheStorageMock();
+    (global as any).caches = cacheStorageMock;
+    await cacheStorageMock.seed(
+      'omr-book-files-v1',
+      '/api/books/test-book-id/file',
+      createMockResponse({
+        status: 200,
+        headers: {
+          ETag: '"corrupted-book"',
+          'Content-Type': 'application/epub+zip',
+        },
+        body: new Uint8Array([99, 88, 77, 66]).buffer,
+      })
+    );
+
+    mockEpubFactory.mockImplementation((source: ArrayBuffer) => {
+      const bytes = Array.from(new Uint8Array(source));
+
+      if (bytes[0] === 99 && bytes[1] === 88) {
+        throw new Error('Corrupted cached EPUB');
+      }
+
+      return mockBook;
+    });
+
+    const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    render(<Reader {...DEFAULT_PROPS} />);
+
+    await waitFor(() => expect(mockEpubFactory).toHaveBeenCalledTimes(2));
+    expect(consoleWarn).toHaveBeenCalledWith(
+      'Cached EPUB failed to initialize. Clearing the saved copy and retrying from the network.',
+      expect.any(Error)
+    );
+    expect(Array.from(new Uint8Array(mockEpubFactory.mock.calls[0][0] as ArrayBuffer))).toEqual([99, 88, 77, 66]);
+    expect(Array.from(new Uint8Array(mockEpubFactory.mock.calls[1][0] as ArrayBuffer))).toEqual(Array.from(epubArrayBytes));
+    expect((global.fetch as jest.Mock).mock.calls.some(([url]) => url === '/api/books/test-book-id/file')).toBe(true);
+    expect(mockRenderTo).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('The page needs another try')).not.toBeInTheDocument();
+
+    consoleWarn.mockRestore();
   });
 
   it('falls back to the beginning of the book when the saved reading location cannot be displayed', async () => {
@@ -371,6 +535,74 @@ describe('Reader component', () => {
     expect(mockDisplay.mock.calls[1]).toEqual([]);
 
     consoleError.mockRestore();
+  });
+
+  it('keeps reading progress local-only when no progress endpoint is provided', async () => {
+    render(<Reader {...DEFAULT_PROPS} />);
+
+    await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
+    (global.fetch as jest.Mock).mockClear();
+
+    await act(async () => {
+      renditionEventHandlers.relocated?.({
+        start: {
+          cfi: 'epubcfi(/6/4[p2])',
+          href: 'Text/chapter-2.xhtml',
+          index: 1,
+          percentage: 0.5,
+        },
+        end: {
+          index: 3,
+        },
+      });
+    });
+
+    await waitFor(() => expect(screen.getByText('2 / 4')).toBeInTheDocument());
+
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+    });
+
+    expect((global.fetch as jest.Mock).mock.calls.some(([url]) => url === '/api/progress')).toBe(false);
+  });
+
+  it('syncs reading progress when the server provides a progress endpoint', async () => {
+    render(<Reader {...DEFAULT_PROPS} progressSaveEndpoint="/api/progress" />);
+
+    await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
+    (global.fetch as jest.Mock).mockClear();
+
+    await act(async () => {
+      renditionEventHandlers.relocated?.({
+        start: {
+          cfi: 'epubcfi(/6/4[p2])',
+          href: 'Text/chapter-2.xhtml',
+          index: 1,
+          percentage: 0.5,
+        },
+        end: {
+          index: 3,
+        },
+      });
+    });
+
+    await waitFor(() => expect(screen.getByText('2 / 4')).toBeInTheDocument());
+
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+    });
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith('/api/progress', expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookId: 'test-book-id',
+          cfi: 'epubcfi(/6/4[p2])',
+          progress: 50,
+        }),
+      }));
+    });
   });
 
   it('shows the donor narration mini-player and expands into the full controls on demand', async () => {
@@ -440,6 +672,40 @@ describe('Reader component', () => {
 
     expect(await screen.findByLabelText('Narration playback position')).toBeInTheDocument();
     expect(screen.getByLabelText('Collapse narration player')).toBeInTheDocument();
+  });
+
+  it('silently keeps the local narration player preference when the account can no longer be synced', async () => {
+    global.fetch = buildFetchMock({ narrationPreferenceStatus: 404 }) as jest.Mock;
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    localStorage.setItem('reader-narration-player-expanded', 'true');
+
+    render(
+      <Reader
+        {...DEFAULT_PROPS}
+        narrationPlayerPreferenceEndpoint="/api/reader/preferences"
+        narrationAccess={{
+          hasAccess: true,
+          isSignedIn: true,
+          manageHref: '/books/test-book-id#support-this-book',
+          statusEndpoint: '/api/books/test-book-id/narration',
+        }}
+      />
+    );
+
+    expect(await screen.findByLabelText('Narration playback position')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith('/api/reader/preferences', expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ narrationPlayerExpanded: true }),
+      }));
+    });
+
+    expect(
+      consoleError.mock.calls.filter(([message]) => message === 'Failed to sync the narration player preference')
+    ).toHaveLength(0);
+
+    consoleError.mockRestore();
   });
 
   it('persists the narration player preference locally and syncs it to the server when readers expand and collapse it', async () => {

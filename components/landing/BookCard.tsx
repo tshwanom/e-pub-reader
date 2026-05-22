@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
+import BookReadLink from '@/components/BookReadLink';
 
 interface BookCardProps {
   id: string;
@@ -115,12 +116,12 @@ export default function BookCard({
           </Link>
 
           {hasProgress && isAccessible && (
-            <Link
-              href={`/read/${id}`}
+            <BookReadLink
+              bookId={id}
               className="ml-auto rounded-lg bg-landing-accent/10 px-3 py-1.5 text-xs font-semibold text-landing-accent transition hover:bg-landing-accent hover:text-white"
             >
               Resume {Math.round(readingProgress ?? 0)}%
-            </Link>
+            </BookReadLink>
           )}
         </div>
       </div>

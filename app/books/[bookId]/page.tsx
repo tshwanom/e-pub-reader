@@ -10,6 +10,7 @@ import DonationSection from '@/components/DonationSection';
 import Header from '@/components/landing/Header';
 import Footer from '@/components/landing/Footer';
 import ContentNarrationPlayer from '@/components/ContentNarrationPlayer';
+import BookReadLink from '@/components/BookReadLink';
 
 export default async function BookDetailsPage({
   params,
@@ -104,12 +105,13 @@ export default async function BookDetailsPage({
               </div>
 
               {access.hasAccess ? (
-                <Link
-                  href={`/read/${book.id}`}
+                <BookReadLink
+                  bookId={book.id}
+                  prefetchOnMount
                   className="brand-button mb-4 block w-full text-center"
                 >
                   {progress ? 'Continue Reading' : 'Start Reading'}
-                </Link>
+                </BookReadLink>
               ) : session ? (
                 <a
                   href="#support-this-book"
@@ -338,6 +340,7 @@ export default async function BookDetailsPage({
                   <DonationSection
                     bookId={book.id}
                     bookTitle={book.title}
+                    donorOnly={book.donorOnly}
                     currentUserEmail={session?.user?.email ?? null}
                     message={
                       book.donationMessage ||

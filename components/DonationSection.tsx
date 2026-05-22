@@ -1,50 +1,39 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
+import { X } from 'lucide-react';
+import CurrencyPicker from '@/components/CurrencyPicker';
 import {
   DEFAULT_DONATION_CURRENCY,
   DEFAULT_DONATION_GATEWAY,
   DONATION_BASE_CURRENCY,
   DONATION_CURRENCY_OPTIONS,
   DONATION_GATEWAYS,
+  detectDonationCurrencyFromLocale,
   formatCurrencyAmount,
+  getDefaultDonationAmount,
+  getSuggestedDonationAmounts,
   isSupportedDonationCurrency,
+  normalizeDonationCurrency,
   type DonationGateway,
+  type DonationQuoteSummary,
 } from '@/lib/donations';
 
-/**
- * Infer the visitor's most likely currency from their browser locale.
- * Uses Intl.NumberFormat to extract the currency symbol resolution — zero
- * extra dependencies and no network request required.
- */
-function detectLocaleCurrency(): string {
-  try {
-    if (typeof navigator === 'undefined') return DEFAULT_DONATION_CURRENCY;
-    const locale = navigator.language || navigator.languages?.[0];
-    if (!locale) return DEFAULT_DONATION_CURRENCY;
-    // Format a dummy amount; the resolved options carry the currency code.
-    const resolved = new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: 'USD', // seed value – overridden by locale resolution below
-    }).resolvedOptions();
-    // Try to get the currency from the locale region tag (e.g. en-ZA → ZAR)
-    const region = locale.split('-')[1]?.toUpperCase();
-    const regionCurrency = region
-      ? new Intl.NumberFormat(`en-${region}`, {
-          style: 'currency',
-          currency: 'USD',
-        }).resolvedOptions().currency
-      : null;
-    const candidate = regionCurrency ?? resolved.currency ?? DEFAULT_DONATION_CURRENCY;
-    return isSupportedDonationCurrency(candidate) ? candidate : DEFAULT_DONATION_CURRENCY;
-  } catch {
-    return DEFAULT_DONATION_CURRENCY;
-  }
+const DONATION_CURRENCY_STORAGE_KEY = 'omr:donation:currency';
+
+function isAbortError(error: unknown) {
+  return Boolean(
+    error &&
+      typeof error === 'object' &&
+      'name' in error &&
+      (error as { name?: string }).name === 'AbortError'
+  );
 }
 
 interface DonationSectionProps {
   bookId: string;
   bookTitle: string;
+  donorOnly?: boolean;
   message?: string | null;
   goal?: any; // Decimal type from Prisma
   currentUserEmail?: string | null;
@@ -53,39 +42,243 @@ interface DonationSectionProps {
 export default function DonationSection({
   bookId,
   bookTitle,
+  donorOnly = false,
   message,
   goal,
   currentUserEmail,
 }: DonationSectionProps) {
-  const [amount, setAmount] = useState('10');
+  const currencyPickerId = useId();
+  const donationModalTitleId = useId();
+  const donationModalDescriptionId = useId();
+  const [amount, setAmount] = useState(String(getDefaultDonationAmount(DEFAULT_DONATION_CURRENCY)));
   const [currency, setCurrency] = useState(DEFAULT_DONATION_CURRENCY);
-
-  // Auto-detect the donor's local currency once on mount (client-side only)
-  useEffect(() => {
-    const detected = detectLocaleCurrency();
-    setCurrency(detected);
-  }, []);
+  const [detectedCurrency, setDetectedCurrency] = useState(DEFAULT_DONATION_CURRENCY);
+  const [displayLocale, setDisplayLocale] = useState('en-US');
+  const [isCurrencyReady, setIsCurrencyReady] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [gateway, setGateway] = useState<DonationGateway>(DEFAULT_DONATION_GATEWAY);
   const [donorEmail, setDonorEmail] = useState(currentUserEmail ?? '');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [quote, setQuote] = useState<DonationQuoteSummary | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const browserLocales = typeof navigator === 'undefined'
+      ? []
+      : Array.from(navigator.languages ?? []).filter((locale): locale is string => Boolean(locale));
+
+    if (browserLocales.length === 0 && typeof navigator !== 'undefined' && navigator.language) {
+      browserLocales.push(navigator.language);
+    }
+
+    const nextDisplayLocale = browserLocales[0] ?? 'en-US';
+    const nextDetectedCurrency = detectDonationCurrencyFromLocale(browserLocales);
+    const savedCurrency = typeof window !== 'undefined'
+      ? window.localStorage.getItem(DONATION_CURRENCY_STORAGE_KEY)
+      : null;
+    const hasSavedCurrency = typeof savedCurrency === 'string'
+      && savedCurrency.trim().length > 0
+      && isSupportedDonationCurrency(savedCurrency);
+    const preferredCurrency = hasSavedCurrency
+      ? normalizeDonationCurrency(savedCurrency)
+      : nextDetectedCurrency;
+
+    setDisplayLocale(nextDisplayLocale);
+    setDetectedCurrency(nextDetectedCurrency);
+    setCurrency(preferredCurrency);
+    setAmount(String(getDefaultDonationAmount(preferredCurrency)));
+    setIsCurrencyReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isCurrencyReady) {
+      return;
+    }
+
+    setErrorMessage(null);
+  }, [amount, currency, donorEmail, gateway, isCurrencyReady]);
 
   const suggestedAmounts = useMemo(
-    () => ['5', '10', '25', '50'].map((preset) => ({
-      value: preset,
-      label: formatCurrencyAmount(Number(preset), currency),
+    () => getSuggestedDonationAmounts(currency).map((preset) => ({
+      value: preset.toString(),
+      label: formatCurrencyAmount(preset, currency, displayLocale),
     })),
-    [currency]
+    [currency, displayLocale]
   );
 
   const selectedGateway = DONATION_GATEWAYS.find((option) => option.id === gateway) ?? DONATION_GATEWAYS[0];
+  const selectedCurrency = DONATION_CURRENCY_OPTIONS.find((option) => option.code === currency);
   const requiresPaystackEmail = gateway === 'PAYSTACK' && !currentUserEmail;
   const numericAmount = Number(amount);
   const hasValidAmount = Number.isFinite(numericAmount) && numericAmount >= 1;
+  const donateButtonLabel = donorOnly ? 'Donate to unlock' : 'Open donation';
+  const minimumEquivalentError = quote && quote.baseAmount < 1
+    ? 'Minimum donation is the equivalent of USD 1.00.'
+    : null;
+  const disableCheckout = loading
+    || !hasValidAmount
+    || Boolean(minimumEquivalentError)
+    || (requiresPaystackEmail && !donorEmail.trim());
+
+  useEffect(() => {
+    if (!isCurrencyReady || !isModalOpen || !hasValidAmount) {
+      setQuote(null);
+      setQuoteError(null);
+      setQuoteLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const syncLiveQuote = async () => {
+      setQuoteLoading(true);
+      setQuoteError(null);
+
+      try {
+        const params = new URLSearchParams({
+          amount: numericAmount.toString(),
+          currency,
+          gateway,
+        });
+        const response = await fetch(`/api/donations/quote?${params.toString()}`, {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        const payload = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          throw new Error(payload?.error || 'Unable to refresh the live conversion.');
+        }
+
+        setQuote(payload as DonationQuoteSummary);
+      } catch (error) {
+        if (isAbortError(error)) {
+          return;
+        }
+
+        setQuote(null);
+        setQuoteError(
+          error instanceof Error
+            ? error.message
+            : 'Unable to refresh the live conversion.'
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setQuoteLoading(false);
+        }
+      }
+    };
+
+    void syncLiveQuote();
+
+    return () => controller.abort();
+  }, [currency, gateway, hasValidAmount, isCurrencyReady, isModalOpen, numericAmount]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const syncDonationModalFromHash = () => {
+      if (window.location.hash === '#support-this-book') {
+        setIsModalOpen(true);
+      }
+    };
+
+    syncDonationModalFromHash();
+    window.addEventListener('hashchange', syncDonationModalFromHash);
+
+    return () => {
+      window.removeEventListener('hashchange', syncDonationModalFromHash);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isModalOpen || typeof document === 'undefined') {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isModalOpen]);
+
+  useEffect(() => {
+    if (!isModalOpen || typeof window === 'undefined') {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsModalOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isModalOpen]);
+
+  const openDonationModal = () => {
+    setErrorMessage(null);
+    setIsModalOpen(true);
+  };
+
+  const closeDonationModal = () => {
+    setIsModalOpen(false);
+    setErrorMessage(null);
+
+    if (typeof window !== 'undefined' && window.location.hash === '#support-this-book') {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    }
+  };
+
+  const handleCurrencyChange = (nextCurrencyValue: string) => {
+    const nextCurrency = normalizeDonationCurrency(nextCurrencyValue);
+    const shouldResetAmount = amount.trim().length === 0
+      || suggestedAmounts.some((preset) => preset.value === amount);
+
+    setCurrency(nextCurrency);
+
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(DONATION_CURRENCY_STORAGE_KEY, nextCurrency);
+    }
+
+    if (shouldResetAmount) {
+      setAmount(String(getDefaultDonationAmount(nextCurrency)));
+    }
+  };
+
+  const handleUseDetectedCurrency = () => {
+    const shouldResetAmount = amount.trim().length === 0
+      || suggestedAmounts.some((preset) => preset.value === amount);
+
+    setCurrency(detectedCurrency);
+
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(DONATION_CURRENCY_STORAGE_KEY);
+    }
+
+    if (shouldResetAmount) {
+      setAmount(String(getDefaultDonationAmount(detectedCurrency)));
+    }
+  };
 
   const handleDonate = async () => {
     if (!hasValidAmount) {
       setErrorMessage('Please enter at least 1 unit in your chosen currency.');
+      return;
+    }
+
+    if (minimumEquivalentError) {
+      setErrorMessage(minimumEquivalentError);
       return;
     }
 
@@ -127,161 +320,297 @@ export default function DonationSection({
     }
   };
 
-  return (
-    <div className="surface-card p-6 sm:p-8">
-      <h2 className="font-playfair text-3xl font-semibold text-landing-text mb-2">
-        Support “{bookTitle}”
-      </h2>
-      <p className="text-sm text-landing-text-muted mb-5">
-        Help keep the library independent and fund future releases.
-      </p>
-
-      {message && (
-        <p className="mb-4 whitespace-pre-wrap leading-relaxed text-landing-text-muted">
-          {message}
-        </p>
-      )}
-
-      {goal && (
-        <div className="mb-4">
-          <div className="mb-1 flex justify-between text-sm text-landing-text-muted">
-            <span>Funding Goal</span>
-            <span>{formatCurrencyAmount(Number(goal), DONATION_BASE_CURRENCY)}</span>
-          </div>
-          {/* TODO: Show actual progress from donations */}
+  const donationForm = (
+    <>
+      {message ? (
+        <div className="surface-muted text-sm text-landing-text-muted p-4">
+          <p className="whitespace-pre-wrap">{message}</p>
         </div>
-      )}
+      ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <label className="mb-2 block text-sm font-medium text-landing-text">
-            Payment gateway
-          </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {DONATION_GATEWAYS.map((option) => (
+      <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]">
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_220px]">
+            <div>
+              <label htmlFor="donation-amount" className="mb-2 block text-sm font-medium text-landing-text">
+                Amount in {currency}
+              </label>
+              <input
+                id="donation-amount"
+                autoFocus
+                type="number"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                min="1"
+                step="0.01"
+                className="w-full rounded-xl border border-landing-border bg-white px-4 py-3 text-landing-text shadow-sm transition-colors focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/30"
+                placeholder={`Custom amount in ${currency}`}
+              />
+            </div>
+
+            <div>
+              <label htmlFor={currencyPickerId} className="mb-2 block text-sm font-medium text-landing-text">
+                Your currency
+              </label>
+              <CurrencyPicker
+                id={currencyPickerId}
+                value={currency}
+                detectedCurrency={detectedCurrency}
+                options={DONATION_CURRENCY_OPTIONS}
+                onChange={handleCurrencyChange}
+                onUseDetectedCurrency={handleUseDetectedCurrency}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            {suggestedAmounts.map((preset) => (
               <button
-                key={option.id}
+                key={preset.value}
                 type="button"
-                aria-pressed={gateway === option.id}
-                onClick={() => setGateway(option.id)}
-                className={`rounded-2xl border px-4 py-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
-                  gateway === option.id
-                    ? 'border-landing-accent bg-landing-accent/8 shadow-sm'
-                    : 'border-landing-border bg-white hover:border-landing-accent/35'
+                onClick={() => setAmount(preset.value)}
+                className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
+                  amount === preset.value
+                    ? 'bg-landing-accent text-white shadow-sm'
+                    : 'border border-landing-border bg-white text-landing-text hover:border-landing-accent/40 hover:text-landing-accent'
                 }`}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-semibold text-landing-text">{option.label}</span>
-                  <span className="rounded-full bg-landing-surface-muted px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-landing-text-muted">
-                    {option.checkoutCurrency}
-                  </span>
-                </div>
-                <p className="mt-2 text-xs leading-5 text-landing-text-muted">
-                  {option.description}
-                </p>
+                {preset.label}
               </button>
             ))}
           </div>
+
+          {requiresPaystackEmail ? (
+            <div>
+              <label htmlFor="donor-email" className="mb-2 block text-sm font-medium text-landing-text">
+                Email for Paystack
+              </label>
+              <input
+                id="donor-email"
+                type="email"
+                value={donorEmail}
+                onChange={(event) => setDonorEmail(event.target.value)}
+                className="w-full rounded-xl border border-landing-border bg-white px-4 py-3 text-landing-text shadow-sm transition-colors focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/30"
+                placeholder="you@example.com"
+              />
+              <p className="mt-2 text-xs leading-5 text-landing-text-muted">
+                Needed for checkout.
+              </p>
+            </div>
+          ) : null}
         </div>
 
-        <div>
-          <p className="mb-2 block text-sm font-medium text-landing-text">
-            Donation currency
-          </p>
-          <div className="flex items-center gap-3 rounded-xl border border-landing-border bg-white/70 px-4 py-3">
-            <span className="rounded-full bg-landing-accent/10 px-3 py-1 text-sm font-bold tracking-wide text-landing-accent">
-              {currency}
-            </span>
-            <span className="text-sm text-landing-text-muted">
-              {DONATION_CURRENCY_OPTIONS.find((o) => o.code === currency)?.name ?? currency}
-            </span>
-            <span className="ml-auto rounded-full bg-landing-surface-muted px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-landing-text-muted">
-              Auto-detected
-            </span>
+        <div className="space-y-3">
+          <div className="surface-muted p-3">
+            <div className="mb-2.5 flex items-center justify-between gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-landing-text-muted">
+                Payment gateway
+              </p>
+              <span className="rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-landing-text-muted shadow-sm">
+                {selectedGateway.checkoutCurrency}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {DONATION_GATEWAYS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={gateway === option.id}
+                  onClick={() => setGateway(option.id)}
+                  className={`rounded-xl border px-3 py-2.5 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
+                    gateway === option.id
+                      ? 'border-landing-accent bg-white shadow-sm ring-1 ring-landing-accent/10'
+                      : 'border-landing-border/90 bg-white/85 hover:border-landing-accent/35 hover:bg-white'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          aria-hidden="true"
+                          className={`h-2.5 w-2.5 rounded-full transition-colors ${
+                            gateway === option.id
+                              ? 'bg-landing-accent'
+                              : 'bg-landing-border'
+                          }`}
+                        />
+                        <span className="truncate text-sm font-semibold text-landing-text">{option.label}</span>
+                      </div>
+                      <p className="mt-1 pl-[1.125rem] text-[10px] font-semibold uppercase tracking-[0.16em] text-landing-text-muted">
+                        {option.checkoutCurrency}
+                      </p>
+                    </div>
+
+                    <span className="rounded-full bg-landing-surface-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-landing-text-muted">
+                      {option.checkoutCurrency}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
-          <p className="mt-2 text-xs leading-5 text-landing-text-muted">
-            Detected from your browser locale. We store every donation in {DONATION_BASE_CURRENCY}; PayPal charges USD, Paystack charges ZAR after live conversion.
-          </p>
-        </div>
-      </div>
 
-      <div className="mt-6 flex flex-wrap gap-3">
-        {suggestedAmounts.map((preset) => (
+          <div className="surface-muted p-3.5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-text-muted">
+                Checkout total
+              </p>
+              <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${
+                quoteLoading
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-emerald-100 text-emerald-700'
+              }`}>
+                {quoteLoading ? 'Refreshing…' : 'Live'}
+              </span>
+            </div>
+
+            <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+              <div className="rounded-xl border border-white/70 bg-white/80 px-3.5 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-landing-text-muted">
+                  You donate
+                </p>
+                <p className="mt-1.5 text-lg font-semibold text-landing-text sm:text-xl">
+                  {formatCurrencyAmount(hasValidAmount ? numericAmount : 0, currency, displayLocale)}
+                </p>
+                <p className="mt-1 text-xs text-landing-text-muted">
+                  {selectedCurrency?.name ?? currency}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/70 bg-white/80 px-3.5 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-landing-text-muted">
+                  {selectedGateway.label} checkout
+                </p>
+                <p className="mt-1.5 text-lg font-semibold text-landing-text sm:text-xl">
+                  {quote
+                    ? formatCurrencyAmount(quote.gatewayAmount, quote.gatewayCurrency, displayLocale)
+                    : '—'}
+                </p>
+                <p className="mt-1 text-xs text-landing-text-muted">
+                  {quote ? `Charged in ${quote.gatewayCurrency}` : 'Waiting for rate'}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-2.5 space-y-2 text-xs leading-5 text-landing-text-muted">
+              {quoteError ? (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
+                  {quoteError}
+                </p>
+              ) : null}
+              {minimumEquivalentError ? (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
+                  {minimumEquivalentError}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
           <button
-            key={preset.value}
             type="button"
-            onClick={() => setAmount(preset.value)}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-              amount === preset.value
-                ? 'bg-landing-accent text-white'
-                : 'border border-landing-border bg-white text-landing-text hover:border-landing-accent/40 hover:text-landing-accent'
-            }`}
+            onClick={handleDonate}
+            disabled={disableCheckout}
+            className="brand-button w-full px-5 py-3 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {preset.label}
+            {loading ? 'Preparing checkout…' : `Continue to ${selectedGateway.label}`}
           </button>
-        ))}
-      </div>
-
-      <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
-        <div>
-          <label htmlFor="donation-amount" className="mb-2 block text-sm font-medium text-landing-text">
-            Amount in {currency}
-          </label>
-          <input
-            id="donation-amount"
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            min="1"
-            step="0.01"
-            className="w-full rounded-xl border border-landing-border bg-white px-4 py-3 text-landing-text focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/30"
-            placeholder={`Custom amount in ${currency}`}
-          />
         </div>
-
-        {requiresPaystackEmail ? (
-          <div>
-            <label htmlFor="donor-email" className="mb-2 block text-sm font-medium text-landing-text">
-              Email for Paystack
-            </label>
-            <input
-              id="donor-email"
-              type="email"
-              value={donorEmail}
-              onChange={(event) => setDonorEmail(event.target.value)}
-              className="w-full rounded-xl border border-landing-border bg-white px-4 py-3 text-landing-text focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/30"
-              placeholder="you@example.com"
-            />
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-landing-border bg-white/70 px-4 py-3 text-sm leading-6 text-landing-text-muted">
-            {currentUserEmail
-              ? `Signed in as ${currentUserEmail}. We'll use that for receipts and Paystack verification if you choose it.`
-              : 'PayPal can start immediately. If you switch to Paystack, we’ll ask for an email before redirecting you.'}
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={handleDonate}
-          disabled={loading || !hasValidAmount || (requiresPaystackEmail && !donorEmail.trim())}
-          className="brand-button px-8 py-3 disabled:cursor-not-allowed disabled:opacity-60 md:self-end"
-        >
-          {loading ? 'Preparing checkout…' : `Continue to ${selectedGateway.label}`}
-        </button>
       </div>
 
-      {errorMessage && (
+      {errorMessage ? (
         <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {errorMessage}
         </p>
-      )}
+      ) : null}
+    </>
+  );
 
-      <p className="mt-4 text-center text-xs leading-5 text-landing-text-muted">
-        {gateway === 'PAYPAL'
-          ? `We’ll convert ${currency} to ${DONATION_BASE_CURRENCY} before redirecting you to PayPal.`
-          : `We’ll normalize ${currency} to ${DONATION_BASE_CURRENCY}, then convert it to ZAR before redirecting you to Paystack.`}
-      </p>
-    </div>
+  return (
+    <>
+      <div className="mx-auto w-full max-w-3xl rounded-2xl border border-landing-border/80 bg-white/78 px-4 py-3 shadow-sm ring-1 ring-white/65 backdrop-blur-xl sm:px-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-landing-accent/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-landing-accent">
+                Support
+              </span>
+              {goal ? (
+                <span className="rounded-full bg-landing-surface-muted px-2.5 py-1 text-[11px] font-medium text-landing-text-muted">
+                  Goal {formatCurrencyAmount(Number(goal), DONATION_BASE_CURRENCY, displayLocale)}
+                </span>
+              ) : null}
+            </div>
+
+            <p className="mt-2 truncate text-sm font-medium text-landing-text sm:text-[15px]">
+              {donorOnly
+                ? 'Unlock this title in a quick donation modal.'
+                : `Support “${bookTitle}” in a quick donation modal.`}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={openDonationModal}
+            className="brand-button shrink-0 px-4 py-2.5 sm:px-5"
+          >
+            {donateButtonLabel}
+          </button>
+        </div>
+      </div>
+
+      {isModalOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-4 backdrop-blur-sm sm:items-center"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              closeDonationModal();
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={donationModalTitleId}
+            aria-describedby={donationModalDescriptionId}
+            className="surface-card w-full max-w-4xl overflow-hidden shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-landing-border/70 bg-white/70 px-4 py-3 backdrop-blur-sm sm:px-5">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-landing-accent/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-landing-accent">
+                    Secure checkout
+                  </span>
+                  {goal ? (
+                    <span className="rounded-full bg-landing-surface-muted px-2.5 py-1 text-[11px] font-medium text-landing-text-muted">
+                      Goal {formatCurrencyAmount(Number(goal), DONATION_BASE_CURRENCY, displayLocale)}
+                    </span>
+                  ) : null}
+                </div>
+                <h2 id={donationModalTitleId} className="mt-2 truncate font-playfair text-xl font-semibold text-landing-text sm:text-2xl">
+                  Support “{bookTitle}”
+                </h2>
+                <p id={donationModalDescriptionId} className="mt-1 text-xs text-landing-text-muted sm:text-sm">
+                  Pick an amount, currency, and gateway.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeDonationModal}
+                className="rounded-full border border-landing-border bg-white p-1.5 text-landing-text-muted transition-colors hover:border-landing-accent/35 hover:text-landing-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 sm:p-2"
+                aria-label="Close donation modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="max-h-[85vh] overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
+              {donationForm}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

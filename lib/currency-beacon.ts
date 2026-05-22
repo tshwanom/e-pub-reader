@@ -8,6 +8,7 @@ import {
 
 const CURRENCYBEACON_API_BASE = 'https://api.currencybeacon.com';
 const CURRENCYBEACON_API_KEY = process.env.CURRENCYBEACON_API_KEY;
+const CURRENCYBEACON_API_VERSIONED_BASE = `${CURRENCYBEACON_API_BASE}/v1/`;
 
 function assertCurrencyBeaconConfigured() {
   if (!CURRENCYBEACON_API_KEY) {
@@ -52,7 +53,7 @@ export async function convertCurrencyAmount({
 
   const apiKey = assertCurrencyBeaconConfigured();
 
-  const url = new URL('/convert', CURRENCYBEACON_API_BASE);
+  const url = new URL('convert', CURRENCYBEACON_API_VERSIONED_BASE);
   url.searchParams.set('api_key', apiKey);
   url.searchParams.set('from', normalizedFrom);
   url.searchParams.set('to', normalizedTo);

@@ -5,32 +5,191 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import DonationSection from '@/components/DonationSection';
 
+const originalLanguage = window.navigator.language;
+const originalLanguages = window.navigator.languages;
+
+function setNavigatorLanguage(language: string, languages: ReadonlyArray<string> = [language]) {
+  Object.defineProperty(window.navigator, 'language', {
+    configurable: true,
+    value: language,
+  });
+  Object.defineProperty(window.navigator, 'languages', {
+    configurable: true,
+    value: Array.from(languages),
+  });
+}
+
+function buildQuoteResponse({
+  amount,
+  currency,
+  gateway,
+}: {
+  amount: number;
+  currency: string;
+  gateway: string;
+}) {
+  const gatewayCurrency = gateway === 'PAYSTACK' ? 'ZAR' : 'USD';
+  const baseAmount = currency === 'USD' ? amount : 5.5;
+  const gatewayAmount = gateway === 'PAYSTACK'
+    ? currency === 'ZAR'
+      ? amount
+      : 100
+    : baseAmount;
+
+  return {
+    donorAmount: amount,
+    donorCurrency: currency,
+    baseAmount,
+    baseCurrency: 'USD',
+    gatewayAmount,
+    gatewayCurrency,
+    gateway,
+    quotedAt: '2026-05-21T12:00:00.000Z',
+  };
+}
+
+async function chooseCurrencyWithSearch(user: ReturnType<typeof userEvent.setup>, searchTerm: string, optionName: RegExp) {
+  await user.click(screen.getByLabelText(/Your currency/i));
+  await user.type(screen.getByRole('combobox', { name: /Search currencies/i }), searchTerm);
+  await user.click(await screen.findByRole('option', { name: optionName }));
+}
+
+async function openDonationModal(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: /Open donation|Donate to unlock/i }));
+
+  await waitFor(() => {
+    expect(screen.getByRole('dialog', { name: /Support “Test Book”/i })).toBeInTheDocument();
+  });
+}
+
 describe('DonationSection', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    window.localStorage.clear();
+    setNavigatorLanguage('en-US');
 
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({}),
-    } as Response) as jest.Mock;
+    global.fetch = jest.fn().mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+      if (url.startsWith('/api/donations/quote')) {
+        const parsedUrl = new URL(url, 'http://localhost');
+
+        return {
+          ok: true,
+          json: async () => buildQuoteResponse({
+            amount: Number(parsedUrl.searchParams.get('amount')),
+            currency: parsedUrl.searchParams.get('currency') ?? 'USD',
+            gateway: parsedUrl.searchParams.get('gateway') ?? 'PAYPAL',
+          }),
+        } as Response;
+      }
+
+      return {
+        ok: true,
+        json: async () => ({}),
+      } as Response;
+    }) as jest.Mock;
   });
 
-  it('posts the default PayPal + USD donation payload', async () => {
+  afterAll(() => {
+    setNavigatorLanguage(originalLanguage, originalLanguages);
+  });
+
+  it('starts as a compact CTA and opens the donation flow in a modal', async () => {
     const user = userEvent.setup();
 
     render(<DonationSection bookId="book-1" bookTitle="Test Book" />);
 
+    expect(screen.getByRole('button', { name: /Open donation/i })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Amount in USD/i)).not.toBeInTheDocument();
+
+    await openDonationModal(user);
+
+    expect(screen.getByLabelText(/Amount in USD/i)).toBeInTheDocument();
+  });
+
+  it('prefers the detected South African currency and requests a live quote immediately', async () => {
+    const user = userEvent.setup();
+
+    setNavigatorLanguage('en-ZA', ['en-ZA', 'en']);
+
+    render(<DonationSection bookId="book-1" bookTitle="Test Book" />);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await openDonationModal(user);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Your currency/i)).toHaveTextContent('ZAR');
+      expect(screen.getByLabelText(/Your currency/i)).toHaveTextContent('🇿🇦');
+    });
+
+    expect(screen.getByLabelText(/Amount in ZAR/i)).toHaveValue(100);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/donations/quote?amount=100&currency=ZAR&gateway=PAYPAL'),
+        expect.objectContaining({ cache: 'no-store' })
+      );
+    });
+  });
+
+  it('shows popular currencies and supports keyboard arrow selection in the picker', async () => {
+    const user = userEvent.setup();
+
+    render(<DonationSection bookId="book-1" bookTitle="Test Book" />);
+
+    await openDonationModal(user);
+
+    expect(screen.getByLabelText(/Your currency/i)).toHaveTextContent('🇺🇸');
+
+    await user.click(screen.getByLabelText(/Your currency/i));
+
+    expect(screen.getByText(/Popular currencies/i)).toBeInTheDocument();
+
+    const searchInput = screen.getByRole('combobox', { name: /Search currencies/i });
+    await user.type(searchInput, 'south africa');
+    await user.keyboard('{ArrowDown}{Enter}');
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Your currency/i)).toHaveTextContent('🇿🇦');
+      expect(screen.getByLabelText(/Your currency/i)).toHaveTextContent('ZAR');
+    });
+  });
+
+  it('lets the user search by country name and posts the selected currency in the checkout payload', async () => {
+    const user = userEvent.setup();
+
+    render(<DonationSection bookId="book-1" bookTitle="Test Book" />);
+
+    await openDonationModal(user);
+
+    await chooseCurrencyWithSearch(user, 'south africa', /ZAR/i);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Your currency/i)).toHaveTextContent('ZAR');
+    });
+
     await user.click(screen.getByRole('button', { name: /Continue to PayPal/i }));
 
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+    const postCall = await waitFor(() => {
+      const call = (global.fetch as jest.Mock).mock.calls.find(([, request]) => request?.method === 'POST');
+      expect(call).toBeDefined();
+      return call;
+    });
 
-    const request = (global.fetch as jest.Mock).mock.calls[0][1];
+    const request = postCall?.[1];
     expect(request.method).toBe('POST');
     expect(request.headers).toEqual({ 'Content-Type': 'application/json' });
     expect(JSON.parse(request.body)).toEqual({
       bookId: 'book-1',
-      amount: 10,
-      currency: 'USD',
+      amount: 100,
+      currency: 'ZAR',
       gateway: 'PAYPAL',
     });
   });
@@ -40,32 +199,48 @@ describe('DonationSection', () => {
 
     render(<DonationSection bookId="book-1" bookTitle="Test Book" />);
 
+    await openDonationModal(user);
+
     await user.click(screen.getAllByRole('button', { name: /Paystack/i })[0]);
     const continueButton = screen.getByRole('button', { name: /Continue to Paystack/i });
 
     expect(screen.getByLabelText(/Email for Paystack/i)).toBeInTheDocument();
     expect(continueButton).toBeDisabled();
-    expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('includes the selected Paystack gateway and donor email in the request body', async () => {
+  it('refreshes the live quote and includes the selected Paystack gateway and donor email in the request body', async () => {
     const user = userEvent.setup();
 
     render(<DonationSection bookId="book-1" bookTitle="Test Book" />);
 
+    await openDonationModal(user);
+
+    await chooseCurrencyWithSearch(user, 'south africa', /ZAR/i);
     await user.click(screen.getAllByRole('button', { name: /Paystack/i })[0]);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/donations/quote?amount=100&currency=ZAR&gateway=PAYSTACK'),
+        expect.objectContaining({ cache: 'no-store' })
+      );
+    });
+
     await user.type(screen.getByLabelText(/Email for Paystack/i), 'reader@example.com');
-    await user.clear(screen.getByLabelText(/Amount in USD/i));
-    await user.type(screen.getByLabelText(/Amount in USD/i), '15');
+    await user.clear(screen.getByLabelText(/Amount in ZAR/i));
+    await user.type(screen.getByLabelText(/Amount in ZAR/i), '150');
     await user.click(screen.getByRole('button', { name: /Continue to Paystack/i }));
 
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+    const postCall = await waitFor(() => {
+      const call = (global.fetch as jest.Mock).mock.calls.find(([, request]) => request?.method === 'POST');
+      expect(call).toBeDefined();
+      return call;
+    });
 
-    const request = (global.fetch as jest.Mock).mock.calls[0][1];
+    const request = postCall?.[1];
     expect(JSON.parse(request.body)).toEqual({
       bookId: 'book-1',
-      amount: 15,
-      currency: 'USD',
+      amount: 150,
+      currency: 'ZAR',
       gateway: 'PAYSTACK',
       donorEmail: 'reader@example.com',
     });

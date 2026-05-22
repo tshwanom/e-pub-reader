@@ -9,12 +9,14 @@ import type {
   NarrationManifestChapter,
   NarrationManifestCue,
 } from '@/lib/narration';
+import { clearCachedBookBinary, isBookLoadErrorCode, loadBookBinary } from '@/lib/book-client-cache';
 
 interface ReaderProps {
   url: string;
   initialLocation?: string | null;
   bookId: string;
   title?: string;
+  progressSaveEndpoint?: string | null;
   initialNarrationPlayerExpanded?: boolean | null;
   narrationPlayerPreferenceEndpoint?: string | null;
   narrationAccess?: ReaderNarrationAccess;
@@ -304,6 +306,10 @@ function getNarrationVoicePreferenceStorageKey(bookId: string) {
   return `${NARRATION_VOICE_PREFERENCE_KEY_PREFIX}-${bookId}`;
 }
 
+function isNarrationPlayerPreferenceSyncSkippableStatus(status: number) {
+  return status === 401 || status === 403 || status === 404;
+}
+
 function resolveNarrationChapterIndexFromChapters(
   chapters: NarrationManifestChapter[],
   preferredHref?: string | null,
@@ -387,6 +393,7 @@ export default function Reader({
   initialLocation,
   bookId,
   title,
+  progressSaveEndpoint = null,
   initialNarrationPlayerExpanded = null,
   narrationPlayerPreferenceEndpoint = null,
   narrationAccess,
@@ -592,6 +599,10 @@ export default function Reader({
       });
 
       if (!response.ok) {
+        if (isNarrationPlayerPreferenceSyncSkippableStatus(response.status)) {
+          return;
+        }
+
         throw new Error(`Preference sync failed with status ${response.status}`);
       }
     } catch (error) {
@@ -725,8 +736,16 @@ export default function Reader({
 
   // Save progress
   const saveProgress = useCallback(async (cfi: string, percentage: number) => {
+    if (!progressSaveEndpoint) {
+      return;
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return;
+    }
+
     try {
-      await fetch('/api/progress', {
+      await fetch(progressSaveEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bookId, cfi, progress: percentage * 100 }),
@@ -734,7 +753,22 @@ export default function Reader({
     } catch (error) {
       console.error('Failed to save progress', error);
     }
-  }, [bookId]);
+  }, [bookId, progressSaveEndpoint]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      const currentCfi = currentCfiRef.current;
+
+      if (!currentCfi) {
+        return;
+      }
+
+      void saveProgress(currentCfi, progressPct / 100);
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [progressPct, saveProgress]);
 
   const loadNarrationStatus = useCallback(async (force = false) => {
     if (!narrationFeatureEnabled || !narrationAccess?.hasAccess || isCheckingNarration) return;
@@ -1301,25 +1335,15 @@ export default function Reader({
     setIsReady(false);
     setReaderLoadError(null);
 
-    const initBook = async () => {
-      if (destroyed || !viewerRef.current) return;
+    const resetRenderedBook = () => {
+      renditionInstance?.destroy();
+      renditionInstance = null;
+      renditionRef.current = null;
+      bookRef.current = null;
+    };
 
-      let bookSource: ArrayBuffer;
-
-      try {
-        const response = await fetch(url);
-
-        if (!response.ok) {
-          throw new Error(`EPUB fetch failed with status ${response.status}`);
-        }
-
-        bookSource = await response.arrayBuffer();
-      } catch (error) {
-        console.error('Failed to fetch the EPUB file for the reader', error);
-        throw error;
-      }
-
-      const book = ePub(bookSource, { openAs: 'epub' }) as unknown as Book;
+    const initializeBookFromBinary = async (bookSource: ArrayBuffer) => {
+      const book = ePub(bookSource, { openAs: 'binary' }) as unknown as Book;
       bookRef.current = book;
 
       // Use explicit pixel dimensions so epub.js paginates correctly
@@ -1469,11 +1493,57 @@ export default function Reader({
       });
     };
 
+    const initBook = async () => {
+      if (destroyed || !viewerRef.current) return;
+
+      let loadedBookSource: 'cache' | 'network' | null = null;
+
+      const loadAndInitializeBook = async (options?: { forceNetwork?: boolean }) => {
+        let loadedBook;
+
+        try {
+          loadedBook = await loadBookBinary(url, options);
+        } catch (error) {
+          console.error('Failed to load the EPUB file for the reader', error);
+          throw error;
+        }
+
+        loadedBookSource = loadedBook.source;
+        await initializeBookFromBinary(loadedBook.buffer);
+      };
+
+      try {
+        await loadAndInitializeBook();
+      } catch (error) {
+        const shouldRetryFromNetwork = !destroyed
+          && loadedBookSource === 'cache'
+          && typeof navigator !== 'undefined'
+          && navigator.onLine !== false;
+
+        if (!shouldRetryFromNetwork) {
+          throw error;
+        }
+
+        console.warn(
+          'Cached EPUB failed to initialize. Clearing the saved copy and retrying from the network.',
+          error,
+        );
+
+        resetRenderedBook();
+        await clearCachedBookBinary(url).catch(() => undefined);
+        await loadAndInitializeBook({ forceNetwork: true });
+      }
+    };
+
     initBook().catch((error) => {
       console.error('Failed to initialize the reader', error);
 
       if (!destroyed) {
-        setReaderLoadError('We could not open this page right away. Please refresh and try again.');
+        setReaderLoadError(
+          isBookLoadErrorCode(error, 'BOOK_CACHE_MISS_OFFLINE')
+            ? 'This book is not saved on this device yet. Open it online once and it will be ready instantly on this device—even offline.'
+            : 'We could not open this page right away. Please refresh and try again.'
+        );
       }
     });
 
@@ -1483,7 +1553,7 @@ export default function Reader({
       // fresh rendition after a re-initialization.
       registeredHighlightCfisForRender.clear();
       if (locationTimeout.current) clearTimeout(locationTimeout.current);
-      renditionInstance?.destroy();
+      resetRenderedBook();
     };
   }, [
     applyNarrationCueHighlight,
@@ -1801,7 +1871,7 @@ export default function Reader({
                         <div className="mx-auto h-11 w-11 animate-spin rounded-full border-2 border-landing-border border-t-landing-accent motion-reduce:animate-none" />
                         <h2 className="mt-4 text-base font-semibold text-landing-text">Loading your book</h2>
                         <p className="mt-2 text-sm leading-relaxed text-landing-text-muted">
-                          We&apos;re opening {title ?? 'your book'} and restoring your place. The reader will appear in a moment.
+                          We&apos;re opening {title ?? 'your book'} and restoring your place. Once it&apos;s open, it stays ready on this device for faster offline reading next time.
                         </p>
                       </>
                     )}

@@ -2,24 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import {
+  createDonationQuote,
+} from '@/lib/donation-quote';
+import {
   buildPaystackReference,
   createPayPalOrder,
   initializePaystackTransaction,
 } from '@/lib/donation-payments';
 import {
   DEFAULT_DONATION_GATEWAY,
-  DONATION_BASE_CURRENCY,
-  getGatewayCheckoutCurrency,
   isDonationGateway,
   isSupportedDonationCurrency,
   normalizeDonationCurrency,
-  roundMoney,
+  DONATION_BASE_CURRENCY,
 } from '@/lib/donations';
 import { prisma } from '@/lib/prisma';
-import {
-  convertBaseCurrencyToPaystack,
-  convertDonationAmountToBaseCurrency,
-} from '@/lib/currency-beacon';
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -73,10 +70,17 @@ export async function POST(req: NextRequest) {
 
   try {
     const donorEmail = session?.user?.email?.trim() || donorEmailFromBody || null;
-    const roundedDonorAmount = roundMoney(amount);
-    const baseAmount = donorCurrency === DONATION_BASE_CURRENCY
-      ? roundedDonorAmount
-      : await convertDonationAmountToBaseCurrency(roundedDonorAmount, donorCurrency);
+    const quote = await createDonationQuote({
+      amount,
+      donorCurrency,
+      gateway,
+    });
+    const {
+      donorAmount: roundedDonorAmount,
+      baseAmount,
+      gatewayAmount: quotedGatewayAmount,
+      gatewayCurrency,
+    } = quote;
 
     if (baseAmount < 1) {
       return NextResponse.json(
@@ -88,8 +92,7 @@ export async function POST(req: NextRequest) {
     const baseUrl = process.env.NEXTAUTH_URL || req.nextUrl.origin;
     const description = book ? `Support for “${book.title}”` : 'General donation';
 
-    let gatewayAmount = baseAmount;
-    let gatewayCurrency = getGatewayCheckoutCurrency(gateway);
+    let gatewayAmount = quotedGatewayAmount;
     let paypalId: string | undefined;
     let paystackReference: string | undefined;
     let checkoutUrl: string;
@@ -111,9 +114,6 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
-
-      gatewayAmount = await convertBaseCurrencyToPaystack(baseAmount);
-      gatewayCurrency = getGatewayCheckoutCurrency(gateway);
 
       const paystackTransaction = await initializePaystackTransaction({
         amount: gatewayAmount,
