@@ -1,12 +1,14 @@
 import { notFound } from 'next/navigation';
 import { getBookAccessState } from '@/lib/book-access';
 import { withContentFeatureFallback } from '@/lib/content';
+import { getUserActivePaystackSubscription } from '@/lib/donation-subscriptions';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import Link from 'next/link';
 import Image from 'next/image';
 import DonationSection from '@/components/DonationSection';
+import PaystackSubscriptionManager from '@/components/PaystackSubscriptionManager';
 import Header from '@/components/landing/Header';
 import Footer from '@/components/landing/Footer';
 import ContentNarrationPlayer from '@/components/ContentNarrationPlayer';
@@ -17,11 +19,12 @@ export default async function BookDetailsPage({
   searchParams,
 }: {
   params: Promise<{ bookId: string }>;
-  searchParams?: Promise<{ donation?: string }>;
+  searchParams?: Promise<{ donation?: string; subscription?: string }>;
 }) {
   const { bookId } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const session = await getServerSession(authOptions);
+  const paystackSubscription = session?.user ? await getUserActivePaystackSubscription(session.user) : null;
 
   const book = await prisma.book.findUnique({
     where: { id: bookId },
@@ -324,6 +327,16 @@ export default async function BookDetailsPage({
 
             {(book.donationEnabled || book.donorOnly) && (
               <section id="support-this-book">
+                {paystackSubscription ? (
+                  <div className="mb-6">
+                    <PaystackSubscriptionManager
+                      subscription={paystackSubscription}
+                      returnTo={`/books/${book.id}`}
+                      status={resolvedSearchParams?.subscription}
+                    />
+                  </div>
+                ) : null}
+
                 {book.donorOnly && !session ? (
                   <div className="surface-card p-6 sm:p-8">
                     <h2 className="font-playfair text-3xl font-semibold text-landing-text">

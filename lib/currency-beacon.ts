@@ -87,6 +87,14 @@ export function convertDonationAmountToBaseCurrency(amount: number, donorCurrenc
   });
 }
 
+export function convertBaseCurrencyToDonationCurrency(amount: number, donorCurrency: string) {
+  return convertCurrencyAmount({
+    amount,
+    from: DONATION_BASE_CURRENCY,
+    to: donorCurrency,
+  });
+}
+
 export function convertBaseCurrencyToPaystack(amount: number) {
   return convertCurrencyAmount({
     amount,

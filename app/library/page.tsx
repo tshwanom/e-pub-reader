@@ -1,4 +1,5 @@
 import { isPrivilegedUser, isUserDonor } from "@/lib/book-access";
+import { getUserActivePaystackSubscription } from '@/lib/donation-subscriptions';
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { getServerSession } from "next-auth";
@@ -6,13 +7,20 @@ import { authOptions } from "@/lib/auth";
 import Header from "@/components/landing/Header";
 import BookCard from "@/components/landing/BookCard";
 import Footer from "@/components/landing/Footer";
+import PaystackSubscriptionManager from '@/components/PaystackSubscriptionManager';
 
 export const dynamic = 'force-dynamic';
 
-export default async function LibraryPage() {
+export default async function LibraryPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ subscription?: string }>;
+}) {
   const session = await getServerSession(authOptions);
   const privileged = isPrivilegedUser(session?.user);
-  const isDonor = privileged ? true : await isUserDonor(session?.user?.id);
+  const isDonor = privileged ? true : await isUserDonor(session?.user);
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const paystackSubscription = session?.user ? await getUserActivePaystackSubscription(session.user) : null;
   
   const books = await prisma.book.findMany({
     where: privileged ? undefined : { status: 'PUBLISHED' },
@@ -41,6 +49,16 @@ export default async function LibraryPage() {
             Some titles are marked for sustaining donors.
           </p>
         </div>
+
+        {paystackSubscription ? (
+          <div className="mb-10">
+            <PaystackSubscriptionManager
+              subscription={paystackSubscription}
+              returnTo="/library"
+              status={resolvedSearchParams?.subscription}
+            />
+          </div>
+        ) : null}
 
         {books.length === 0 ? (
           <div className="surface-card py-20 text-center">

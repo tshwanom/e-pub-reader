@@ -1,10 +1,13 @@
 import {
+  DONATION_PRESET_BASE_AMOUNTS,
   detectDonationCurrencyFromLocale,
+  formatDonationFrequencyLabel,
   formatDonationGatewayLabel,
   formatCurrencyAmount,
   getDefaultDonationAmount,
   getGatewayCheckoutCurrency,
   getSuggestedDonationAmounts,
+  isDonationFrequency,
   isSupportedDonationCurrency,
   normalizeDonationCurrency,
   roundMoney,
@@ -27,6 +30,10 @@ describe('donation helpers', () => {
     expect(getGatewayCheckoutCurrency('PAYSTACK')).toBe('ZAR');
     expect(formatDonationGatewayLabel('PAYPAL')).toBe('PayPal');
     expect(formatDonationGatewayLabel('PAYSTACK')).toBe('Paystack');
+    expect(isDonationFrequency('ONE_TIME')).toBe(true);
+    expect(isDonationFrequency('MONTHLY')).toBe(true);
+    expect(isDonationFrequency('YEARLY')).toBe(false);
+    expect(formatDonationFrequencyLabel('MONTHLY')).toBe('Monthly');
   });
 
   it('rounds and formats canonical USD values consistently', () => {
@@ -34,10 +41,11 @@ describe('donation helpers', () => {
     expect(formatCurrencyAmount(25, 'USD')).toContain('$');
   });
 
-  it('returns currency-aware donation presets and defaults', () => {
+  it('returns the canonical USD donation tiers and defaults', () => {
+    expect(DONATION_PRESET_BASE_AMOUNTS).toEqual([5, 10, 25, 50]);
     expect(getSuggestedDonationAmounts('USD')).toEqual([5, 10, 25, 50]);
-    expect(getSuggestedDonationAmounts('zar')).toEqual([50, 100, 250, 500]);
+    expect(getSuggestedDonationAmounts('zar')).toEqual([5, 10, 25, 50]);
     expect(getDefaultDonationAmount('USD')).toBe(10);
-    expect(getDefaultDonationAmount('ZAR')).toBe(100);
+    expect(getDefaultDonationAmount('ZAR')).toBe(10);
   });
 });

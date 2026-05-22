@@ -7,6 +7,7 @@ import DonationSection from '@/components/DonationSection';
 
 const originalLanguage = window.navigator.language;
 const originalLanguages = window.navigator.languages;
+const USD_PRESETS = [5, 10, 25, 50] as const;
 
 function setNavigatorLanguage(language: string, languages: ReadonlyArray<string> = [language]) {
   Object.defineProperty(window.navigator, 'language', {
@@ -28,12 +29,16 @@ function buildQuoteResponse({
   currency: string;
   gateway: string;
 }) {
+  const baseAmount = currency === 'USD'
+    ? amount
+    : currency === 'ZAR'
+      ? Number((amount / 18.25).toFixed(2))
+      : 5.5;
   const gatewayCurrency = gateway === 'PAYSTACK' ? 'ZAR' : 'USD';
-  const baseAmount = currency === 'USD' ? amount : 5.5;
   const gatewayAmount = gateway === 'PAYSTACK'
     ? currency === 'ZAR'
       ? amount
-      : 100
+      : Number((baseAmount * 18.25).toFixed(2))
     : baseAmount;
 
   return {
@@ -44,6 +49,23 @@ function buildQuoteResponse({
     gatewayAmount,
     gatewayCurrency,
     gateway,
+    quotedAt: '2026-05-21T12:00:00.000Z',
+  };
+}
+
+function buildPresetOptionsResponse(currency: string) {
+  const suggestedAmounts = currency === 'USD'
+    ? [...USD_PRESETS]
+    : currency === 'ZAR'
+      ? USD_PRESETS.map((amount) => Number((amount * 18.25).toFixed(2)))
+      : [...USD_PRESETS];
+
+  return {
+    donorCurrency: currency,
+    baseCurrency: 'USD',
+    baseSuggestedAmounts: [...USD_PRESETS],
+    suggestedAmounts,
+    defaultAmount: suggestedAmounts[1],
     quotedAt: '2026-05-21T12:00:00.000Z',
   };
 }
@@ -59,6 +81,10 @@ async function openDonationModal(user: ReturnType<typeof userEvent.setup>) {
 
   await waitFor(() => {
     expect(screen.getByRole('dialog', { name: /Support “Test Book”/i })).toBeInTheDocument();
+  });
+
+  await waitFor(() => {
+    expect(global.fetch).toHaveBeenCalled();
   });
 }
 
@@ -85,6 +111,15 @@ describe('DonationSection', () => {
             currency: parsedUrl.searchParams.get('currency') ?? 'USD',
             gateway: parsedUrl.searchParams.get('gateway') ?? 'PAYPAL',
           }),
+        } as Response;
+      }
+
+      if (url.startsWith('/api/donations/options')) {
+        const parsedUrl = new URL(url, 'http://localhost');
+
+        return {
+          ok: true,
+          json: async () => buildPresetOptionsResponse(parsedUrl.searchParams.get('currency') ?? 'USD'),
         } as Response;
       }
 
@@ -129,11 +164,18 @@ describe('DonationSection', () => {
       expect(screen.getByLabelText(/Your currency/i)).toHaveTextContent('🇿🇦');
     });
 
-    expect(screen.getByLabelText(/Amount in ZAR/i)).toHaveValue(100);
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/donations/options?currency=ZAR'),
+        expect.objectContaining({ cache: 'no-store' })
+      );
+    });
+
+    expect(screen.getByLabelText(/Amount in ZAR/i)).toHaveValue(182.5);
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/donations/quote?amount=100&currency=ZAR&gateway=PAYPAL'),
+        expect.stringContaining('/api/donations/quote?amount=182.5&currency=ZAR&gateway=PAYPAL'),
         expect.objectContaining({ cache: 'no-store' })
       );
     });
@@ -188,8 +230,9 @@ describe('DonationSection', () => {
     expect(request.headers).toEqual({ 'Content-Type': 'application/json' });
     expect(JSON.parse(request.body)).toEqual({
       bookId: 'book-1',
-      amount: 100,
+      amount: 182.5,
       currency: 'ZAR',
+      frequency: 'ONE_TIME',
       gateway: 'PAYPAL',
     });
   });
@@ -201,10 +244,14 @@ describe('DonationSection', () => {
 
     await openDonationModal(user);
 
-    await user.click(screen.getAllByRole('button', { name: /Paystack/i })[0]);
-    const continueButton = screen.getByRole('button', { name: /Continue to Paystack/i });
+    await user.click(screen.getByRole('button', { name: /^Paystack/i }));
 
-    expect(screen.getByLabelText(/Email for Paystack/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Email for Paystack/i)).toBeInTheDocument();
+    });
+
+    const continueButton = await screen.findByRole('button', { name: /Continue to Paystack/i });
+
     expect(continueButton).toBeDisabled();
   });
 
@@ -216,11 +263,15 @@ describe('DonationSection', () => {
     await openDonationModal(user);
 
     await chooseCurrencyWithSearch(user, 'south africa', /ZAR/i);
-    await user.click(screen.getAllByRole('button', { name: /Paystack/i })[0]);
+    await user.click(screen.getByRole('button', { name: /^Paystack/i }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Email for Paystack/i)).toBeInTheDocument();
+    });
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/donations/quote?amount=100&currency=ZAR&gateway=PAYSTACK'),
+        expect.stringContaining('/api/donations/quote?amount=182.5&currency=ZAR&gateway=PAYSTACK'),
         expect.objectContaining({ cache: 'no-store' })
       );
     });
@@ -241,6 +292,49 @@ describe('DonationSection', () => {
       bookId: 'book-1',
       amount: 150,
       currency: 'ZAR',
+      frequency: 'ONE_TIME',
+      gateway: 'PAYSTACK',
+      donorEmail: 'reader@example.com',
+    });
+  });
+
+  it('lets the donor switch to monthly support and start recurring checkout on Paystack', async () => {
+    const user = userEvent.setup();
+
+    render(<DonationSection bookId="book-1" bookTitle="Test Book" />);
+
+    await openDonationModal(user);
+
+    await user.click(screen.getByRole('button', { name: /Monthly/i }));
+
+    expect(screen.getByText(/Monthly recurring support is available through PayPal and Paystack/i)).toBeInTheDocument();
+
+    const paystackGatewayButton = screen.getByRole('button', { name: /^Paystack/i });
+    expect(paystackGatewayButton).not.toBeDisabled();
+
+    await user.click(paystackGatewayButton);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Email for Paystack/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('button', { name: /Start monthly support with Paystack/i })).toBeDisabled();
+
+    await user.type(screen.getByLabelText(/Email for Paystack/i), 'reader@example.com');
+
+    await user.click(screen.getByRole('button', { name: /Start monthly support with Paystack/i }));
+
+    const postCall = await waitFor(() => {
+      const call = (global.fetch as jest.Mock).mock.calls.find(([, request]) => request?.method === 'POST');
+      expect(call).toBeDefined();
+      return call;
+    });
+
+    expect(JSON.parse(postCall?.[1].body)).toEqual({
+      bookId: 'book-1',
+      amount: 10,
+      currency: 'USD',
+      frequency: 'MONTHLY',
       gateway: 'PAYSTACK',
       donorEmail: 'reader@example.com',
     });

@@ -5,12 +5,13 @@ jest.mock('@/lib/prisma', () => ({
   prisma: {
     donation: {
       findFirst: jest.fn(),
+      updateMany: jest.fn(),
     },
   },
 }));
 
 const { prisma } = jest.requireMock('@/lib/prisma') as {
-  prisma: { donation: { findFirst: jest.MockedFunction<any> } };
+  prisma: { donation: { findFirst: jest.MockedFunction<any>; updateMany: jest.MockedFunction<any> } };
 };
 
 const publishedFreeBook = { status: 'PUBLISHED', donorOnly: false };
@@ -44,6 +45,7 @@ describe('getBookAccessState', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.donation.findFirst.mockResolvedValue(null); // default: not a donor
+    prisma.donation.updateMany.mockResolvedValue({ count: 0 });
   });
 
   it('grants access to a published free book for anonymous users', async () => {
@@ -93,6 +95,7 @@ describe('getDonorFeatureAccessState', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.donation.findFirst.mockResolvedValue(null); // default: not a donor
+    prisma.donation.updateMany.mockResolvedValue({ count: 0 });
   });
 
   it('denies donor features to anonymous readers of free books', async () => {
@@ -106,11 +109,28 @@ describe('getDonorFeatureAccessState', () => {
 
   it('grants donor features to donors on published free books', async () => {
     prisma.donation.findFirst.mockResolvedValue({ id: 'donation1' });
-    const result = await getDonorFeatureAccessState(publishedFreeBook, { id: 'user1', role: 'USER' });
+    const result = await getDonorFeatureAccessState(publishedFreeBook, {
+      id: 'user1',
+      role: 'USER',
+      email: 'reader@example.com',
+    });
     expect(result.hasBookAccess).toBe(true);
     expect(result.hasAccess).toBe(true);
     expect(result.requiresDonation).toBe(false);
     expect(result.isDonor).toBe(true);
+    expect(prisma.donation.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: null,
+        status: 'COMPLETED',
+        donorEmail: {
+          equals: 'reader@example.com',
+          mode: 'insensitive',
+        },
+      },
+      data: {
+        userId: 'user1',
+      },
+    });
   });
 
   it('keeps donor features locked when the user cannot open a donor-only book', async () => {
@@ -134,6 +154,7 @@ describe('getDonorAccessState', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.donation.findFirst.mockResolvedValue(null); // default: not a donor
+    prisma.donation.updateMany.mockResolvedValue({ count: 0 });
   });
 
   it('keeps donor narration locked for anonymous visitors', async () => {
@@ -147,11 +168,45 @@ describe('getDonorAccessState', () => {
   it('grants donor narration access to donors', async () => {
     prisma.donation.findFirst.mockResolvedValue({ id: 'donation1' });
 
-    const result = await getDonorAccessState({ id: 'user1', role: 'USER' });
+    const result = await getDonorAccessState({
+      id: 'user1',
+      role: 'USER',
+      email: 'reader@example.com',
+    });
 
     expect(result.hasAccess).toBe(true);
     expect(result.isDonor).toBe(true);
     expect(result.requiresDonation).toBe(false);
+  });
+
+  it('recognizes completed guest donations again after the user signs in with the same email', async () => {
+    prisma.donation.findFirst.mockResolvedValue({ id: 'donation-email-linked' });
+
+    const result = await getDonorAccessState({
+      id: 'user-linked',
+      role: 'USER',
+      email: 'guest@example.com',
+    });
+
+    expect(result.hasAccess).toBe(true);
+    expect(result.isDonor).toBe(true);
+    expect(prisma.donation.findFirst).toHaveBeenCalledWith({
+      where: {
+        status: 'COMPLETED',
+        OR: [
+          { userId: 'user-linked' },
+          {
+            donorEmail: {
+              equals: 'guest@example.com',
+              mode: 'insensitive',
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+      },
+    });
   });
 
   it('grants donor narration access to privileged users without donation checks', async () => {

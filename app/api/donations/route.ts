@@ -6,12 +6,16 @@ import {
 } from '@/lib/donation-quote';
 import {
   buildPaystackReference,
+  createPaystackPlan,
   createPayPalOrder,
+  createPayPalSubscription,
   initializePaystackTransaction,
   resolvePublicAppOrigin,
 } from '@/lib/donation-payments';
 import {
   DEFAULT_DONATION_GATEWAY,
+  DEFAULT_DONATION_FREQUENCY,
+  isDonationFrequency,
   isDonationGateway,
   isSupportedDonationCurrency,
   normalizeDonationCurrency,
@@ -28,6 +32,9 @@ export async function POST(req: NextRequest) {
   const gateway = isDonationGateway(body.gateway)
     ? body.gateway
     : DEFAULT_DONATION_GATEWAY;
+  const frequency = isDonationFrequency(body.frequency)
+    ? body.frequency
+    : DEFAULT_DONATION_FREQUENCY;
   const donorCurrency = normalizeDonationCurrency(body.currency);
   const donorEmailFromBody = typeof body.donorEmail === 'string' ? body.donorEmail.trim() : '';
 
@@ -69,8 +76,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  let pendingDonationId: string | null = null;
+
   try {
-    const donorEmail = session?.user?.email?.trim() || donorEmailFromBody || null;
+    const donorEmail = (session?.user?.email?.trim() || donorEmailFromBody || '').toLowerCase() || null;
     const quote = await createDonationQuote({
       amount,
       donorCurrency,
@@ -90,52 +99,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const baseUrl = resolvePublicAppOrigin(req);
-    const description = book ? `Support for “${book.title}”` : 'General donation';
-
-    let gatewayAmount = quotedGatewayAmount;
-    let paypalId: string | undefined;
-    let paystackReference: string | undefined;
-    let checkoutUrl: string;
-
-    if (gateway === 'PAYPAL') {
-      const order = await createPayPalOrder({
-        amount: baseAmount,
-        description,
-        returnUrl: `${baseUrl}/api/donations/success`,
-        cancelUrl: `${baseUrl}/api/donations/cancel`,
-      });
-
-      paypalId = order.orderId;
-      checkoutUrl = order.approvalUrl;
-    } else {
-      if (!donorEmail) {
-        return NextResponse.json(
-          { error: 'Paystack needs an email address before checkout can begin.' },
-          { status: 400 }
-        );
-      }
-
-      const paystackTransaction = await initializePaystackTransaction({
-        amount: gatewayAmount,
-        email: donorEmail,
-        reference: buildPaystackReference(),
-        description,
-        callbackUrl: `${baseUrl}/api/donations/paystack/callback`,
-        metadata: {
-          bookId: book?.id ?? null,
-          donorAmount: roundedDonorAmount.toFixed(2),
-          donorCurrency,
-          baseAmount: baseAmount.toFixed(2),
-          baseCurrency: DONATION_BASE_CURRENCY,
-        },
-      });
-
-      paystackReference = paystackTransaction.reference;
-      checkoutUrl = paystackTransaction.authorizationUrl;
+    if (gateway === 'PAYSTACK' && !donorEmail) {
+      return NextResponse.json(
+        { error: 'Paystack needs an email address before checkout can begin.' },
+        { status: 400 }
+      );
     }
 
-    await prisma.donation.create({
+    const baseUrl = resolvePublicAppOrigin(req);
+    const description = book
+      ? frequency === 'MONTHLY'
+        ? `Monthly support for “${book.title}”`
+        : `Support for “${book.title}”`
+      : frequency === 'MONTHLY'
+        ? 'Monthly donation'
+        : 'General donation';
+
+    const pendingDonation = await prisma.donation.create({
       data: {
         userId: session?.user?.id,
         donorEmail,
@@ -145,17 +125,110 @@ export async function POST(req: NextRequest) {
         donorAmount: roundedDonorAmount,
         donorCurrency,
         gateway,
-        gatewayAmount,
+        frequency,
+        gatewayAmount: quotedGatewayAmount,
         gatewayCurrency,
-        paypalId,
-        paystackReference,
         status: 'PENDING',
       },
+      select: {
+        id: true,
+      },
     });
+
+    pendingDonationId = pendingDonation.id;
+
+    const buildGatewayReturnUrl = (pathname: string) => {
+      const url = new URL(pathname, baseUrl);
+      url.searchParams.set('donationId', pendingDonation.id);
+      url.searchParams.set('frequency', frequency);
+      return url.toString();
+    };
+
+    let gatewayAmount = quotedGatewayAmount;
+    let checkoutUrl: string;
+
+    if (gateway === 'PAYPAL') {
+      if (frequency === 'MONTHLY') {
+        const subscription = await createPayPalSubscription({
+          amount: baseAmount,
+          description,
+          returnUrl: buildGatewayReturnUrl('/api/donations/success'),
+          cancelUrl: buildGatewayReturnUrl('/api/donations/cancel'),
+          customId: pendingDonation.id,
+          subscriberEmail: donorEmail ?? undefined,
+        });
+
+        await prisma.donation.update({
+          where: { id: pendingDonation.id },
+          data: {
+            paypalId: subscription.subscriptionId,
+          },
+        });
+
+        checkoutUrl = subscription.approvalUrl;
+      } else {
+        const order = await createPayPalOrder({
+          amount: baseAmount,
+          description,
+          returnUrl: buildGatewayReturnUrl('/api/donations/success'),
+          cancelUrl: buildGatewayReturnUrl('/api/donations/cancel'),
+        });
+
+        await prisma.donation.update({
+          where: { id: pendingDonation.id },
+          data: {
+            paypalId: order.orderId,
+          },
+        });
+
+        checkoutUrl = order.approvalUrl;
+      }
+    } else {
+      const paystackPlan = frequency === 'MONTHLY'
+        ? await createPaystackPlan({
+            amount: gatewayAmount,
+            name: book
+              ? `One Man Revolution Monthly Support · ${book.title}`
+              : 'One Man Revolution Monthly Support',
+            description: `${description} · Donation ${pendingDonation.id}`,
+          })
+        : null;
+
+      const paystackTransaction = await initializePaystackTransaction({
+        amount: gatewayAmount,
+        email: donorEmail,
+        reference: buildPaystackReference(),
+        description,
+        callbackUrl: buildGatewayReturnUrl('/api/donations/paystack/callback'),
+        planCode: paystackPlan?.planCode,
+        metadata: {
+          donationId: pendingDonation.id,
+          bookId: book?.id ?? null,
+          donorAmount: roundedDonorAmount.toFixed(2),
+          donorCurrency,
+          baseAmount: baseAmount.toFixed(2),
+          baseCurrency: DONATION_BASE_CURRENCY,
+          frequency,
+          gateway,
+          ...(paystackPlan ? { paystackPlanCode: paystackPlan.planCode } : {}),
+        },
+      });
+
+      await prisma.donation.update({
+        where: { id: pendingDonation.id },
+        data: {
+          paystackReference: paystackTransaction.reference,
+          ...(paystackPlan ? { paystackPlanCode: paystackPlan.planCode } : {}),
+        },
+      });
+
+      checkoutUrl = paystackTransaction.authorizationUrl;
+    }
 
     return NextResponse.json({
       checkoutUrl,
       gateway,
+      frequency,
       baseAmount,
       baseCurrency: DONATION_BASE_CURRENCY,
       gatewayAmount,
@@ -163,6 +236,16 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('Donation error:', error);
+
+    if (pendingDonationId) {
+      await prisma.donation
+        .update({
+          where: { id: pendingDonationId },
+          data: { status: 'FAILED' },
+        })
+        .catch(() => undefined);
+    }
+
     return NextResponse.json(
       {
         error:

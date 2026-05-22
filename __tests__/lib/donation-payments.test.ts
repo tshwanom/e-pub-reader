@@ -1,11 +1,15 @@
 import {
   buildPaystackReference,
   buildDonationDestination,
+  getPayPalDonorEmail,
+  isPayPalSubscriptionId,
   isSuccessfulPayPalCapture,
+  isSuccessfulPayPalSubscription,
   isSuccessfulPaystackVerification,
   resolvePublicAppOrigin,
   toPaystackMinorUnits,
   type PayPalCaptureResponse,
+  type PayPalSubscriptionResponse,
   type PaystackVerificationResponse,
 } from '@/lib/donation-payments';
 
@@ -48,6 +52,29 @@ describe('donation payment helpers', () => {
     expect(reference).toMatch(/^[-.=A-Za-z0-9]+$/);
     expect(reference).not.toContain('_');
     expect(reference).toContain('omr-don-');
+  });
+
+  it('detects PayPal subscription identifiers and extracts donor email addresses', () => {
+    expect(isPayPalSubscriptionId('I-SUBSCRIPTION-123')).toBe(true);
+    expect(isPayPalSubscriptionId('ORDER-123')).toBe(false);
+
+    expect(
+      getPayPalDonorEmail({
+        payer: {
+          email_address: 'Reader@Example.com',
+        },
+      })
+    ).toBe('reader@example.com');
+
+    expect(
+      getPayPalDonorEmail({
+        resource: {
+          subscriber: {
+            email_address: 'Subscriber@example.com',
+          },
+        },
+      })
+    ).toBe('subscriber@example.com');
   });
 
   it('converts Paystack amounts into minor currency units', () => {
@@ -113,6 +140,44 @@ describe('donation payment helpers', () => {
         captureData,
         expectedAmount: 10,
         expectedCurrency: 'ZAR',
+      })
+    ).toBe(false);
+  });
+
+  it('validates an active PayPal subscription against the stored recurring amount', () => {
+    const subscriptionData: PayPalSubscriptionResponse = {
+      status: 'ACTIVE',
+      plan: {
+        billing_cycles: [
+          {
+            tenure_type: 'REGULAR',
+            pricing_scheme: {
+              fixed_price: {
+                currency_code: 'USD',
+                value: '10',
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    expect(
+      isSuccessfulPayPalSubscription({
+        subscriptionData,
+        expectedAmount: 10,
+        expectedCurrency: 'USD',
+      })
+    ).toBe(true);
+
+    expect(
+      isSuccessfulPayPalSubscription({
+        subscriptionData: {
+          ...subscriptionData,
+          status: 'APPROVAL_PENDING',
+        },
+        expectedAmount: 10,
+        expectedCurrency: 'USD',
       })
     ).toBe(false);
   });

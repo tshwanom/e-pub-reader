@@ -1,20 +1,48 @@
-import { createDonationQuote } from '@/lib/donation-quote';
+import { createDonationPresetOptions, createDonationQuote } from '@/lib/donation-quote';
 import {
+  convertBaseCurrencyToDonationCurrency,
   convertBaseCurrencyToPaystack,
   convertDonationAmountToBaseCurrency,
 } from '@/lib/currency-beacon';
 
 jest.mock('@/lib/currency-beacon', () => ({
+  convertBaseCurrencyToDonationCurrency: jest.fn(),
   convertDonationAmountToBaseCurrency: jest.fn(),
   convertBaseCurrencyToPaystack: jest.fn(),
 }));
 
+const mockConvertBaseCurrencyToDonationCurrency = convertBaseCurrencyToDonationCurrency as jest.MockedFunction<typeof convertBaseCurrencyToDonationCurrency>;
 const mockConvertDonationAmountToBaseCurrency = convertDonationAmountToBaseCurrency as jest.MockedFunction<typeof convertDonationAmountToBaseCurrency>;
 const mockConvertBaseCurrencyToPaystack = convertBaseCurrencyToPaystack as jest.MockedFunction<typeof convertBaseCurrencyToPaystack>;
 
 describe('createDonationQuote', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('converts the canonical USD tiers into the selected donor currency for preset buttons', async () => {
+    mockConvertBaseCurrencyToDonationCurrency
+      .mockResolvedValueOnce(91.25)
+      .mockResolvedValueOnce(182.5)
+      .mockResolvedValueOnce(456.25)
+      .mockResolvedValueOnce(912.5);
+
+    await expect(
+      createDonationPresetOptions({
+        donorCurrency: 'ZAR',
+      })
+    ).resolves.toEqual({
+      donorCurrency: 'ZAR',
+      baseCurrency: 'USD',
+      baseSuggestedAmounts: [5, 10, 25, 50],
+      suggestedAmounts: [91.25, 182.5, 456.25, 912.5],
+      defaultAmount: 182.5,
+    });
+
+    expect(mockConvertBaseCurrencyToDonationCurrency).toHaveBeenNthCalledWith(1, 5, 'ZAR');
+    expect(mockConvertBaseCurrencyToDonationCurrency).toHaveBeenNthCalledWith(2, 10, 'ZAR');
+    expect(mockConvertBaseCurrencyToDonationCurrency).toHaveBeenNthCalledWith(3, 25, 'ZAR');
+    expect(mockConvertBaseCurrencyToDonationCurrency).toHaveBeenNthCalledWith(4, 50, 'ZAR');
   });
 
   it('keeps PayPal USD donations in the base currency without extra conversion', async () => {

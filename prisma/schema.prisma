@@ -208,10 +208,14 @@ model Donation {
   donorCurrency String?
   donorEmail String?
   gateway   DonationGateway @default(PAYPAL)
+  frequency DonationFrequency @default(ONE_TIME)
   gatewayAmount Decimal?   @db.Decimal(10, 2)
   gatewayCurrency String?
   paypalId  String?        @unique
   paystackReference String? @unique
+  paystackPlanCode String?
+  paystackSubscriptionCode String? @unique
+  paystackCustomerCode String?
   status    DonationStatus
   createdAt DateTime       @default(now())
 }
@@ -358,6 +362,11 @@ enum DonationStatus {
 enum DonationGateway {
   PAYPAL
   PAYSTACK
+}
+
+enum DonationFrequency {
+  ONE_TIME
+  MONTHLY
 }
 
 model SiteSettings {

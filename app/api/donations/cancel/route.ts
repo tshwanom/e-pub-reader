@@ -3,14 +3,23 @@ import { buildDonationDestination } from '@/lib/donation-payments';
 import { prisma } from '@/lib/prisma';
 
 export async function GET(request: NextRequest) {
-  const orderId = request.nextUrl.searchParams.get('token');
+  const donationId = request.nextUrl.searchParams.get('donationId');
+  const paypalReference =
+    request.nextUrl.searchParams.get('subscription_id')
+    || request.nextUrl.searchParams.get('token')
+    || request.nextUrl.searchParams.get('ba_token');
 
-  if (!orderId) {
+  if (!donationId && !paypalReference) {
     return NextResponse.redirect(buildDonationDestination(request, null, 'failed'));
   }
 
-  const donation = await prisma.donation.findUnique({
-    where: { paypalId: orderId },
+  const donation = await prisma.donation.findFirst({
+    where: {
+      OR: [
+        ...(donationId ? [{ id: donationId }] : []),
+        ...(paypalReference ? [{ paypalId: paypalReference }] : []),
+      ],
+    },
     select: {
       id: true,
       bookId: true,
@@ -27,7 +36,10 @@ export async function GET(request: NextRequest) {
     await prisma.donation
       .update({
         where: { id: donation.id },
-        data: { status: 'FAILED' },
+        data: {
+          status: 'FAILED',
+          ...(paypalReference ? { paypalId: paypalReference } : {}),
+        },
       })
       .catch(() => undefined);
   }

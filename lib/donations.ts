@@ -44,7 +44,7 @@ const CURRENCY_FLAG_OVERRIDES = {
   ZAR: '🇿🇦',
 } as const satisfies Partial<Record<string, string>>;
 
-const FALLBACK_SUGGESTED_DONATION_AMOUNTS = [5, 10, 25, 50] as const;
+export const DONATION_PRESET_BASE_AMOUNTS = [5, 10, 25, 50] as const;
 
 const LOCALE_REGION_TO_CURRENCY = {
   AE: 'AED',
@@ -87,29 +87,6 @@ const LOCALE_REGION_TO_CURRENCY = {
   ZA: 'ZAR',
 } as const satisfies Record<string, string>;
 
-const SUGGESTED_DONATION_AMOUNTS = {
-  AED: [20, 50, 100, 250],
-  AUD: [10, 25, 50, 100],
-  BWP: [50, 100, 250, 500],
-  CAD: [10, 25, 50, 100],
-  CHF: [5, 10, 25, 50],
-  CNY: [30, 60, 150, 300],
-  EUR: [5, 10, 25, 50],
-  GBP: [5, 10, 25, 50],
-  GHS: [50, 100, 250, 500],
-  INR: [200, 500, 1000, 2500],
-  JPY: [500, 1000, 2500, 5000],
-  KES: [500, 1000, 2500, 5000],
-  NAD: [50, 100, 250, 500],
-  NGN: [5000, 10000, 25000, 50000],
-  NZD: [10, 25, 50, 100],
-  SAR: [20, 50, 100, 250],
-  TZS: [5000, 10000, 25000, 50000],
-  UGX: [20000, 50000, 100000, 200000],
-  USD: [5, 10, 25, 50],
-  ZAR: [50, 100, 250, 500],
-} as const satisfies Partial<Record<string, readonly number[]>>;
-
 type IntlWithSupportedValuesOf = typeof Intl & {
   supportedValuesOf?: (key: string) => string[];
 };
@@ -118,9 +95,11 @@ export const DONATION_BASE_CURRENCY = 'USD';
 export const PAYSTACK_CHECKOUT_CURRENCY = 'ZAR';
 export const DEFAULT_DONATION_CURRENCY = DONATION_BASE_CURRENCY;
 export const DEFAULT_DONATION_GATEWAY = 'PAYPAL';
+export const DEFAULT_DONATION_FREQUENCY = 'ONE_TIME';
 export const POPULAR_DONATION_CURRENCIES = PRIORITY_CURRENCIES.slice(0, 10);
 
 export type DonationGateway = 'PAYPAL' | 'PAYSTACK';
+export type DonationFrequency = 'ONE_TIME' | 'MONTHLY';
 
 export interface DonationCurrencyOption {
   code: string;
@@ -140,6 +119,14 @@ export interface DonationQuoteSummary {
   gateway: DonationGateway;
 }
 
+export interface DonationPresetOptions {
+  donorCurrency: string;
+  baseCurrency: string;
+  baseSuggestedAmounts: number[];
+  suggestedAmounts: number[];
+  defaultAmount: number;
+}
+
 export const DONATION_GATEWAYS = [
   {
     id: 'PAYPAL',
@@ -150,7 +137,7 @@ export const DONATION_GATEWAYS = [
   {
     id: 'PAYSTACK',
     label: 'Paystack',
-    description: 'Paystack checkout is created in ZAR after a live conversion from the system USD base.',
+    description: 'Paystack checkout is created in ZAR after a live conversion from the system USD base, including recurring monthly support.',
     checkoutCurrency: PAYSTACK_CHECKOUT_CURRENCY,
   },
 ] as const satisfies ReadonlyArray<{
@@ -158,6 +145,23 @@ export const DONATION_GATEWAYS = [
   label: string;
   description: string;
   checkoutCurrency: string;
+}>;
+
+export const DONATION_FREQUENCY_OPTIONS = [
+  {
+    id: 'ONE_TIME',
+    label: 'One-time',
+    description: 'A single donation today.',
+  },
+  {
+    id: 'MONTHLY',
+    label: 'Monthly',
+    description: 'Recurring monthly support through PayPal or Paystack.',
+  },
+] as const satisfies ReadonlyArray<{
+  id: DonationFrequency;
+  label: string;
+  description: string;
 }>;
 
 function buildDonationCurrencyOptions() {
@@ -271,16 +275,16 @@ export function isDonationGateway(value?: string | null): value is DonationGatew
   return value === 'PAYPAL' || value === 'PAYSTACK';
 }
 
+export function isDonationFrequency(value?: string | null): value is DonationFrequency {
+  return value === 'ONE_TIME' || value === 'MONTHLY';
+}
+
 export function isSupportedDonationCurrency(currency?: string | null) {
   return DONATION_CURRENCY_SET.has(normalizeDonationCurrency(currency));
 }
 
 export function getSuggestedDonationAmounts(currency?: string | null) {
-  const normalizedCurrency = normalizeDonationCurrency(currency);
-  const suggestedAmounts = SUGGESTED_DONATION_AMOUNTS[normalizedCurrency as keyof typeof SUGGESTED_DONATION_AMOUNTS]
-    ?? FALLBACK_SUGGESTED_DONATION_AMOUNTS;
-
-  return [...suggestedAmounts];
+  return [...DONATION_PRESET_BASE_AMOUNTS];
 }
 
 export function getDefaultDonationAmount(currency?: string | null) {
@@ -300,6 +304,17 @@ export function formatDonationGatewayLabel(gateway?: string | null) {
       return 'Paystack';
     default:
       return gateway?.trim() || '';
+  }
+}
+
+export function formatDonationFrequencyLabel(frequency?: string | null) {
+  switch (frequency) {
+    case 'MONTHLY':
+      return 'Monthly';
+    case 'ONE_TIME':
+      return 'One-time';
+    default:
+      return frequency?.trim() || '';
   }
 }
 

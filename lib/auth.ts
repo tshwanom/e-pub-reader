@@ -1,40 +1,60 @@
-import { getServerSession } from "next-auth/next"
-import { type GetServerSidePropsContext, type NextApiRequest, type NextApiResponse } from "next"
-import { NextAuthOptions } from "next-auth";
-import CredentialsProvider from "next-auth/providers/credentials";
-import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import { PrismaClient } from "@prisma/client";
-import { compare } from "bcryptjs";
-
-// PrismaClient is attached to the `global` object in development to prevent
-// exhausting your database connection limit.
-// We'll reuse the existing client if available (likely in lib/prisma.ts, but let's check or create it)
-// Checking existing lib/prisma.ts content first is good practice, but for now I'll assume standard setup or create it.
-import { prisma } from "@/lib/prisma";
+import { compare } from 'bcryptjs';
+import { type GetServerSidePropsContext, type NextApiRequest, type NextApiResponse } from 'next';
+import { getServerSession } from 'next-auth/next';
+import { NextAuthOptions } from 'next-auth';
+import { PrismaAdapter } from '@next-auth/prisma-adapter';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import EmailProvider from 'next-auth/providers/email';
+import {
+  generateMagicLoginCode,
+  MAGIC_LOGIN_MAX_AGE_MINUTES,
+  normalizeAuthEmail,
+  sendMagicLoginEmail,
+} from '@/lib/auth-email';
+import { prisma } from '@/lib/prisma';
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   session: {
-    strategy: "jwt",
+    strategy: 'jwt',
   },
   pages: {
-    signIn: "/login", // Custom login page (we need to create this)
+    signIn: '/login',
   },
   providers: [
+    EmailProvider({
+      from: process.env.RESEND_FROM_EMAIL,
+      maxAge: MAGIC_LOGIN_MAX_AGE_MINUTES * 60,
+      normalizeIdentifier(identifier) {
+        return normalizeAuthEmail(identifier);
+      },
+      async generateVerificationToken() {
+        return generateMagicLoginCode();
+      },
+      async sendVerificationRequest({ identifier, url, token }) {
+        await sendMagicLoginEmail({
+          identifier,
+          url,
+          token,
+        });
+      },
+    }),
     CredentialsProvider({
-      name: "Credentials",
+      name: 'Credentials',
       credentials: {
-        email: { label: "Email", type: "email", placeholder: "hello@example.com" },
-        password: { label: "Password", type: "password" }
+        email: { label: 'Email', type: 'email', placeholder: 'hello@example.com' },
+        password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
 
+        const email = normalizeAuthEmail(credentials.email);
+
         const user = await prisma.user.findUnique({
           where: {
-            email: credentials.email,
+            email,
           },
         });
 
@@ -52,10 +72,10 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           name: user.name,
           email: user.email,
-          role: user.role, // We want this in the session
+          role: user.role,
         };
-      }
-    })
+      },
+    }),
   ],
   callbacks: {
     async session({ session, token }) {
@@ -68,22 +88,22 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
-        token.role = user.role;
+        token.role = user.role || token.role || 'READER';
       }
-      // Support updating session (e.g. role change)
+
       if (trigger === "update" && session) {
-        token = { ...token, ...session }
+        token = { ...token, ...session };
       }
       return token;
-    }
-  }
+    },
+  },
 };
 
-export function auth( // Helper to get session server-side
+export function auth(
   ...args:
     | [GetServerSidePropsContext["req"], GetServerSidePropsContext["res"]]
     | [NextApiRequest, NextApiResponse]
     | []
 ) {
-  return getServerSession(...args, authOptions)
+  return getServerSession(...args, authOptions);
 }

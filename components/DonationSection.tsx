@@ -5,16 +5,21 @@ import { X } from 'lucide-react';
 import CurrencyPicker from '@/components/CurrencyPicker';
 import {
   DEFAULT_DONATION_CURRENCY,
+  DEFAULT_DONATION_FREQUENCY,
   DEFAULT_DONATION_GATEWAY,
   DONATION_BASE_CURRENCY,
   DONATION_CURRENCY_OPTIONS,
+  DONATION_FREQUENCY_OPTIONS,
   DONATION_GATEWAYS,
   detectDonationCurrencyFromLocale,
   formatCurrencyAmount,
+  formatDonationFrequencyLabel,
   getDefaultDonationAmount,
   getSuggestedDonationAmounts,
   isSupportedDonationCurrency,
   normalizeDonationCurrency,
+  type DonationFrequency,
+  type DonationPresetOptions,
   type DonationGateway,
   type DonationQuoteSummary,
 } from '@/lib/donations';
@@ -39,6 +44,10 @@ interface DonationSectionProps {
   currentUserEmail?: string | null;
 }
 
+type DonationPresetOptionsResponse = DonationPresetOptions & {
+  quotedAt: string;
+};
+
 export default function DonationSection({
   bookId,
   bookTitle,
@@ -56,6 +65,7 @@ export default function DonationSection({
   const [displayLocale, setDisplayLocale] = useState('en-US');
   const [isCurrencyReady, setIsCurrencyReady] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [frequency, setFrequency] = useState<DonationFrequency>(DEFAULT_DONATION_FREQUENCY);
   const [gateway, setGateway] = useState<DonationGateway>(DEFAULT_DONATION_GATEWAY);
   const [donorEmail, setDonorEmail] = useState(currentUserEmail ?? '');
   const [loading, setLoading] = useState(false);
@@ -63,6 +73,11 @@ export default function DonationSection({
   const [quote, setQuote] = useState<DonationQuoteSummary | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [suggestedAmounts, setSuggestedAmounts] = useState<number[]>(
+    getSuggestedDonationAmounts(DEFAULT_DONATION_CURRENCY)
+  );
+  const [suggestedAmountsLoading, setSuggestedAmountsLoading] = useState(false);
+  const [suggestedAmountsError, setSuggestedAmountsError] = useState<string | null>(null);
 
   useEffect(() => {
     const browserLocales = typeof navigator === 'undefined'
@@ -98,14 +113,14 @@ export default function DonationSection({
     }
 
     setErrorMessage(null);
-  }, [amount, currency, donorEmail, gateway, isCurrencyReady]);
+  }, [amount, currency, donorEmail, frequency, gateway, isCurrencyReady]);
 
-  const suggestedAmounts = useMemo(
-    () => getSuggestedDonationAmounts(currency).map((preset) => ({
+  const suggestedAmountButtons = useMemo(
+    () => suggestedAmounts.map((preset) => ({
       value: preset.toString(),
       label: formatCurrencyAmount(preset, currency, displayLocale),
     })),
-    [currency, displayLocale]
+    [currency, displayLocale, suggestedAmounts]
   );
 
   const selectedGateway = DONATION_GATEWAYS.find((option) => option.id === gateway) ?? DONATION_GATEWAYS[0];
@@ -114,6 +129,9 @@ export default function DonationSection({
   const numericAmount = Number(amount);
   const hasValidAmount = Number.isFinite(numericAmount) && numericAmount >= 1;
   const donateButtonLabel = donorOnly ? 'Donate to unlock' : 'Open donation';
+  const checkoutButtonLabel = frequency === 'MONTHLY'
+    ? `Start monthly support with ${selectedGateway.label}`
+    : `Continue to ${selectedGateway.label}`;
   const minimumEquivalentError = quote && quote.baseAmount < 1
     ? 'Minimum donation is the equivalent of USD 1.00.'
     : null;
@@ -121,6 +139,62 @@ export default function DonationSection({
     || !hasValidAmount
     || Boolean(minimumEquivalentError)
     || (requiresPaystackEmail && !donorEmail.trim());
+
+  useEffect(() => {
+    if (!isCurrencyReady || !isModalOpen) {
+      setSuggestedAmountsLoading(false);
+      setSuggestedAmountsError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const shouldResetAmount = amount.trim().length === 0
+      || suggestedAmounts.some((preset) => preset.toString() === amount);
+
+    const syncPresetOptions = async () => {
+      setSuggestedAmountsLoading(true);
+      setSuggestedAmountsError(null);
+
+      try {
+        const params = new URLSearchParams({ currency });
+        const response = await fetch(`/api/donations/options?${params.toString()}`, {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        const payload = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          throw new Error(payload?.error || 'Unable to refresh the live donation presets.');
+        }
+
+        const options = payload as DonationPresetOptionsResponse;
+        setSuggestedAmounts(options.suggestedAmounts);
+
+        if (shouldResetAmount) {
+          setAmount(String(options.defaultAmount));
+        }
+      } catch (error) {
+        if (isAbortError(error)) {
+          return;
+        }
+
+        setSuggestedAmounts(getSuggestedDonationAmounts(currency));
+        setSuggestedAmountsError(
+          error instanceof Error
+            ? error.message
+            : 'Unable to refresh the live donation presets.'
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setSuggestedAmountsLoading(false);
+        }
+      }
+    };
+
+    void syncPresetOptions();
+
+    return () => controller.abort();
+  }, [currency, isCurrencyReady, isModalOpen]);
 
   useEffect(() => {
     if (!isCurrencyReady || !isModalOpen || !hasValidAmount) {
@@ -242,32 +316,19 @@ export default function DonationSection({
 
   const handleCurrencyChange = (nextCurrencyValue: string) => {
     const nextCurrency = normalizeDonationCurrency(nextCurrencyValue);
-    const shouldResetAmount = amount.trim().length === 0
-      || suggestedAmounts.some((preset) => preset.value === amount);
 
     setCurrency(nextCurrency);
 
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(DONATION_CURRENCY_STORAGE_KEY, nextCurrency);
     }
-
-    if (shouldResetAmount) {
-      setAmount(String(getDefaultDonationAmount(nextCurrency)));
-    }
   };
 
   const handleUseDetectedCurrency = () => {
-    const shouldResetAmount = amount.trim().length === 0
-      || suggestedAmounts.some((preset) => preset.value === amount);
-
     setCurrency(detectedCurrency);
 
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(DONATION_CURRENCY_STORAGE_KEY);
-    }
-
-    if (shouldResetAmount) {
-      setAmount(String(getDefaultDonationAmount(detectedCurrency)));
     }
   };
 
@@ -298,6 +359,7 @@ export default function DonationSection({
           bookId,
           amount: numericAmount,
           currency,
+          frequency,
           gateway,
           donorEmail: donorEmail.trim() || undefined,
         }),
@@ -330,6 +392,54 @@ export default function DonationSection({
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]">
         <div className="space-y-4">
+          <div className="surface-muted p-3">
+            <div className="mb-2.5 flex items-center justify-between gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-landing-text-muted">
+                Support cadence
+              </p>
+              <span className="rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-landing-text-muted shadow-sm">
+                {formatDonationFrequencyLabel(frequency)}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {DONATION_FREQUENCY_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={frequency === option.id}
+                  onClick={() => setFrequency(option.id)}
+                  className={`rounded-xl border px-3 py-2.5 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
+                    frequency === option.id
+                      ? 'border-landing-accent bg-white shadow-sm ring-1 ring-landing-accent/10'
+                      : 'border-landing-border/90 bg-white/85 hover:border-landing-accent/35 hover:bg-white'
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <span
+                      aria-hidden="true"
+                      className={`mt-1 h-2.5 w-2.5 rounded-full transition-colors ${
+                        frequency === option.id
+                          ? 'bg-landing-accent'
+                          : 'bg-landing-border'
+                      }`}
+                    />
+                    <div className="min-w-0">
+                      <span className="block text-sm font-semibold text-landing-text">{option.label}</span>
+                      <p className="mt-1 text-[11px] leading-5 text-landing-text-muted">
+                        {option.description}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <p className="mt-3 text-xs leading-5 text-landing-text-muted">
+              Any completed donation unlocks donor-only books on this signed-in account — or on the same email when you sign in later.
+            </p>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_220px]">
             <div>
               <label htmlFor="donation-amount" className="mb-2 block text-sm font-medium text-landing-text">
@@ -363,8 +473,25 @@ export default function DonationSection({
             </div>
           </div>
 
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-landing-text-muted">
+                Live presets
+              </p>
+              <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+                suggestedAmountsLoading
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-white/85 text-landing-text-muted shadow-sm'
+              }`}>
+                {suggestedAmountsLoading ? 'Refreshing…' : 'USD 5 · 10 · 25 · 50'}
+              </span>
+            </div>
+            <p className="text-xs leading-5 text-landing-text-muted">
+              Preset buttons are the live {currency} equivalents of the fixed USD 5, 10, 25, and 50 support tiers.
+            </p>
+
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            {suggestedAmounts.map((preset) => (
+            {suggestedAmountButtons.map((preset) => (
               <button
                 key={preset.value}
                 type="button"
@@ -378,6 +505,7 @@ export default function DonationSection({
                 {preset.label}
               </button>
             ))}
+          </div>
           </div>
 
           {requiresPaystackEmail ? (
@@ -412,43 +540,51 @@ export default function DonationSection({
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              {DONATION_GATEWAYS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  aria-pressed={gateway === option.id}
-                  onClick={() => setGateway(option.id)}
-                  className={`rounded-xl border px-3 py-2.5 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
-                    gateway === option.id
-                      ? 'border-landing-accent bg-white shadow-sm ring-1 ring-landing-accent/10'
-                      : 'border-landing-border/90 bg-white/85 hover:border-landing-accent/35 hover:bg-white'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span
-                          aria-hidden="true"
-                          className={`h-2.5 w-2.5 rounded-full transition-colors ${
-                            gateway === option.id
-                              ? 'bg-landing-accent'
-                              : 'bg-landing-border'
-                          }`}
-                        />
-                        <span className="truncate text-sm font-semibold text-landing-text">{option.label}</span>
+              {DONATION_GATEWAYS.map((option) => {
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    aria-pressed={gateway === option.id}
+                    onClick={() => setGateway(option.id)}
+                    className={`rounded-xl border px-3 py-2.5 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
+                      gateway === option.id
+                        ? 'border-landing-accent bg-white shadow-sm ring-1 ring-landing-accent/10'
+                        : 'border-landing-border/90 bg-white/85 hover:border-landing-accent/35 hover:bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span
+                            aria-hidden="true"
+                            className={`h-2.5 w-2.5 rounded-full transition-colors ${
+                              gateway === option.id
+                                ? 'bg-landing-accent'
+                                : 'bg-landing-border'
+                            }`}
+                          />
+                          <span className="truncate text-sm font-semibold text-landing-text">{option.label}</span>
+                        </div>
+                        <p className="mt-1 pl-[1.125rem] text-[10px] font-semibold uppercase tracking-[0.16em] text-landing-text-muted">
+                          {option.checkoutCurrency}
+                        </p>
                       </div>
-                      <p className="mt-1 pl-[1.125rem] text-[10px] font-semibold uppercase tracking-[0.16em] text-landing-text-muted">
-                        {option.checkoutCurrency}
-                      </p>
-                    </div>
 
-                    <span className="rounded-full bg-landing-surface-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-landing-text-muted">
-                      {option.checkoutCurrency}
-                    </span>
-                  </div>
-                </button>
-              ))}
+                      <span className="rounded-full bg-landing-surface-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-landing-text-muted">
+                        {option.checkoutCurrency}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
+
+            {frequency === 'MONTHLY' ? (
+              <p className="mt-2 text-xs leading-5 text-landing-text-muted">
+                Monthly recurring support is available through PayPal and Paystack. Paystack recurring checkouts are billed in ZAR.
+              </p>
+            ) : null}
           </div>
 
           <div className="surface-muted p-3.5">
@@ -461,7 +597,7 @@ export default function DonationSection({
                   ? 'bg-amber-100 text-amber-700'
                   : 'bg-emerald-100 text-emerald-700'
               }`}>
-                {quoteLoading ? 'Refreshing…' : 'Live'}
+                {quoteLoading ? 'Refreshing…' : formatDonationFrequencyLabel(frequency)}
               </span>
             </div>
 
@@ -474,7 +610,7 @@ export default function DonationSection({
                   {formatCurrencyAmount(hasValidAmount ? numericAmount : 0, currency, displayLocale)}
                 </p>
                 <p className="mt-1 text-xs text-landing-text-muted">
-                  {selectedCurrency?.name ?? currency}
+                  {selectedCurrency?.name ?? currency} · {frequency === 'MONTHLY' ? 'Billed every month' : 'Single contribution'}
                 </p>
               </div>
 
@@ -488,12 +624,21 @@ export default function DonationSection({
                     : '—'}
                 </p>
                 <p className="mt-1 text-xs text-landing-text-muted">
-                  {quote ? `Charged in ${quote.gatewayCurrency}` : 'Waiting for rate'}
+                  {quote
+                    ? frequency === 'MONTHLY'
+                      ? `Billed monthly in ${quote.gatewayCurrency}`
+                      : `Charged in ${quote.gatewayCurrency}`
+                    : 'Waiting for rate'}
                 </p>
               </div>
             </div>
 
             <div className="mt-2.5 space-y-2 text-xs leading-5 text-landing-text-muted">
+              {suggestedAmountsError ? (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
+                  {suggestedAmountsError}
+                </p>
+              ) : null}
               {quoteError ? (
                 <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
                   {quoteError}
@@ -513,7 +658,11 @@ export default function DonationSection({
             disabled={disableCheckout}
             className="brand-button w-full px-5 py-3 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading ? 'Preparing checkout…' : `Continue to ${selectedGateway.label}`}
+            {loading
+              ? frequency === 'MONTHLY'
+                ? 'Preparing recurring checkout…'
+                : 'Preparing checkout…'
+              : checkoutButtonLabel}
           </button>
         </div>
       </div>
@@ -591,7 +740,7 @@ export default function DonationSection({
                   Support “{bookTitle}”
                 </h2>
                 <p id={donationModalDescriptionId} className="mt-1 text-xs text-landing-text-muted sm:text-sm">
-                  Pick an amount, currency, and gateway.
+                  Pick one-time or monthly support, then choose the amount, currency, and checkout option.
                 </p>
               </div>
 

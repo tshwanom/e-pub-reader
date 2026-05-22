@@ -17,7 +17,7 @@ export default async function LandingPage() {
 
   try {
     session = await getServerSession(authOptions);
-    isDonor = await isUserDonor(session?.user?.id);
+    isDonor = await isUserDonor(session?.user);
   } catch (err) {
     console.error('[LandingPage] Failed to resolve session:', err);
   }
