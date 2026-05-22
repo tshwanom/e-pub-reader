@@ -8,6 +8,7 @@ import {
   buildPaystackReference,
   createPayPalOrder,
   initializePaystackTransaction,
+  resolvePublicAppOrigin,
 } from '@/lib/donation-payments';
 import {
   DEFAULT_DONATION_GATEWAY,
@@ -89,7 +90,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const baseUrl = process.env.NEXTAUTH_URL || req.nextUrl.origin;
+    const baseUrl = resolvePublicAppOrigin(req);
     const description = book ? `Support for “${book.title}”` : 'General donation';
 
     let gatewayAmount = quotedGatewayAmount;

@@ -1,13 +1,47 @@
 import {
   buildPaystackReference,
+  buildDonationDestination,
   isSuccessfulPayPalCapture,
   isSuccessfulPaystackVerification,
+  resolvePublicAppOrigin,
   toPaystackMinorUnits,
   type PayPalCaptureResponse,
   type PaystackVerificationResponse,
 } from '@/lib/donation-payments';
 
+const PUBLIC_URL_ENV_KEYS = [
+  'APP_URL',
+  'SITE_URL',
+  'NEXT_PUBLIC_SITE_URL',
+  'NEXT_PUBLIC_APP_URL',
+  'NEXTAUTH_URL',
+] as const;
+
+const originalPublicUrlEnv = Object.fromEntries(
+  PUBLIC_URL_ENV_KEYS.map((key) => [key, process.env[key]])
+) as Record<(typeof PUBLIC_URL_ENV_KEYS)[number], string | undefined>;
+
+function createMockRequest(url: string, headers?: Record<string, string>) {
+  return {
+    url,
+    nextUrl: new URL(url),
+    headers: new Headers(headers),
+  } as Parameters<typeof resolvePublicAppOrigin>[0];
+}
+
 describe('donation payment helpers', () => {
+  afterEach(() => {
+    for (const key of PUBLIC_URL_ENV_KEYS) {
+      const originalValue = originalPublicUrlEnv[key];
+
+      if (typeof originalValue === 'undefined') {
+        delete process.env[key];
+      } else {
+        process.env[key] = originalValue;
+      }
+    }
+  });
+
   it('builds a Paystack reference using only supported characters', () => {
     const reference = buildPaystackReference();
 
@@ -19,6 +53,30 @@ describe('donation payment helpers', () => {
   it('converts Paystack amounts into minor currency units', () => {
     expect(toPaystackMinorUnits(18.245)).toBe(1825);
     expect(toPaystackMinorUnits(18.2)).toBe(1820);
+  });
+
+  it('prefers the forwarded production origin over localhost config', () => {
+    process.env.NEXTAUTH_URL = 'http://localhost:3001';
+
+    const request = createMockRequest('http://localhost:3001/api/donations', {
+        host: 'localhost:3001',
+        'x-forwarded-host': '1manrevolution.com',
+        'x-forwarded-proto': 'https',
+    });
+
+    expect(resolvePublicAppOrigin(request)).toBe('https://1manrevolution.com');
+    expect(buildDonationDestination(request, 'book-123', 'success').toString()).toBe(
+      'https://1manrevolution.com/books/book-123?donation=success'
+    );
+  });
+
+  it('uses an explicit app url when the request only exposes localhost', () => {
+    process.env.APP_URL = 'https://1manrevolution.com';
+    process.env.NEXTAUTH_URL = 'http://localhost:3001';
+
+    const request = createMockRequest('http://localhost:3001/api/donations');
+
+    expect(resolvePublicAppOrigin(request)).toBe('https://1manrevolution.com');
   });
 
   it('validates a completed PayPal capture against the stored donation amount', () => {

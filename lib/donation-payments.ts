@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import type { NextRequest } from 'next/server';
 import {
   DONATION_BASE_CURRENCY,
   PAYSTACK_CHECKOUT_CURRENCY,
@@ -16,6 +16,13 @@ const PAYPAL_API_BASE =
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 const PAYSTACK_API_BASE = 'https://api.paystack.co';
+
+const EXPLICIT_PUBLIC_URL_ENV_KEYS = [
+  'APP_URL',
+  'SITE_URL',
+  'NEXT_PUBLIC_SITE_URL',
+  'NEXT_PUBLIC_APP_URL',
+] as const;
 
 export type PayPalCaptureResponse = {
   status?: string;
@@ -55,13 +62,93 @@ function assertPaystackConfigured() {
   return PAYSTACK_SECRET_KEY;
 }
 
+function toOrigin(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new URL(value.trim()).origin;
+  } catch {
+    return null;
+  }
+}
+
+function getPrimaryHeaderValue(value: string | null) {
+  return value?.split(',')[0]?.trim() || null;
+}
+
+function isLocalHostname(hostname: string) {
+  const normalizedHostname = hostname.toLowerCase();
+
+  return (
+    normalizedHostname === 'localhost' ||
+    normalizedHostname === '127.0.0.1' ||
+    normalizedHostname === '0.0.0.0' ||
+    normalizedHostname === '::1' ||
+    normalizedHostname === '[::1]' ||
+    normalizedHostname.endsWith('.localhost')
+  );
+}
+
+function isLocalOrigin(origin: string) {
+  try {
+    return isLocalHostname(new URL(origin).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function buildOriginFromRequestHeaders(request: NextRequest) {
+  const forwardedHost = getPrimaryHeaderValue(request.headers.get('x-forwarded-host'));
+  const host = forwardedHost || getPrimaryHeaderValue(request.headers.get('host'));
+
+  if (!host) {
+    return null;
+  }
+
+  const forwardedProto = getPrimaryHeaderValue(request.headers.get('x-forwarded-proto'));
+  const forwardedPort = getPrimaryHeaderValue(request.headers.get('x-forwarded-port'));
+  const requestProtocol = request.nextUrl.protocol.replace(/:$/, '') || 'https';
+  const protocol = forwardedProto || requestProtocol;
+
+  let normalizedHost = host;
+  const hasExplicitPort = normalizedHost.startsWith('[')
+    ? normalizedHost.includes(']:')
+    : normalizedHost.split(':').length > 1;
+
+  if (!hasExplicitPort && forwardedPort && forwardedPort !== '80' && forwardedPort !== '443') {
+    normalizedHost = `${normalizedHost}:${forwardedPort}`;
+  }
+
+  return toOrigin(`${protocol}://${normalizedHost}`);
+}
+
+export function resolvePublicAppOrigin(request: NextRequest) {
+  const explicitEnvOrigins = EXPLICIT_PUBLIC_URL_ENV_KEYS
+    .map((key) => toOrigin(process.env[key]))
+    .filter((origin): origin is string => Boolean(origin));
+  const headerOrigin = buildOriginFromRequestHeaders(request);
+  const requestOrigin = toOrigin(request.nextUrl.origin) || toOrigin(request.url);
+  const nextAuthOrigin = toOrigin(process.env.NEXTAUTH_URL);
+
+  const candidates = [
+    ...explicitEnvOrigins,
+    headerOrigin,
+    requestOrigin,
+    nextAuthOrigin,
+  ].filter((origin): origin is string => Boolean(origin));
+
+  return candidates.find((origin) => !isLocalOrigin(origin)) || candidates[0] || request.nextUrl.origin;
+}
+
 export function buildDonationDestination(
   request: NextRequest,
   bookId?: string | null,
   status: 'success' | 'failed' = 'success'
 ) {
   const pathname = bookId ? `/books/${bookId}` : '/library';
-  return new URL(`${pathname}?donation=${status}`, request.url);
+  return new URL(`${pathname}?donation=${status}`, resolvePublicAppOrigin(request));
 }
 
 export async function getPayPalAccessToken() {
