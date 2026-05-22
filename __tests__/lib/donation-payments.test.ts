@@ -59,9 +59,10 @@ describe('donation payment helpers', () => {
     process.env.NEXTAUTH_URL = 'http://localhost:3001';
 
     const request = createMockRequest('http://localhost:3001/api/donations', {
-        host: 'localhost:3001',
-        'x-forwarded-host': '1manrevolution.com',
-        'x-forwarded-proto': 'https',
+      host: 'localhost:3001',
+      'x-forwarded-host': '1manrevolution.com',
+      'x-forwarded-proto': 'https',
+      'x-forwarded-port': '3001',
     });
 
     expect(resolvePublicAppOrigin(request)).toBe('https://1manrevolution.com');

@@ -111,13 +111,20 @@ function buildOriginFromRequestHeaders(request: NextRequest) {
   const forwardedPort = getPrimaryHeaderValue(request.headers.get('x-forwarded-port'));
   const requestProtocol = request.nextUrl.protocol.replace(/:$/, '') || 'https';
   const protocol = forwardedProto || requestProtocol;
+  const isUsingForwardedHost = Boolean(forwardedHost);
 
   let normalizedHost = host;
   const hasExplicitPort = normalizedHost.startsWith('[')
     ? normalizedHost.includes(']:')
     : normalizedHost.split(':').length > 1;
 
-  if (!hasExplicitPort && forwardedPort && forwardedPort !== '80' && forwardedPort !== '443') {
+  if (
+    !isUsingForwardedHost &&
+    !hasExplicitPort &&
+    forwardedPort &&
+    forwardedPort !== '80' &&
+    forwardedPort !== '443'
+  ) {
     normalizedHost = `${normalizedHost}:${forwardedPort}`;
   }
 
