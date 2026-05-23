@@ -22,10 +22,13 @@ export const authOptions: NextAuthOptions = {
     signIn: '/login',
   },
   providers: [
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     EmailProvider({
       from: process.env.RESEND_FROM_EMAIL,
       maxAge: MAGIC_LOGIN_MAX_AGE_MINUTES * 60,
-      allowDangerousEmailAccountLinking: true,
+      // allowDangerousEmailAccountLinking is a valid next-auth v4 runtime option
+      // but is absent from the EmailUserConfig TS type in this version — cast required.
+      ...(({ allowDangerousEmailAccountLinking: true } as any)),
       normalizeIdentifier(identifier) {
         return normalizeAuthEmail(identifier);
       },
