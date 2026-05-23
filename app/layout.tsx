@@ -32,7 +32,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} ${playfair.variable} ${crimson.variable} ${inter.className}`}>
+      <body className={`${inter.variable} ${playfair.variable} ${crimson.variable} ${inter.className} overflow-x-hidden`}>
         <OfflineSupport />
         {children}
       </body>

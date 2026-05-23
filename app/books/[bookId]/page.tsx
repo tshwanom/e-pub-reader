@@ -13,6 +13,7 @@ import Header from '@/components/landing/Header';
 import Footer from '@/components/landing/Footer';
 import ContentNarrationPlayer from '@/components/ContentNarrationPlayer';
 import BookReadLink from '@/components/BookReadLink';
+import OMRVideoPlayer from '@/components/OMRVideoPlayer';
 
 export default async function BookDetailsPage({
   params,
@@ -73,20 +74,21 @@ export default async function BookDetailsPage({
     <main className="page-shell">
       <Header />
 
-      <div className="page-container py-10 sm:py-14">
-        <Link
-          href="/library"
-          className="ghost-button mb-8 px-4 py-2"
-        >
-          ← Back to Library
-        </Link>
+      <div className="page-container py-8 sm:py-12">
+        <div className="w-full min-w-0">
+          <Link
+            href="/library"
+            className="ghost-button mb-4 py-2 sm:py-1.5"
+          >
+            ← Back to Library
+          </Link>
 
-        <div className="grid gap-8 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 sm:gap-8 lg:grid-cols-3">
           {/* Left column - Cover and actions */}
-          <div className="lg:col-span-1">
-            <div className="surface-card sticky top-28 p-6">
+          <div className="lg:col-span-1 min-w-0">
+            <div className="surface-card p-4 sm:p-6 w-full max-w-sm mx-auto lg:max-w-none lg:mx-0 lg:sticky lg:top-28">
               {/* Cover */}
-              <div className="relative mb-6 aspect-[2/3] overflow-hidden rounded-xl bg-gradient-to-br from-landing-accent/10 to-landing-bg">
+              <div className="relative mb-6 mx-auto w-full aspect-[2/3] overflow-hidden rounded-xl bg-gradient-to-br from-landing-accent/10 to-landing-bg">
                 {book.coverUrl && book.coverUrl !== '/placeholder-cover.jpg' ? (
                   <Image
                     src={book.coverUrl}
@@ -217,7 +219,7 @@ export default async function BookDetailsPage({
           </div>
 
           {/* Right column - Details */}
-          <div className="space-y-6 lg:col-span-2">
+          <div className="space-y-6 lg:col-span-2 min-w-0">
             {donationStatus === 'success' && (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 px-5 py-4 text-sm text-emerald-800">
                 Donation received successfully. {book.donorOnly ? 'This donor-only title is now unlocked on your account.' : 'Thank you for supporting the work.'}
@@ -226,12 +228,54 @@ export default async function BookDetailsPage({
 
             {donationStatus === 'failed' && (
               <div className="rounded-2xl border border-red-200 bg-red-50/80 px-5 py-4 text-sm text-red-700">
-                We couldn’t confirm the donation. Please try again, and if the payment provider already charged you, we can reconcile it from the admin side.
+                We couldn't confirm the donation. Please try again, and if the payment provider already charged you, we can reconcile it from the admin side.
               </div>
             )}
 
-            <div className="surface-card p-6 sm:p-8">
-              <h1 className="font-playfair text-4xl font-semibold text-landing-text">
+            {(book.donationEnabled || book.donorOnly) && (
+              <section id="support-this-book">
+                {paystackSubscription ? (
+                  <div className="mb-6">
+                    <PaystackSubscriptionManager
+                      subscription={paystackSubscription}
+                      returnTo={`/books/${book.id}`}
+                      status={resolvedSearchParams?.subscription}
+                    />
+                  </div>
+                ) : null}
+
+                {book.donorOnly && !session ? (
+                  <div className="surface-card p-4 sm:p-6 lg:p-8 w-full">
+                    <h2 className="font-playfair text-2xl sm:text-3xl font-semibold text-landing-text">
+                      Sign in before donating
+                    </h2>
+                    <p className="mt-3 leading-relaxed text-landing-text-muted">
+                      Donor access is tied to your account, so please sign in first. Then any completed donation will unlock this book.
+                    </p>
+                    <Link href={loginHref} className="brand-button mt-6 inline-flex px-6 py-3">
+                      Sign in to continue
+                    </Link>
+                  </div>
+                ) : (
+                  <DonationSection
+                    bookId={book.id}
+                    bookTitle={book.title}
+                    donorOnly={book.donorOnly}
+                    currentUserEmail={session?.user?.email ?? null}
+                    message={
+                      book.donationMessage ||
+                      (book.donorOnly
+                        ? 'Make any completed donation to unlock this donor-only book and future donor releases on your account.'
+                        : undefined)
+                    }
+                    goal={book.donationGoal ? Number(book.donationGoal) : undefined}
+                  />
+                )}
+              </section>
+            )}
+
+            <div className="surface-card p-4 sm:p-6 lg:p-8 w-full">
+              <h1 className="font-playfair text-3xl sm:text-4xl font-semibold text-landing-text">
                 {book.title}
               </h1>
               <p className="mt-2 text-xl text-landing-text-muted">{book.author}</p>
@@ -325,54 +369,12 @@ export default async function BookDetailsPage({
               )}
             </div>
 
-            {(book.donationEnabled || book.donorOnly) && (
-              <section id="support-this-book">
-                {paystackSubscription ? (
-                  <div className="mb-6">
-                    <PaystackSubscriptionManager
-                      subscription={paystackSubscription}
-                      returnTo={`/books/${book.id}`}
-                      status={resolvedSearchParams?.subscription}
-                    />
-                  </div>
-                ) : null}
-
-                {book.donorOnly && !session ? (
-                  <div className="surface-card p-6 sm:p-8">
-                    <h2 className="font-playfair text-3xl font-semibold text-landing-text">
-                      Sign in before donating
-                    </h2>
-                    <p className="mt-3 leading-relaxed text-landing-text-muted">
-                      Donor access is tied to your account, so please sign in first. Then any completed donation will unlock this book.
-                    </p>
-                    <Link href={loginHref} className="brand-button mt-6 inline-flex px-6 py-3">
-                      Sign in to continue
-                    </Link>
-                  </div>
-                ) : (
-                  <DonationSection
-                    bookId={book.id}
-                    bookTitle={book.title}
-                    donorOnly={book.donorOnly}
-                    currentUserEmail={session?.user?.email ?? null}
-                    message={
-                      book.donationMessage ||
-                      (book.donorOnly
-                        ? 'Make any completed donation to unlock this donor-only book and future donor releases on your account.'
-                        : undefined)
-                    }
-                    goal={book.donationGoal ? Number(book.donationGoal) : undefined}
-                  />
-                )}
-              </section>
-            )}
-
             {supplementaryContents.length > 0 && (
               <div className="space-y-4">
                 <h2 className="font-playfair text-3xl font-semibold text-landing-text">Explore More</h2>
                 <div className="grid gap-4">
                   {supplementaryContents.map((item) => (
-                    <div key={item.id} className="surface-card p-6">
+                    <div key={item.id} className="surface-card p-4 sm:p-6 w-full">
                       {item.type === 'VIDEO' && (
                         <div>
                           <h3 className="mb-3 text-lg font-semibold text-landing-text">{item.title}</h3>
@@ -382,12 +384,12 @@ export default async function BookDetailsPage({
                             </p>
                           ) : null}
                           {item.url && (
-                             <div className="aspect-video overflow-hidden rounded-xl border border-landing-border bg-landing-surface-muted">
-                                {item.url.includes('youtube.com') || item.url.includes('youtu.be') ? (
-                                   <iframe 
-                                     src={item.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/')}
-                                     className="h-full w-full"
-                                     allowFullScreen
+                             <div className="aspect-video overflow-hidden rounded-xl border border-landing-border bg-landing-surface-muted relative">
+                                {item.url.includes('youtube.com') || item.url.includes('youtu.be') || item.url.includes('vimeo.com') ? (
+                                   <OMRVideoPlayer
+                                     url={item.url}
+                                     title={item.title}
+                                     className="absolute inset-0 h-full w-full"
                                    />
                                 ) : (
                                    <a href={item.url} target="_blank" rel="noopener noreferrer" className="flex h-full items-center justify-center text-landing-accent hover:underline">
@@ -398,7 +400,7 @@ export default async function BookDetailsPage({
                           )}
                         </div>
                       )}
-                      
+
                       {item.type === 'ARTICLE' && (
                         <div>
                           <h3 className="mb-2 text-lg font-semibold text-landing-text">{item.title}</h3>
@@ -416,8 +418,8 @@ export default async function BookDetailsPage({
                       )}
 
                       {item.type === 'POEM' && (
-                        <div className="surface-muted p-6 text-center font-serif italic">
-                          <h3 className="mb-4 font-playfair text-2xl font-semibold not-italic text-landing-text">{item.title}</h3>
+                        <div className="surface-muted p-4 sm:p-6 text-center font-serif italic">
+                          <h3 className="mb-4 font-playfair text-xl sm:text-2xl font-semibold not-italic text-landing-text">{item.title}</h3>
                           <div className="mx-auto max-w-lg whitespace-pre-wrap leading-relaxed text-landing-text-muted">
                             {item.content}
                           </div>
@@ -450,6 +452,7 @@ export default async function BookDetailsPage({
           </div>
         </div>
       </div>
+    </div>
 
       <Footer />
     </main>

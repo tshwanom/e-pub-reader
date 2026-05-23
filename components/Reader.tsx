@@ -1359,6 +1359,16 @@ export default function Reader({
       renditionRef.current = rendition;
 
       // Register themes
+      rendition.themes.default({
+        body: {
+          'box-shadow': 'none !important',
+          'border': 'none !important',
+          'border-radius': '0 !important',
+          'margin': '0 !important',
+          'max-width': 'none !important',
+        },
+      });
+
       rendition.themes.register('light', {
         body: { background: '#ffffff', color: '#000000' },
       });
@@ -1834,17 +1844,14 @@ export default function Reader({
       <div className={`absolute inset-0 flex items-stretch bg-landing-bg ${readerViewportInsetClass}`}>
 
         {/* Book canvas */}
-        <div className="flex flex-1 min-h-0 items-stretch justify-center overflow-hidden md:p-5 md:items-center">
+        <div className="flex flex-1 min-h-0 items-stretch justify-center overflow-hidden md:p-5 md:items-stretch">
           {/* Drag wrapper — translates during swipe animation */}
-          <div ref={dragWrapperRef} className="flex w-full min-h-0 items-stretch justify-center md:items-center" style={{ willChange: 'transform' }}>
+          <div ref={dragWrapperRef} className="flex w-full h-full min-h-0 items-stretch justify-center md:items-stretch" style={{ willChange: 'transform' }}>
             <div
-              className={`overflow-hidden md:rounded-xl md:border border-landing-border bg-white md:shadow-2xl transition-opacity duration-150 ${isFading ? 'opacity-0' : 'opacity-100'}`}
+              className={`overflow-hidden flex flex-col w-full h-full bg-white transition-opacity duration-150 ${isFading ? 'opacity-0' : 'opacity-100'}`}
               style={flow === 'scrolled' ? {
-                width: '100%',
                 maxWidth: '680px',
-                height: '100%',
               } : {
-                width: '100%',
                 maxWidth: twoPage ? '1100px' : '560px',
                 height: '100%',
               }}
@@ -1914,12 +1921,12 @@ export default function Reader({
         <div className="pointer-events-auto flex items-center gap-2">
           <div
             aria-live="polite"
-            className="rounded-full bg-black/25 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm"
+            className="flex items-center justify-center rounded-full bg-landing-surface-muted/80 border border-landing-border px-3 py-1.5 text-xs font-semibold text-landing-text shadow-sm backdrop-blur-md"
           >
             {currentPage} / {totalPages || '—'}
           </div>
           {minutesRemaining > 0 && (
-            <div className="rounded-full bg-black/20 px-3 py-1 text-xs text-white/80 backdrop-blur-sm">
+            <div className="flex items-center justify-center rounded-full bg-landing-surface-muted/80 border border-landing-border px-3 py-1.5 text-xs font-medium text-landing-text-muted shadow-sm backdrop-blur-md">
               {minutesRemaining < 60
                 ? `${minutesRemaining} min left`
                 : `${Math.floor(minutesRemaining / 60)}h ${minutesRemaining % 60}m left`}
@@ -1931,7 +1938,8 @@ export default function Reader({
           <button
             onClick={() => setShowSearch(true)}
             aria-label="Search in book"
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-black/25 text-white backdrop-blur-sm transition hover:bg-black/45 focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2"
+            title="Search in book"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-landing-surface-muted/80 border border-landing-border text-landing-text shadow-sm backdrop-blur-md transition hover:bg-landing-border/40 hover:text-landing-accent focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
@@ -1941,7 +1949,8 @@ export default function Reader({
           <button
             onClick={() => setShowGoTo(true)}
             aria-label="Go to location"
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-black/25 text-white backdrop-blur-sm transition hover:bg-black/45 focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2"
+            title="Go to location"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-landing-surface-muted/80 border border-landing-border text-landing-text shadow-sm backdrop-blur-md transition hover:bg-landing-border/40 hover:text-landing-accent focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1951,11 +1960,12 @@ export default function Reader({
           <button
             onClick={() => setSidePanel(sidePanel === 'notes' ? null : 'notes')}
             aria-label="My notes"
+            title="My notes"
             aria-pressed={sidePanel === 'notes'}
-            className={`flex h-9 w-9 items-center justify-center rounded-full backdrop-blur-sm transition focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
+            className={`flex h-10 w-10 items-center justify-center rounded-full border shadow-sm backdrop-blur-md transition focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
               sidePanel === 'notes'
-                ? 'bg-landing-accent text-white'
-                : 'bg-black/25 text-white hover:bg-black/45'
+                ? 'bg-landing-accent border-landing-accent text-white'
+                : 'bg-landing-surface-muted/80 border-landing-border text-landing-text hover:bg-landing-border/40 hover:text-landing-accent'
             }`}
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1966,7 +1976,10 @@ export default function Reader({
           <button
             onClick={toggleBookmark}
             aria-label={isBookmarkedHere ? 'Remove bookmark' : 'Add bookmark'}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-black/25 text-white backdrop-blur-sm transition hover:bg-black/45 focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2"
+            title={isBookmarkedHere ? 'Remove bookmark' : 'Add bookmark'}
+            className={`flex h-10 w-10 items-center justify-center rounded-full border shadow-sm backdrop-blur-md transition hover:bg-landing-border/40 focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
+              isBookmarkedHere ? 'bg-landing-accent border-landing-accent text-white' : 'bg-landing-surface-muted/80 border-landing-border text-landing-text hover:text-landing-accent'
+            }`}
           >
             <svg className="h-4 w-4" fill={isBookmarkedHere ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16l-7-4-7 4V5z" />
@@ -1976,11 +1989,12 @@ export default function Reader({
           <button
             onClick={() => setSidePanel(sidePanel === 'toc' ? null : 'toc')}
             aria-label="Table of contents"
+            title="Table of contents"
             aria-pressed={sidePanel === 'toc'}
-            className={`flex h-9 w-9 items-center justify-center rounded-full backdrop-blur-sm transition focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
+            className={`flex h-10 w-10 items-center justify-center rounded-full border shadow-sm backdrop-blur-md transition focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
               sidePanel === 'toc'
-                ? 'bg-landing-accent text-white shadow-md'
-                : 'bg-black/25 text-white hover:bg-black/45'
+                ? 'bg-landing-accent border-landing-accent text-white'
+                : 'bg-landing-surface-muted/80 border-landing-border text-landing-text hover:bg-landing-border/40 hover:text-landing-accent'
             }`}
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2000,10 +2014,19 @@ export default function Reader({
                     ? 'Open narrated mode status'
                     : 'Narrated mode reserved for donors'
               }
-              className={`relative flex h-9 w-9 items-center justify-center rounded-full backdrop-blur-sm transition focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
+              title={
+                narrationHasReadyPlayer
+                  ? isNarrationPlaying
+                    ? 'Pause narration'
+                    : 'Play narration'
+                  : narrationAccess?.hasAccess
+                    ? 'Open narrated mode status'
+                    : 'Narrated mode reserved for donors'
+              }
+              className={`relative flex h-10 w-10 items-center justify-center rounded-full border shadow-sm backdrop-blur-md transition focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
                 narrationHasReadyPlayer || narrationAccess?.hasAccess
-                  ? 'bg-landing-accent text-white hover:bg-landing-accent-secondary'
-                  : 'bg-black/25 text-white hover:bg-black/45'
+                  ? 'bg-landing-accent border-landing-accent text-white hover:bg-landing-accent-secondary'
+                  : 'bg-landing-surface-muted/80 border-landing-border text-landing-text hover:bg-landing-border/40 hover:text-landing-accent'
               }`}
             >
               {narrationHasReadyPlayer && isNarrationPlaying ? (
@@ -2021,10 +2044,10 @@ export default function Reader({
                 </svg>
               )}
               <span
-                className={`absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full border border-white text-[9px] font-bold ${
+                className={`absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full border border-white text-[9px] font-bold ${
                   narrationHasReadyPlayer || narrationAccess?.hasAccess
                     ? 'bg-white text-landing-accent'
-                    : 'bg-amber-400 text-amber-950'
+                    : 'bg-amber-400 text-amber-950 border-amber-100'
                 }`}
               >
                 {narrationHasReadyPlayer ? '▶' : narrationAccess?.hasAccess ? '✓' : '★'}
@@ -2034,8 +2057,9 @@ export default function Reader({
 
           <button
             onClick={() => setShowMenu(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-black/25 text-white shadow-md backdrop-blur-sm transition hover:bg-black/45 focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-landing-surface-muted/80 border border-landing-border text-landing-text shadow-sm backdrop-blur-md transition hover:bg-landing-border/40 hover:text-landing-accent focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2"
             aria-label="Open reading menu"
+            title="Reader Options"
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -2554,19 +2578,31 @@ export default function Reader({
                 ? standaloneNotes.length + highlights.filter(h => h.note).length
                 : panel === 'highlights' ? highlights.length
                 : panel === 'bookmarks' ? bookmarks.length : 0;
+                
+              const getIcon = (p: SidePanel) => {
+                switch(p) {
+                  case 'toc': return <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h10" /></svg>;
+                  case 'highlights': return <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a4 4 0 01-1.414.94l-3.535.884.884-3.535a4 4 0 01.94-1.414z" /></svg>;
+                  case 'notes': return <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>;
+                  case 'bookmarks': return <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-4-7 4V5z" /></svg>;
+                  default: return null;
+                }
+              };
+
               return (
                 <button
                   key={panel!}
                   onClick={() => setSidePanel(panel)}
-                  className={`relative flex-1 rounded-t-lg py-2.5 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
+                  title={label}
+                  className={`relative flex flex-1 items-center justify-center rounded-t-lg py-3 transition-colors ${
                     sidePanel === panel
                       ? 'border-b-2 border-landing-accent text-landing-accent'
-                      : 'text-landing-text-muted hover:text-landing-text'
+                      : 'text-landing-text-muted hover:text-landing-text hover:bg-landing-surface-muted/50'
                   }`}
                 >
-                  {label}
+                  {getIcon(panel)}
                   {badge > 0 && (
-                    <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-landing-accent/15 px-1 text-[10px] font-bold text-landing-accent">
+                    <span className="absolute top-1 right-2 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-landing-accent px-1 text-[10px] font-bold text-white">
                       {badge}
                     </span>
                   )}
@@ -2575,10 +2611,10 @@ export default function Reader({
             })}
             <button
               onClick={() => setSidePanel(null)}
-              className="ml-2 rounded-full p-2 text-landing-text-muted transition hover:bg-landing-surface-muted hover:text-landing-text focus-visible:ring-2 focus-visible:ring-landing-accent"
+              className="ml-2 flex h-8 w-8 items-center justify-center rounded-full text-landing-text-muted transition hover:bg-landing-surface-muted hover:text-landing-text focus-visible:ring-2 focus-visible:ring-landing-accent"
               aria-label="Close panel"
             >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>

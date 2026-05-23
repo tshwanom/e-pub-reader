@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,24 +8,23 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  password  String?
-  role      UserRole @default(READER)
+  id                String            @id @default(cuid())
+  email             String            @unique
+  name              String?
+  password          String?
+  role              UserRole          @default(READER)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  audiobookId       String?
   readerPreferences Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  readingProgress ReadingProgress[]
-  bookmarks       Bookmark[]
-  highlights      Highlight[]
-  notes           Note[]
-  donations       Donation[]
-  audiobook       Audiobook?        @relation(fields: [audiobookId], references: [id])
-  accounts        Account[]
-  sessions        Session[]
-  audiobookId     String?
+  accounts          Account[]
+  bookmarks         Bookmark[]
+  donations         Donation[]
+  highlights        Highlight[]
+  notes             Note[]
+  readingProgress   ReadingProgress[]
+  sessions          Session[]
+  audiobook         Audiobook?        @relation(fields: [audiobookId], references: [id])
 }
 
 model Account {
@@ -37,15 +33,14 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -67,95 +62,88 @@ model VerificationToken {
 }
 
 model Book {
-  id          String     @id @default(cuid())
-  title       String
-  author      String
-  description String     @db.Text
-  coverUrl    String
-  slug        String     @unique
-  status      BookStatus @default(DRAFT)
-  donorOnly   Boolean    @default(false)
-  publishedAt DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-
-  // Features
-  narrationEnabled Boolean @default(false)
-
-  // Monetization
-  donationEnabled Boolean  @default(false)
-  donationMessage String?  @db.Text
-  donationGoal    Decimal? @db.Decimal(10, 2)
-  amazonKdpUrl    String?
-
-  // EPUB Metadata
-  publisher String?
-  language  String?  @default("en")
-  isbn      String?
-  coverIsbn String? // ISBN from cover image metadata
-  subjects  String[] // Categories/tags from EPUB
-
-  epubFile              BookFile?
+  id                    String                 @id @default(cuid())
+  title                 String
+  author                String
+  description           String
+  coverUrl              String
+  slug                  String                 @unique
+  status                BookStatus             @default(DRAFT)
+  donorOnly             Boolean                @default(false)
+  publishedAt           DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  donationEnabled       Boolean                @default(false)
+  donationMessage       String?
+  donationGoal          Decimal?               @db.Decimal(10, 2)
+  amazonKdpUrl          String?
+  publisher             String?
+  language              String?                @default("en")
+  isbn                  String?
+  coverIsbn             String?
+  subjects              String[]
+  narrationEnabled      Boolean                @default(false)
   audioFiles            AudioFile[]
-  printLinks            PrintLink[]
-  categories            Category[]
-  readingProgress       ReadingProgress[]
+  audiobook             Audiobook?
+  epubFile              BookFile?
+  narrations            BookNarration[]
   bookmarks             Bookmark[]
+  donations             Donation[]
   highlights            Highlight[]
   notes                 Note[]
-  donations             Donation[]
-  audiobook             Audiobook?
-  narrations            BookNarration[]
+  printLinks            PrintLink[]
+  readingProgress       ReadingProgress[]
   supplementaryContents SupplementaryContent[]
+  categories            Category[]             @relation("BookToCategory")
 }
 
 model BookFile {
   id        String   @id @default(cuid())
   bookId    String   @unique
-  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
   fileUrl   String
   fileSize  Int
   mimeType  String
   createdAt DateTime @default(now())
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
 }
 
 model AudioFile {
   id        String   @id @default(cuid())
   bookId    String
-  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
   title     String
   fileUrl   String
-  duration  Int? // seconds
+  duration  Int?
   order     Int      @default(0)
   createdAt DateTime @default(now())
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
 }
 
 model PrintLink {
   id        String      @id @default(cuid())
   bookId    String
-  book      Book        @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  provider  String // "Amazon KDP", "IngramSpark", "Lulu"
-  format    PrintFormat // PAPERBACK, HARDCOVER
+  provider  String
+  format    PrintFormat
   url       String
   createdAt DateTime    @default(now())
+  book      Book        @relation(fields: [bookId], references: [id], onDelete: Cascade)
 }
 
 model Category {
   id    String @id @default(cuid())
   name  String @unique
   slug  String @unique
-  books Book[]
+  books Book[] @relation("BookToCategory")
 }
 
 model ReadingProgress {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   bookId    String
-  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  cfi       String // ePub CFI (Canonical Fragment Identifier)
-  progress  Float // 0-100 percentage
+  cfi       String
+  progress  Float
   updatedAt DateTime @updatedAt
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, bookId])
 }
@@ -163,61 +151,200 @@ model ReadingProgress {
 model Bookmark {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   bookId    String
-  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
   cfi       String
   chapter   String?
   createdAt DateTime @default(now())
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Highlight {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   bookId    String
-  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
   cfi       String
-  text      String   @db.Text
+  text      String
   color     String   @default("#FFEB3B")
-  note      String?  @db.Text
+  note      String?
   createdAt DateTime @default(now())
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Note {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   bookId    String
-  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
   cfi       String
-  content   String   @db.Text
+  content   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Donation {
-  id        String         @id @default(cuid())
-  userId    String?
-  user      User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
-  bookId    String?
-  book      Book?          @relation(fields: [bookId], references: [id], onDelete: SetNull)
-  amount    Decimal        @db.Decimal(10, 2)
-  currency  String         @default("USD")
-  donorAmount Decimal?     @db.Decimal(10, 2)
-  donorCurrency String?
-  donorEmail String?
-  gateway   DonationGateway @default(PAYPAL)
-  frequency DonationFrequency @default(ONE_TIME)
-  gatewayAmount Decimal?   @db.Decimal(10, 2)
-  gatewayCurrency String?
-  paypalId  String?        @unique
-  paystackReference String? @unique
-  paystackPlanCode String?
-  paystackSubscriptionCode String? @unique
-  paystackCustomerCode String?
-  status    DonationStatus
-  createdAt DateTime       @default(now())
+  id                String          @id @default(cuid())
+  userId            String?
+  bookId            String?
+  amount            Decimal         @db.Decimal(10, 2)
+  currency          String          @default("USD")
+  paypalId          String?         @unique
+  status            DonationStatus
+  createdAt         DateTime        @default(now())
+  donorAmount       Decimal?        @db.Decimal(10, 2)
+  donorCurrency     String?
+  donorEmail        String?
+  gateway           DonationGateway @default(PAYPAL)
+  gatewayAmount     Decimal?        @db.Decimal(10, 2)
+  gatewayCurrency   String?
+  paystackReference String?         @unique
+  paystackSubscriptionCode String?
+  paystackPlanCode          String?
+  paystackCustomerCode      String?
+  frequency         DonationFrequency @default(ONE_TIME)
+  book              Book?           @relation(fields: [bookId], references: [id])
+  user              User?           @relation(fields: [userId], references: [id])
+}
+
+model Audiobook {
+  id        String   @id @default(cuid())
+  bookId    String   @unique
+  fileUrl   String
+  duration  Int
+  fileSize  Int
+  mimeType  String
+  createdAt DateTime @default(now())
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  users     User[]
+}
+
+model NarrationVoice {
+  id                String             @id @default(cuid())
+  name              String
+  slug              String             @unique
+  provider          String
+  language          String             @default("en")
+  description       String?
+  sampleText        String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  narrations        BookNarration[]
+  contentNarrations ContentNarration[]
+}
+
+model BookNarration {
+  id                String                   @id @default(cuid())
+  bookId            String
+  voiceId           String
+  status            NarrationJobStatus       @default(PENDING)
+  storageProvider   NarrationStorageProvider @default(S3)
+  manifestObjectKey String?
+  audioMimeType     String                   @default("audio/mpeg")
+  totalDurationMs   Int?
+  totalChapters     Int                      @default(0)
+  active            Boolean                  @default(false)
+  readyAt           DateTime?
+  errorMessage      String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  jobKey            String?
+  stylePrompt       String?
+  book              Book                     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  voice             NarrationVoice           @relation(fields: [voiceId], references: [id])
+  chapters          NarrationChapter[]
+
+  @@unique([bookId, voiceId])
+  @@index([bookId, active, status])
+}
+
+model NarrationChapter {
+  id             String               @id @default(cuid())
+  narrationId    String
+  chapterIndex   Int
+  title          String?
+  spineHref      String
+  status         NarrationAssetStatus @default(PENDING)
+  audioObjectKey String?
+  audioMimeType  String               @default("audio/mpeg")
+  durationMs     Int?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  narration      BookNarration        @relation(fields: [narrationId], references: [id], onDelete: Cascade)
+  cues           NarrationCue[]
+
+  @@unique([narrationId, chapterIndex])
+  @@unique([narrationId, spineHref])
+  @@index([narrationId, status])
+}
+
+model NarrationCue {
+  id              String           @id @default(cuid())
+  chapterId       String
+  sequence        Int
+  startMs         Int
+  endMs           Int
+  targetHref      String
+  targetElementId String?
+  targetCfi       String?
+  excerpt         String?
+  createdAt       DateTime         @default(now())
+  chapter         NarrationChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@unique([chapterId, sequence])
+  @@index([chapterId, startMs])
+}
+
+model SiteSettings {
+  id          String   @id @default(cuid())
+  socialLinks Json?
+  updatedAt   DateTime @updatedAt
+}
+
+model SupplementaryContent {
+  id                  String             @id @default(cuid())
+  bookId              String?
+  type                ContentType
+  title               String
+  content             String?
+  url                 String?
+  author              String?
+  order               Int                @default(0)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  coverUrl            String?
+  narrationEnabled    Boolean            @default(false)
+  publishedAt         DateTime?
+  slug                String?            @unique
+  status              ContentStatus      @default(DRAFT)
+  summary             String?
+  narrationSourceHash String?
+  narrations          ContentNarration[]
+  book                Book?              @relation(fields: [bookId], references: [id])
+}
+
+model ContentNarration {
+  id              String                   @id @default(cuid())
+  contentId       String
+  voiceId         String
+  status          NarrationJobStatus       @default(PENDING)
+  storageProvider NarrationStorageProvider @default(S3)
+  audioObjectKey  String?
+  audioMimeType   String                   @default("audio/wav")
+  durationMs      Int?
+  active          Boolean                  @default(false)
+  readyAt         DateTime?
+  errorMessage    String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  sourceHash      String?
+  stylePrompt     String?
+  content         SupplementaryContent     @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  voice           NarrationVoice           @relation(fields: [voiceId], references: [id])
+
+  @@unique([contentId, voiceId])
+  @@index([contentId, active, status])
 }
 
 enum UserRole {
@@ -230,99 +357,6 @@ enum BookStatus {
   DRAFT
   PUBLISHED
   ARCHIVED
-}
-
-model Audiobook {
-  id        String   @id @default(cuid())
-  bookId    String   @unique
-  fileUrl   String
-  duration  Int // Duration in seconds
-  fileSize  Int
-  mimeType  String
-  createdAt DateTime @default(now())
-
-  book  Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  users User[]
-}
-
-model NarrationVoice {
-  id          String   @id @default(cuid())
-  name        String
-  slug        String   @unique
-  provider    String
-  language    String   @default("en")
-  description String?  @db.Text
-  sampleText  String?  @db.Text
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  narrations        BookNarration[]
-  contentNarrations ContentNarration[]
-}
-
-model BookNarration {
-  id               String                   @id @default(cuid())
-  bookId           String
-  voiceId          String
-  status           NarrationJobStatus       @default(PENDING)
-  storageProvider  NarrationStorageProvider @default(S3)
-  stylePrompt      String?                  @db.Text
-  jobKey           String?
-  manifestObjectKey String?
-  audioMimeType    String                   @default("audio/mpeg")
-  totalDurationMs  Int?
-  totalChapters    Int                      @default(0)
-  active           Boolean                  @default(false)
-  readyAt          DateTime?
-  errorMessage     String?                  @db.Text
-  createdAt        DateTime                 @default(now())
-  updatedAt        DateTime                 @updatedAt
-
-  book     Book             @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  voice    NarrationVoice   @relation(fields: [voiceId], references: [id], onDelete: Restrict)
-  chapters NarrationChapter[]
-
-  @@unique([bookId, voiceId])
-  @@index([bookId, active, status])
-}
-
-model NarrationChapter {
-  id            String               @id @default(cuid())
-  narrationId   String
-  chapterIndex  Int
-  title         String?
-  spineHref     String
-  status        NarrationAssetStatus @default(PENDING)
-  audioObjectKey String?
-  audioMimeType String               @default("audio/mpeg")
-  durationMs    Int?
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
-
-  narration BookNarration @relation(fields: [narrationId], references: [id], onDelete: Cascade)
-  cues      NarrationCue[]
-
-  @@unique([narrationId, chapterIndex])
-  @@unique([narrationId, spineHref])
-  @@index([narrationId, status])
-}
-
-model NarrationCue {
-  id              String   @id @default(cuid())
-  chapterId       String
-  sequence        Int
-  startMs         Int
-  endMs           Int
-  targetHref      String
-  targetElementId String?
-  targetCfi       String?
-  excerpt         String?  @db.Text
-  createdAt       DateTime @default(now())
-
-  chapter NarrationChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
-
-  @@unique([chapterId, sequence])
-  @@index([chapterId, startMs])
 }
 
 enum PrintFormat {
@@ -369,35 +403,6 @@ enum DonationFrequency {
   MONTHLY
 }
 
-model SiteSettings {
-  id          String   @id @default(cuid())
-  socialLinks Json? // { twitter: "url", facebook: "url", etc. }
-  updatedAt   DateTime @updatedAt
-}
-
-model SupplementaryContent {
-  id               String        @id @default(cuid())
-  bookId           String?
-  book             Book?         @relation(fields: [bookId], references: [id], onDelete: SetNull)
-  type             ContentType
-  status           ContentStatus @default(DRAFT)
-  title            String
-  slug             String?       @unique
-  summary          String?       @db.Text
-  content          String?       @db.Text // For POEM, QUOTE, ARTICLE (text body)
-  url              String? // For VIDEO, ARTICLE (external link)
-  author           String? // For QUOTE or POEM attribution
-  coverUrl         String?
-  narrationEnabled Boolean       @default(false)
-  narrationSourceHash String?
-  publishedAt      DateTime?
-  order            Int           @default(0)
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-
-  narrations ContentNarration[]
-}
-
 enum ContentType {
   VIDEO
   ARTICLE
@@ -409,28 +414,4 @@ enum ContentStatus {
   DRAFT
   PUBLISHED
   ARCHIVED
-}
-
-model ContentNarration {
-  id              String                   @id @default(cuid())
-  contentId       String
-  voiceId         String
-  status          NarrationJobStatus       @default(PENDING)
-  storageProvider NarrationStorageProvider @default(S3)
-  sourceHash      String?
-  stylePrompt     String?                  @db.Text
-  audioObjectKey  String?
-  audioMimeType   String                   @default("audio/wav")
-  durationMs      Int?
-  active          Boolean                  @default(false)
-  readyAt         DateTime?
-  errorMessage    String?                  @db.Text
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
-
-  content SupplementaryContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
-  voice   NarrationVoice       @relation(fields: [voiceId], references: [id], onDelete: Restrict)
-
-  @@unique([contentId, voiceId])
-  @@index([contentId, active, status])
 }

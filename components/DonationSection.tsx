@@ -390,7 +390,7 @@ export default function DonationSection({
         </div>
       ) : null}
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]">
+      <div className="mt-5 grid gap-6 lg:gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <div className="space-y-4">
           <div className="surface-muted p-3">
             <div className="mb-2.5 flex items-center justify-between gap-3">
@@ -440,7 +440,7 @@ export default function DonationSection({
             </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_220px]">
+          <div className="grid gap-4 sm:gap-6 sm:grid-cols-[minmax(0,1fr)_240px]">
             <div>
               <label htmlFor="donation-amount" className="mb-2 block text-sm font-medium text-landing-text">
                 Amount in {currency}
@@ -473,23 +473,6 @@ export default function DonationSection({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-landing-text-muted">
-                Live presets
-              </p>
-              <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
-                suggestedAmountsLoading
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'bg-white/85 text-landing-text-muted shadow-sm'
-              }`}>
-                {suggestedAmountsLoading ? 'Refreshing…' : 'USD 5 · 10 · 25 · 50'}
-              </span>
-            </div>
-            <p className="text-xs leading-5 text-landing-text-muted">
-              Preset buttons are the live {currency} equivalents of the fixed USD 5, 10, 25, and 50 support tiers.
-            </p>
-
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             {suggestedAmountButtons.map((preset) => (
               <button
@@ -505,7 +488,6 @@ export default function DonationSection({
                 {preset.label}
               </button>
             ))}
-          </div>
           </div>
 
           {requiresPaystackEmail ? (
@@ -724,7 +706,7 @@ export default function DonationSection({
             aria-describedby={donationModalDescriptionId}
             className="surface-card w-full max-w-4xl overflow-hidden shadow-2xl"
           >
-            <div className="flex items-start justify-between gap-3 border-b border-landing-border/70 bg-white/70 px-4 py-3 backdrop-blur-sm sm:px-5">
+            <div className="flex items-start justify-between gap-4 border-b border-landing-border/70 bg-white/70 px-5 py-4 backdrop-blur-sm sm:px-6">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-landing-accent/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-landing-accent">

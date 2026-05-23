@@ -51,23 +51,9 @@ export async function GET(
       return new NextResponse(null, { status: 304 });
     }
 
-    // Stream the file directly to the client — no need to buffer the whole EPUB
-    // in server memory before the first byte reaches the browser.
-    const nodeStream = fs.createReadStream(filePath);
-    const webStream = new ReadableStream({
-      start(controller) {
-        nodeStream.on("data", (chunk) =>
-          controller.enqueue(chunk instanceof Buffer ? chunk : Buffer.from(chunk))
-        );
-        nodeStream.on("end", () => controller.close());
-        nodeStream.on("error", (err) => controller.error(err));
-      },
-      cancel() {
-        nodeStream.destroy();
-      },
-    });
+    const buffer = await fsPromises.readFile(filePath);
 
-    return new NextResponse(webStream, {
+    return new NextResponse(buffer, {
       headers: {
         // Cache the EPUB privately for 1 hour. The ETag ensures the browser
         // re-validates if the file changes (e.g. after an admin re-upload).

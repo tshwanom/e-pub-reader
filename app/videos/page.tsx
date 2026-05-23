@@ -6,7 +6,7 @@ import { Metadata } from 'next';
 import Header from '@/components/landing/Header';
 import Footer from '@/components/landing/Footer';
 import ContentNarrationPlayer from '@/components/ContentNarrationPlayer';
-
+import OMRVideoPlayer from '@/components/OMRVideoPlayer';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
@@ -69,12 +69,11 @@ export default async function VideosPage() {
             <div key={video.id} className="surface-card flex flex-col overflow-hidden">
                {/* Video Embed/Link */}
                <div className="relative aspect-video border-b border-landing-border bg-landing-surface-muted">
-                  {video.url && (video.url.includes('youtube.com') || video.url.includes('youtu.be')) ? (
-                      <iframe 
-                        src={video.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/')}
-                        className="h-full w-full"
-                        allowFullScreen
+                  {video.url && (video.url.includes('youtube.com') || video.url.includes('youtu.be') || video.url.includes('vimeo.com')) ? (
+                      <OMRVideoPlayer 
+                        url={video.url}
                         title={video.title}
+                        className="absolute inset-0 h-full w-full"
                       />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center">

@@ -1,4 +1,4 @@
-export const BOOK_FILE_CACHE_NAME = 'omr-book-files-v1';
+export const BOOK_FILE_CACHE_NAME = 'omr-book-files-v2';
 
 const VALID_BOOK_RESPONSE_CONTENT_TYPES = [
   'application/epub+zip',

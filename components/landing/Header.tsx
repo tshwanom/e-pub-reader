@@ -15,13 +15,13 @@ export default async function Header() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-landing-border/90 bg-white/85 backdrop-blur-xl">
-      <div className="page-container flex items-center justify-between gap-4 py-4">
+      <div className="page-container flex flex-wrap items-center justify-between gap-2 sm:gap-4 py-4">
         <Link
           href="/"
-          className="group inline-flex items-center gap-3 rounded-xl px-1 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2"
+          className="group inline-flex items-center gap-2 sm:gap-3 rounded-xl px-1 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2"
         >
           <Image src="/logo.png" alt="OMR Logo" width={36} height={36} className="rounded-full shadow-sm" />
-          <span className="font-playfair text-lg font-semibold text-landing-text transition-colors group-hover:text-landing-accent">
+          <span className="font-playfair text-base sm:text-lg font-semibold text-landing-text transition-colors group-hover:text-landing-accent">
             One Man Revolution
           </span>
         </Link>
