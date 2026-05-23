@@ -25,6 +25,7 @@ export const authOptions: NextAuthOptions = {
     EmailProvider({
       from: process.env.RESEND_FROM_EMAIL,
       maxAge: MAGIC_LOGIN_MAX_AGE_MINUTES * 60,
+      allowDangerousEmailAccountLinking: true,
       normalizeIdentifier(identifier) {
         return normalizeAuthEmail(identifier);
       },

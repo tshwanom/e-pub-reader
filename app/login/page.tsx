@@ -11,6 +11,8 @@ function getAuthErrorMessage(error?: string | null) {
       return 'That link or code is invalid or has expired. Request a fresh one and try again.';
     case 'EmailSignin':
       return 'We could not send the sign-in email. Please try again in a moment.';
+    case 'EmailCreateAccount':
+      return 'We could not sign you in. If you have an existing account, try signing in with your password, or contact support.';
     case 'AccessDenied':
       return 'We could not sign you in with that email just now.';
     default:
