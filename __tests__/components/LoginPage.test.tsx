@@ -77,8 +77,11 @@ describe('LoginPage', () => {
 
     render(<LoginPage />);
 
-    const emailInputs = screen.getAllByRole('textbox', { name: /Email/i });
-    await user.type(emailInputs[1], 'reader@example.com');
+    // Switch to Password tab
+    await user.click(screen.getByRole('button', { name: /^Password$/i }));
+
+    const emailInput = screen.getByRole('textbox', { name: /Email/i });
+    await user.type(emailInput, 'reader@example.com');
     await user.type(screen.getByLabelText(/^Password$/i), 'secret');
     await user.click(screen.getByRole('button', { name: /Sign in with password/i }));
 
