@@ -30,7 +30,7 @@ function LoginPageShell({ children, subtitle = 'Access your personal library' }:
     <div className="relative flex min-h-screen items-center justify-center bg-landing-bg px-4 py-12 sm:px-6 lg:px-8">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-[radial-gradient(circle_at_top,rgba(61,115,122,0.12),transparent_65%)]" />
 
-      <div className="surface-card w-full max-w-md space-y-8 p-8 sm:p-10">
+      <div className="surface-card w-full max-w-lg space-y-8 p-8 sm:p-10">
         <div className="text-center">
           <p className="mb-4 text-xs font-semibold uppercase tracking-[0.14em] text-landing-accent">Welcome Back</p>
           <h2 className="font-playfair text-3xl font-semibold tracking-tight text-landing-text">
