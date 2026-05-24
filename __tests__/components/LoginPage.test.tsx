@@ -44,7 +44,7 @@ describe('LoginPage', () => {
 
     render(<LoginPage />);
 
-    await user.type(screen.getByLabelText(/Donor email/i), 'Reader@example.com');
+    await user.type(screen.getByLabelText(/Email address/i), 'Reader@example.com');
     await user.click(screen.getByRole('button', { name: /Send magic link or code/i }));
 
     await waitFor(() => {
@@ -63,7 +63,7 @@ describe('LoginPage', () => {
 
     render(<LoginPage />);
 
-    await user.type(screen.getByLabelText(/Donor email/i), 'reader@example.com');
+    await user.type(screen.getByLabelText(/Email address/i), 'reader@example.com');
     await user.type(screen.getByLabelText(/6-digit code/i), '123456');
     await user.click(screen.getByRole('button', { name: /Sign in with code/i }));
 

@@ -67,7 +67,7 @@ function LoginPageContent() {
     event.preventDefault();
 
     if (!normalizedMagicEmail) {
-      setEmailError('Enter the email address you donated with so we can send your sign-in link and code.');
+      setEmailError('Enter your email address so we can send your sign-in link and code.');
       return;
     }
 
@@ -98,7 +98,7 @@ function LoginPageContent() {
     event.preventDefault();
 
     if (!normalizedMagicEmail) {
-      setEmailError('Enter your donor email before using the code.');
+      setEmailError('Enter your email address before using the code.');
       return;
     }
 
@@ -148,10 +148,10 @@ function LoginPageContent() {
       <div className="space-y-6">
         <section className="rounded-2xl border border-landing-border/80 bg-white/70 p-5 shadow-sm">
           <div className="mb-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-landing-accent">Passwordless donor sign-in</p>
-            <h3 className="mt-2 text-xl font-semibold text-landing-text">Use the email you donated with</h3>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-landing-accent">Passwordless sign-in & registration</p>
+            <h3 className="mt-2 text-xl font-semibold text-landing-text">Sign in or create an account</h3>
             <p className="mt-2 text-sm leading-6 text-landing-text-muted">
-              Enter your donor email and we&rsquo;ll send you both a magic link and a 6-digit code.
+              Enter your email to sign in instantly or create a new free account. If you donated, please use your donor email to unlock premium benefits automatically.
             </p>
           </div>
 
@@ -170,7 +170,7 @@ function LoginPageContent() {
           <form className="space-y-4" onSubmit={handleMagicLinkRequest}>
             <div className="space-y-2">
               <label htmlFor="magic-email" className="text-sm font-medium text-landing-text-muted">
-                Donor email
+                Email address
               </label>
               <input
                 id="magic-email"
