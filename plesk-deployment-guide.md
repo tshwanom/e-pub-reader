@@ -22,6 +22,15 @@ This single script (`scripts/deploy-plesk.js`) will execute the following steps 
 
 The production startup entrypoints (`server.js` and `app.js`) also run `prisma migrate deploy` automatically before boot unless you explicitly set `AUTO_RUN_PRISMA_MIGRATIONS=false`.
 
+If the deployment stops with Prisma error `P3009` for the failed migration `20260525133000_book_donor_hierarchy`, run this once on the server and then retry the deployment:
+
+```bash
+npm run repair:book-donor-hierarchy
+npm run deploy:plesk
+```
+
+The repair helper completes any missing donor-access SQL in an idempotent way and then resolves that failed migration as applied.
+
 ## 3) Restart the App
 
 Once the script finishes successfully:

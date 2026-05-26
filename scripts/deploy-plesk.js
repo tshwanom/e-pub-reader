@@ -24,6 +24,14 @@ function runCommand(command, args, env = {}) {
   }
 
   if (result.status !== 0) {
+    if (command === NPX_CMD && args.join(' ') === 'prisma migrate deploy') {
+      console.error('\n💡 Prisma migration recovery hint:');
+      console.error('   If this failed with P3009 for 20260525133000_book_donor_hierarchy, run:');
+      console.error('   npm run repair:book-donor-hierarchy');
+      console.error('   Then re-run:');
+      console.error('   npm run deploy:plesk');
+    }
+
     console.error(`\n❌ Command failed with exit code ${result.status}: ${printable}`);
     process.exit(1);
   }

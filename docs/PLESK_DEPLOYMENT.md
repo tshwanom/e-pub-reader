@@ -276,6 +276,24 @@ If build fails due to memory:
 NODE_OPTIONS="--max-old-space-size=4096" npm run build
 ```
 
+### Failed Prisma migration (`P3009`)
+
+If `npm run deploy:plesk` stops at `npx prisma migrate deploy` with Prisma error `P3009`, the target database has a failed migration recorded in `_prisma_migrations`, so Prisma will not apply anything else until that failed state is reconciled.
+
+For the known donor-access migration failure:
+
+```bash
+npm run repair:book-donor-hierarchy
+npm run deploy:plesk
+```
+
+That helper does two things against the current `DATABASE_URL`:
+
+1. Runs the idempotent SQL in `prisma/repairs/20260525133000_book_donor_hierarchy_repair.sql` to ensure the enum, column, default, backfill, and `NOT NULL` constraint are in place.
+2. Marks the failed migration `20260525133000_book_donor_hierarchy` as applied with `prisma migrate resolve --applied`.
+
+If you need to inspect the failure manually first, query `_prisma_migrations.logs` on the server-side database for that migration name. Prisma's production guidance for this recovery path is to either roll the failed migration back and redeploy, or manually complete the missing SQL and then resolve it as applied.
+
 ## Performance Optimization
 
 ### Enable Production Mode
