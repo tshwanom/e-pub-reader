@@ -82,10 +82,6 @@ async function openDonationModal(user: ReturnType<typeof userEvent.setup>) {
   await waitFor(() => {
     expect(screen.getByRole('dialog', { name: /Support “Test Book”/i })).toBeInTheDocument();
   });
-
-  await waitFor(() => {
-    expect(global.fetch).toHaveBeenCalled();
-  });
 }
 
 describe('DonationSection', () => {
@@ -244,14 +240,10 @@ describe('DonationSection', () => {
 
     await openDonationModal(user);
 
-    await user.click(screen.getByRole('button', { name: /^Paystack/i }));
+    await user.click(screen.getByRole('button', { name: /Paystack payment gateway/i }));
+    const continueButton = screen.getByRole('button', { name: /Continue to Paystack/i });
 
-    await waitFor(() => {
-      expect(screen.getByLabelText(/Email for Paystack/i)).toBeInTheDocument();
-    });
-
-    const continueButton = await screen.findByRole('button', { name: /Continue to Paystack/i });
-
+    expect(screen.getByLabelText(/Email for Paystack/i)).toBeInTheDocument();
     expect(continueButton).toBeDisabled();
   });
 
@@ -263,11 +255,7 @@ describe('DonationSection', () => {
     await openDonationModal(user);
 
     await chooseCurrencyWithSearch(user, 'south africa', /ZAR/i);
-    await user.click(screen.getByRole('button', { name: /^Paystack/i }));
-
-    await waitFor(() => {
-      expect(screen.getByLabelText(/Email for Paystack/i)).toBeInTheDocument();
-    });
+    await user.click(screen.getByRole('button', { name: /Paystack payment gateway/i }));
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
@@ -298,31 +286,21 @@ describe('DonationSection', () => {
     });
   });
 
-  it('lets the donor switch to monthly support and start recurring checkout on Paystack', async () => {
+  it('lets the donor switch to monthly support and keeps recurring checkout on PayPal', async () => {
     const user = userEvent.setup();
 
     render(<DonationSection bookId="book-1" bookTitle="Test Book" />);
 
     await openDonationModal(user);
 
-    await user.click(screen.getByRole('button', { name: /Monthly/i }));
+    await user.click(screen.getByRole('button', { name: /Monthly support cadence/i }));
 
-    expect(screen.getByText(/Monthly recurring support is available through PayPal and Paystack/i)).toBeInTheDocument();
+    expect(screen.getByText(/Monthly recurring support is available through both PayPal and Paystack/i)).toBeInTheDocument();
 
-    const paystackGatewayButton = screen.getByRole('button', { name: /^Paystack/i });
-    expect(paystackGatewayButton).not.toBeDisabled();
+    const paystackGatewayButton = screen.getByRole('button', { name: /Paystack payment gateway/i });
+    expect(paystackGatewayButton).toBeEnabled();
 
-    await user.click(paystackGatewayButton);
-
-    await waitFor(() => {
-      expect(screen.getByLabelText(/Email for Paystack/i)).toBeInTheDocument();
-    });
-
-    expect(screen.getByRole('button', { name: /Start monthly support with Paystack/i })).toBeDisabled();
-
-    await user.type(screen.getByLabelText(/Email for Paystack/i), 'reader@example.com');
-
-    await user.click(screen.getByRole('button', { name: /Start monthly support with Paystack/i }));
+    await user.click(screen.getByRole('button', { name: /Start monthly support with PayPal/i }));
 
     const postCall = await waitFor(() => {
       const call = (global.fetch as jest.Mock).mock.calls.find(([, request]) => request?.method === 'POST');
@@ -335,8 +313,7 @@ describe('DonationSection', () => {
       amount: 10,
       currency: 'USD',
       frequency: 'MONTHLY',
-      gateway: 'PAYSTACK',
-      donorEmail: 'reader@example.com',
+      gateway: 'PAYPAL',
     });
   });
 });

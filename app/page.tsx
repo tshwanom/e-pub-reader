@@ -1,5 +1,10 @@
-import { isUserDonor } from '@/lib/book-access';
+import { getUserDonorProfile, isPrivilegedUser } from '@/lib/book-access';
 import { authOptions } from '@/lib/auth';
+import {
+  type DonorTier,
+  hasBookAccessForDonorTier,
+  resolveBookDonorAccessLevel,
+} from '@/lib/book-access-config';
 import { prisma } from '@/lib/prisma';
 import Header from '@/components/landing/Header';
 import HeroSection from '@/components/landing/HeroSection';
@@ -12,12 +17,17 @@ export const dynamic = 'force-dynamic';
 
 export default async function LandingPage() {
   let session = null;
-  let isDonor = false;
+  let isPrivileged = false;
+  let donorTier: DonorTier = 'NONE';
   let books: Awaited<ReturnType<typeof prisma.book.findMany>> = [];
 
   try {
     session = await getServerSession(authOptions);
-    isDonor = await isUserDonor(session?.user);
+    isPrivileged = isPrivilegedUser(session?.user);
+
+    if (!isPrivileged) {
+      donorTier = (await getUserDonorProfile(session?.user)).tier;
+    }
   } catch (err) {
     console.error('[LandingPage] Failed to resolve session:', err);
   }
@@ -146,8 +156,12 @@ export default async function LandingPage() {
                   author={book.author}
                   description={book.description}
                   coverUrl={book.coverUrl}
+                  donorAccessLevel={book.donorAccessLevel}
                   donorOnly={book.donorOnly}
-                  isAccessible={!book.donorOnly || isDonor}
+                  isAccessible={
+                    isPrivileged
+                    || hasBookAccessForDonorTier(resolveBookDonorAccessLevel(book), donorTier)
+                  }
                 />
               ))}
             </div>

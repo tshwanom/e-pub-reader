@@ -36,6 +36,7 @@ export async function GET(
       title: true,
       status: true,
       donorOnly: true,
+      donorAccessLevel: true,
       audiobook: {
         select: {
           id: true,
@@ -58,7 +59,9 @@ export async function GET(
         available: false,
         reason: "book-access-required",
         message: featureAccess.isPublished
-          ? "Open the book first before narrated mode can be checked for this account."
+          ? featureAccess.requiresRecurringDonation
+            ? 'This title is reserved for recurring supporters. Start or keep an active monthly donation before narrated mode can be checked for this account.'
+            : 'Open the book first before narrated mode can be checked for this account.'
           : "Book not found.",
         storageProvider: activeStorageProvider,
         manifest: null,

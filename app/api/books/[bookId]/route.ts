@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { isPrivilegedUser } from '@/lib/book-access';
 import { authOptions } from '@/lib/auth';
+import { isBookDonorAccessLevel } from '@/lib/book-access-config';
 import { CONTENT_FEATURE_UNAVAILABLE_MESSAGE, isContentFeatureUnavailableError } from '@/lib/content';
 import { prisma } from '@/lib/prisma';
 
@@ -83,6 +84,17 @@ export async function PATCH(
   try {
     // Handle print links and supplementary content separately
     const { printLinks, supplementaryContents, ...bookData } = data;
+
+    if ('donorAccessLevel' in bookData || 'donorOnly' in bookData) {
+      const donorAccessLevel = isBookDonorAccessLevel(bookData.donorAccessLevel)
+        ? bookData.donorAccessLevel
+        : bookData.donorOnly
+          ? 'ALL_DONORS'
+          : 'PUBLIC';
+
+      bookData.donorAccessLevel = donorAccessLevel;
+      bookData.donorOnly = donorAccessLevel !== 'PUBLIC';
+    }
 
     // Sanitize numeric fields that might come in as empty strings, null, or undefined
     if ('donationGoal' in bookData) {

@@ -1,4 +1,9 @@
-import { isPrivilegedUser, isUserDonor } from "@/lib/book-access";
+import { getUserDonorProfile, isPrivilegedUser } from "@/lib/book-access";
+import {
+  type DonorTier,
+  hasBookAccessForDonorTier,
+  resolveBookDonorAccessLevel,
+} from '@/lib/book-access-config';
 import { getUserActivePaystackSubscription } from '@/lib/donation-subscriptions';
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
@@ -18,7 +23,9 @@ export default async function LibraryPage({
 }) {
   const session = await getServerSession(authOptions);
   const privileged = isPrivilegedUser(session?.user);
-  const isDonor = privileged ? true : await isUserDonor(session?.user);
+  const donorTier: DonorTier = privileged
+    ? 'RECURRING'
+    : (await getUserDonorProfile(session?.user)).tier;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const paystackSubscription = session?.user ? await getUserActivePaystackSubscription(session.user) : null;
   
@@ -84,8 +91,12 @@ export default async function LibraryPage({
                 author={book.author}
                 description={book.description}
                 coverUrl={book.coverUrl}
+                donorAccessLevel={book.donorAccessLevel}
                 donorOnly={book.donorOnly}
-                isAccessible={privileged || !book.donorOnly || isDonor}
+                isAccessible={
+                  privileged
+                  || hasBookAccessForDonorTier(resolveBookDonorAccessLevel(book), donorTier)
+                }
                 readingProgress={book.readingProgress?.[0]?.progress ?? null}
               />
             ))}

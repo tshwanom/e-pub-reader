@@ -1,6 +1,11 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import BookReadLink from '@/components/BookReadLink';
+import {
+  isDonorRestrictedBook,
+  isRecurringDonorBook,
+  resolveBookDonorAccessLevel,
+} from '@/lib/book-access-config';
 
 interface BookCardProps {
   id: string;
@@ -8,6 +13,7 @@ interface BookCardProps {
   author: string;
   description: string;
   coverUrl: string;
+  donorAccessLevel?: string | null;
   donorOnly?: boolean;
   isAccessible?: boolean;
   readingProgress?: number | null; // 0–100
@@ -19,25 +25,42 @@ export default function BookCard({
   author,
   description,
   coverUrl,
+  donorAccessLevel,
   donorOnly = false,
-  isAccessible = !donorOnly,
+  isAccessible,
   readingProgress,
 }: BookCardProps) {
-  const ctaLabel = donorOnly
+  const bookDonorAccessLevel = resolveBookDonorAccessLevel({ donorAccessLevel, donorOnly });
+  const isRestrictedBook = isDonorRestrictedBook(bookDonorAccessLevel);
+  const requiresRecurringSupport = isRecurringDonorBook(bookDonorAccessLevel);
+  const resolvedAccessibility = typeof isAccessible === 'boolean'
     ? isAccessible
-      ? 'Open donor edition'
-      : 'Donor access'
-    : 'Read free';
+    : !isRestrictedBook;
+  const ctaLabel = !isRestrictedBook
+    ? 'Read free'
+    : resolvedAccessibility
+      ? requiresRecurringSupport
+        ? 'Open recurring edition'
+        : 'Open donor edition'
+      : requiresRecurringSupport
+        ? 'Monthly donor access'
+        : 'Donor access';
 
-  const hasProgress = isAccessible && readingProgress != null && readingProgress > 0;
+  const hasProgress = resolvedAccessibility && readingProgress != null && readingProgress > 0;
 
   return (
     <article className="group surface-card flex h-full flex-col overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
       {/* Book Cover */}
       <div className="relative aspect-[2/3] overflow-hidden bg-gradient-to-br from-landing-accent/10 to-landing-bg">
-        {donorOnly && (
+        {isRestrictedBook && (
           <div className="absolute left-3 top-3 z-10 rounded-full border border-white/40 bg-black/55 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white backdrop-blur-sm">
-            {isAccessible ? 'Donor edition' : 'Donors only'}
+            {resolvedAccessibility
+              ? requiresRecurringSupport
+                ? 'Recurring edition'
+                : 'Donor edition'
+              : requiresRecurringSupport
+                ? 'Recurring donors'
+                : 'All donors'}
           </div>
         )}
 
@@ -78,9 +101,15 @@ export default function BookCard({
 
       {/* Book Info */}
       <div className="flex flex-1 flex-col p-6">
-        {donorOnly && (
+        {isRestrictedBook && (
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-landing-accent">
-            {isAccessible ? 'Unlocked for donors' : 'Reserved for donors'}
+            {resolvedAccessibility
+              ? requiresRecurringSupport
+                ? 'Unlocked for recurring supporters'
+                : 'Unlocked for donors'
+              : requiresRecurringSupport
+                ? 'Reserved for recurring supporters'
+                : 'Reserved for donors'}
           </p>
         )}
         <h3 className="line-clamp-2 font-inter text-xl font-semibold text-landing-text">
@@ -115,7 +144,7 @@ export default function BookCard({
             </svg>
           </Link>
 
-          {hasProgress && isAccessible && (
+          {hasProgress && resolvedAccessibility && (
             <BookReadLink
               bookId={id}
               className="ml-auto rounded-lg bg-landing-accent/10 px-3 py-1.5 text-xs font-semibold text-landing-accent transition hover:bg-landing-accent hover:text-white"

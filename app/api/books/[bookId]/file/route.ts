@@ -29,7 +29,13 @@ export async function GET(
 
   if (!access.hasAccess) {
     return NextResponse.json(
-      { error: access.requiresDonation ? "Donor access required" : "Book not found" },
+      {
+        error: access.requiresRecurringDonation
+          ? 'Recurring donor access required'
+          : access.requiresDonation
+            ? 'Donor access required'
+            : 'Book not found',
+      },
       { status: access.isPublished ? 403 : 404 }
     );
   }

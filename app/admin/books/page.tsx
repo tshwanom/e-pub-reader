@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { formatBookDonorAccessLevel, isDonorRestrictedBook } from '@/lib/book-access-config';
 import Image from "next/image";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -13,6 +14,7 @@ export default async function AdminBooksPage() {
       slug: true,
       status: true,
       donorOnly: true,
+      donorAccessLevel: true,
       createdAt: true,
       coverUrl: true,
       epubFile: {
@@ -42,7 +44,7 @@ export default async function AdminBooksPage() {
     },
   });
 
-  const donorOnlyCount = books.filter((book) => book.donorOnly).length;
+  const donorOnlyCount = books.filter((book) => isDonorRestrictedBook(book.donorAccessLevel)).length;
   const readyNarrationCount = books.filter((book) => book.narrations[0]?.status === "READY").length;
 
   return (
@@ -148,9 +150,13 @@ export default async function AdminBooksPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
-                      book.donorOnly ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-700'
+                      book.donorAccessLevel === 'RECURRING_DONORS'
+                        ? 'bg-amber-100 text-amber-700'
+                        : book.donorAccessLevel === 'ALL_DONORS'
+                          ? 'bg-violet-100 text-violet-700'
+                          : 'bg-slate-100 text-slate-700'
                     }`}>
-                      {book.donorOnly ? 'Donors only' : 'Public'}
+                      {formatBookDonorAccessLevel(book.donorAccessLevel)}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-landing-text-muted">

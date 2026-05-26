@@ -2,6 +2,7 @@ import { getBookAccessState, getDonorFeatureAccessState } from "@/lib/book-acces
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { getBookDonorRequirementText, getBookLockedAudienceLabel } from '@/lib/book-access-config';
 import Reader from "@/components/Reader";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -21,6 +22,8 @@ export default async function ReadBookPage({ params }: { params: Promise<{ bookI
   }
 
   const access = await getBookAccessState(book, session?.user);
+  const donorRequirementText = getBookDonorRequirementText(access.bookDonorAccessLevel);
+  const lockedAudienceLabel = getBookLockedAudienceLabel(access.bookDonorAccessLevel);
 
   if (!access.hasAccess) {
     if (!access.isPublished) {
@@ -34,10 +37,10 @@ export default async function ReadBookPage({ params }: { params: Promise<{ bookI
             Donor Library
           </p>
           <h1 className="mt-4 font-playfair text-3xl font-semibold text-landing-text sm:text-4xl">
-            “{book.title}” is reserved for donors
+            “{book.title}” is reserved for {lockedAudienceLabel}
           </h1>
           <p className="mt-4 text-base leading-relaxed text-landing-text-muted">
-            Support the work once to unlock this title and the rest of the donor collection.
+            Access requires {donorRequirementText} on your account before this title can open.
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">

@@ -52,7 +52,7 @@ export default async function EditContentPage({ params }: { params: Promise<{ co
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">Content editor</p>
         <h1 className="mt-2 font-playfair text-3xl text-landing-text sm:text-4xl">{content.title}</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-landing-text-muted sm:text-[15px]">
-          Update publishing details, page placement, and platform-wide narration for this content item.
+          Update publishing details, page placement, and donor-only narration for this content item.
         </p>
       </section>
 

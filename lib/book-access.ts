@@ -1,3 +1,10 @@
+import {
+  type DonorTier,
+  hasBookAccessForDonorTier,
+  isDonorRestrictedBook,
+  isRecurringDonorBook,
+  resolveBookDonorAccessLevel,
+} from '@/lib/book-access-config';
 import { prisma } from "@/lib/prisma";
 
 type SessionUserLike = {
@@ -8,7 +15,8 @@ type SessionUserLike = {
 
 type BookAccessLike = {
   status: string;
-  donorOnly: boolean;
+  donorOnly?: boolean | null;
+  donorAccessLevel?: string | null;
 };
 
 export function isPrivilegedUser(user?: SessionUserLike) {
@@ -18,6 +26,35 @@ export function isPrivilegedUser(user?: SessionUserLike) {
 function normalizeDonorEmail(email?: string | null) {
   const normalizedEmail = email?.trim().toLowerCase();
   return normalizedEmail || null;
+}
+
+function getDonationOwnershipMatches({
+  userId,
+  donorEmail,
+}: {
+  userId?: string | null;
+  donorEmail?: string | null;
+}) {
+  return [
+    ...(userId ? [{ userId }] : []),
+    ...(donorEmail
+      ? [{
+          donorEmail: {
+            equals: donorEmail,
+            mode: 'insensitive' as const,
+          },
+        }]
+      : []),
+  ];
+}
+
+function resolveDonationOwner(userOrId?: string | SessionUserLike | null, email?: string | null) {
+  return {
+    userId: typeof userOrId === 'string' ? userOrId : userOrId?.id,
+    donorEmail: normalizeDonorEmail(
+      typeof userOrId === 'string' ? email : userOrId?.email
+    ),
+  };
 }
 
 async function linkCompletedDonationsToUser({
@@ -47,66 +84,111 @@ async function linkCompletedDonationsToUser({
 }
 
 export async function isUserDonor(userOrId?: string | SessionUserLike | null, email?: string | null) {
-  const userId = typeof userOrId === 'string' ? userOrId : userOrId?.id;
-  const donorEmail = normalizeDonorEmail(
-    typeof userOrId === 'string' ? email : userOrId?.email
-  );
+  const donorProfile = await getUserDonorProfile(userOrId, email);
+
+  return donorProfile.isDonor;
+}
+
+export async function getUserDonorProfile(
+  userOrId?: string | SessionUserLike | null,
+  email?: string | null
+) {
+  const { userId, donorEmail } = resolveDonationOwner(userOrId, email);
 
   if (!userId && !donorEmail) {
-    return false;
+    return {
+      tier: 'NONE' as DonorTier,
+      isDonor: false,
+      isRecurringDonor: false,
+    };
   }
 
   if (userId && donorEmail) {
     await linkCompletedDonationsToUser({ userId, donorEmail });
   }
 
-  const donation = await prisma.donation.findFirst({
+  const ownershipMatches = getDonationOwnershipMatches({ userId, donorEmail });
+
+  const recurringDonation = await prisma.donation.findFirst({
     where: {
-      status: "COMPLETED",
-      OR: [
-        ...(userId ? [{ userId }] : []),
-        ...(donorEmail
-          ? [{
-              donorEmail: {
-                equals: donorEmail,
-                mode: 'insensitive' as const,
-              },
-            }]
-          : []),
-      ],
+      status: 'COMPLETED',
+      frequency: 'MONTHLY',
+      OR: ownershipMatches,
     },
     select: {
       id: true,
     },
   });
 
-  return Boolean(donation);
+  if (recurringDonation) {
+    return {
+      tier: 'RECURRING' as DonorTier,
+      isDonor: true,
+      isRecurringDonor: true,
+    };
+  }
+
+  const donation = await prisma.donation.findFirst({
+    where: {
+      status: "COMPLETED",
+      OR: ownershipMatches,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  return {
+    tier: donation ? 'ONE_TIME' as DonorTier : 'NONE' as DonorTier,
+    isDonor: Boolean(donation),
+    isRecurringDonor: false,
+  };
 }
 
 export async function getBookAccessState(book: BookAccessLike, user?: SessionUserLike) {
   const isPrivileged = isPrivilegedUser(user);
   const isPublished = book.status === "PUBLISHED";
-  const isDonor = isPrivileged ? true : await isUserDonor(user);
-  const hasAccess = isPrivileged || (isPublished && (!book.donorOnly || isDonor));
+  const bookDonorAccessLevel = resolveBookDonorAccessLevel(book);
+  const donorProfile = isPrivileged
+    ? {
+        tier: 'NONE' as DonorTier,
+        isDonor: true,
+        isRecurringDonor: false,
+      }
+    : await getUserDonorProfile(user);
+  const meetsDonorRequirement = hasBookAccessForDonorTier(bookDonorAccessLevel, donorProfile.tier);
+  const hasAccess = isPrivileged || (isPublished && meetsDonorRequirement);
 
   return {
     hasAccess,
-    isDonor,
+    isDonor: isPrivileged || donorProfile.isDonor,
+    isRecurringDonor: donorProfile.isRecurringDonor,
     isPrivileged,
     isPublished,
-    requiresDonation: book.donorOnly,
+    donorTier: donorProfile.tier,
+    bookDonorAccessLevel,
+    requiresDonation: isDonorRestrictedBook(bookDonorAccessLevel),
+    requiresRecurringDonation: isRecurringDonorBook(bookDonorAccessLevel),
   };
 }
 
 export async function getDonorAccessState(user?: SessionUserLike) {
   const isPrivileged = isPrivilegedUser(user);
   const isSignedIn = Boolean(user?.id);
-  const isDonor = isPrivileged ? true : await isUserDonor(user);
-  const hasAccess = isPrivileged || isDonor;
+  const donorProfile = isPrivileged
+    ? {
+        tier: 'NONE' as DonorTier,
+        isDonor: true,
+        isRecurringDonor: false,
+      }
+    : await getUserDonorProfile(user);
+  const hasAccess = isPrivileged || donorProfile.isDonor;
 
   return {
     hasAccess,
-    isDonor,
+    isDonor: isPrivileged || donorProfile.isDonor,
+    isRecurringDonor: donorProfile.isRecurringDonor,
+    donorTier: donorProfile.tier,
     isPrivileged,
     isSignedIn,
     requiresDonation: !hasAccess,
@@ -119,11 +201,9 @@ export async function getDonorFeatureAccessState(book: BookAccessLike, user?: Se
   const hasAccess = bookAccess.hasAccess && (bookAccess.isPrivileged || bookAccess.isDonor);
 
   return {
+    ...bookAccess,
     hasAccess,
     hasBookAccess: bookAccess.hasAccess,
-    isDonor: bookAccess.isDonor,
-    isPrivileged: bookAccess.isPrivileged,
-    isPublished: bookAccess.isPublished,
     isSignedIn,
     requiresDonation: !hasAccess,
     requiresBookAccess: !bookAccess.hasAccess,

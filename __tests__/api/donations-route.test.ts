@@ -70,6 +70,7 @@ describe('donations route', () => {
       id: 'book-1',
       title: 'Test Book',
       donorOnly: false,
+      donorAccessLevel: 'PUBLIC',
       status: 'PUBLISHED',
     });
     mockCreateDonationQuote.mockResolvedValue({
@@ -255,5 +256,66 @@ describe('donations route', () => {
         paypalId: 'I-SUBSCRIPTION-1',
       },
     });
+  });
+
+  it('rejects one-time checkout attempts for recurring-donor books', async () => {
+    mockFindBook.mockResolvedValueOnce({
+      id: 'book-1',
+      title: 'Recurring Support Edition',
+      donorOnly: true,
+      donorAccessLevel: 'RECURRING_DONORS',
+      status: 'PUBLISHED',
+    });
+
+    const response = await POST(
+      new Request('http://localhost/api/donations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookId: 'book-1',
+          amount: 25,
+          currency: 'USD',
+          gateway: 'PAYPAL',
+          frequency: 'ONE_TIME',
+        }),
+      }) as any
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: 'This book is reserved for recurring donors. Please choose monthly support to unlock it.',
+    });
+    expect(mockCreateDonation).not.toHaveBeenCalled();
+  });
+
+  it('requires sign-in before starting recurring support for recurring-donor books', async () => {
+    mockGetServerSession.mockResolvedValueOnce(null as any);
+    mockFindBook.mockResolvedValueOnce({
+      id: 'book-1',
+      title: 'Recurring Support Edition',
+      donorOnly: true,
+      donorAccessLevel: 'RECURRING_DONORS',
+      status: 'PUBLISHED',
+    });
+
+    const response = await POST(
+      new Request('http://localhost/api/donations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookId: 'book-1',
+          amount: 25,
+          currency: 'USD',
+          gateway: 'PAYPAL',
+          frequency: 'MONTHLY',
+        }),
+      }) as any
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Please sign in before starting monthly support to unlock recurring-donor books.',
+    });
+    expect(mockCreateDonation).not.toHaveBeenCalled();
   });
 });

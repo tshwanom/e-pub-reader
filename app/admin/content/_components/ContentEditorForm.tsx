@@ -197,7 +197,7 @@ export default function ContentEditorForm({ mode, initialContent, books }: Conte
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">Content details</p>
               <h2 className="mt-2 text-xl font-semibold text-landing-text">Publish platform-wide content</h2>
               <p className="mt-2 text-sm leading-6 text-landing-text-muted">
-                Articles, videos, poems, and quotes can stand alone or be connected to a book. If narration is enabled, the saved title, summary, and body become the sync-tracked narration transcript.
+                Articles, videos, poems, and quotes can stand alone or be connected to a book. If donor narration is enabled, the saved title, summary, and body become the sync-tracked narration transcript.
               </p>
             </div>
 
@@ -277,7 +277,7 @@ export default function ContentEditorForm({ mode, initialContent, books }: Conte
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">Workflow</p>
               <h3 className="mt-2 text-lg font-semibold text-landing-text">Production controls</h3>
               <p className="mt-2 text-sm leading-6 text-landing-text-muted">
-                Draft first, publish when approved, then generate narration from the content editor. Later text edits automatically trigger a fresh sync pass so old audio does not linger on the public page like an accidental director's cut.
+                Draft first, publish when approved, then generate donor narration from the content editor. Later text edits automatically trigger a fresh sync pass so old audio does not linger on the donor player like an accidental director's cut.
               </p>
             </div>
 
@@ -416,10 +416,10 @@ export default function ContentEditorForm({ mode, initialContent, books }: Conte
                 />
                 <div>
                   <label htmlFor="narrationEnabled" className="block text-sm font-semibold text-landing-text">
-                    Enable public narration player
+                    Enable donor narration player
                   </label>
                   <p className="mt-2 text-sm leading-6 text-landing-text-muted">
-                    Generate audio below first, then keep this on when the public article/video/poem should show playback. If the script changes later, older audio stays hidden until the fresh sync finishes.
+                    Generate audio below first, then keep this on when the article/video/poem should expose donor narration. Non-donors will stay locked out, and if the script changes later, older audio stays hidden until the fresh sync finishes.
                   </p>
                 </div>
               </div>
@@ -432,7 +432,7 @@ export default function ContentEditorForm({ mode, initialContent, books }: Conte
         <div>
           <p className="text-sm font-semibold text-landing-text">Save content changes</p>
           <p className="mt-1 text-sm text-landing-text-muted">
-            Publishing state, platform placement, and narration visibility are saved together. Transcript edits also mark existing narration for automatic re-sync.
+            Publishing state, platform placement, and donor narration visibility are saved together. Transcript edits also mark existing narration for automatic re-sync.
           </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">

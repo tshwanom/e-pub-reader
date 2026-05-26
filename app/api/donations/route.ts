@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import {
+  isDonorRestrictedBook,
+  isRecurringDonorBook,
+  resolveBookDonorAccessLevel,
+} from '@/lib/book-access-config';
+import {
   createDonationQuote,
 } from '@/lib/donation-quote';
 import {
@@ -56,10 +61,15 @@ export async function POST(req: NextRequest) {
           id: true,
           title: true,
           donorOnly: true,
+          donorAccessLevel: true,
           status: true,
         },
       })
     : null;
+
+  const bookDonorAccessLevel = resolveBookDonorAccessLevel(book);
+  const requiresRecurringDonation = isRecurringDonorBook(bookDonorAccessLevel);
+  const requiresDonation = isDonorRestrictedBook(bookDonorAccessLevel);
 
   if (bookId && !book) {
     return NextResponse.json({ error: 'Book not found' }, { status: 404 });
@@ -69,9 +79,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Book not available for donations' }, { status: 400 });
   }
 
-  if (book?.donorOnly && !session?.user?.id) {
+  if (requiresRecurringDonation && frequency !== 'MONTHLY') {
     return NextResponse.json(
-      { error: 'Please sign in before donating to unlock donor-only books.' },
+      {
+        error: 'This book is reserved for recurring donors. Please choose monthly support to unlock it.',
+      },
+      { status: 400 }
+    );
+  }
+
+  if (requiresDonation && !session?.user?.id) {
+    return NextResponse.json(
+      {
+        error: requiresRecurringDonation
+          ? 'Please sign in before starting monthly support to unlock recurring-donor books.'
+          : 'Please sign in before donating to unlock donor-only books.',
+      },
       { status: 401 }
     );
   }
@@ -190,7 +213,9 @@ export async function POST(req: NextRequest) {
             name: book
               ? `One Man Revolution Monthly Support · ${book.title}`
               : 'One Man Revolution Monthly Support',
-            description: `${description} · Donation ${pendingDonation.id}`,
+            description: book
+              ? `Monthly support for “${book.title}” · Donation ${pendingDonation.id}`
+              : `Monthly support · Donation ${pendingDonation.id}`,
           })
         : null;
 
@@ -210,7 +235,7 @@ export async function POST(req: NextRequest) {
           baseCurrency: DONATION_BASE_CURRENCY,
           frequency,
           gateway,
-          ...(paystackPlan ? { paystackPlanCode: paystackPlan.planCode } : {}),
+          ...(paystackPlan?.planCode ? { paystackPlanCode: paystackPlan.planCode } : {}),
         },
       });
 
@@ -218,7 +243,7 @@ export async function POST(req: NextRequest) {
         where: { id: pendingDonation.id },
         data: {
           paystackReference: paystackTransaction.reference,
-          ...(paystackPlan ? { paystackPlanCode: paystackPlan.planCode } : {}),
+          ...(paystackPlan?.planCode ? { paystackPlanCode: paystackPlan.planCode } : {}),
         },
       });
 

@@ -1,10 +1,16 @@
 import { notFound } from 'next/navigation';
-import { getBookAccessState } from '@/lib/book-access';
+import { getBookAccessState, getDonorFeatureAccessState } from '@/lib/book-access';
 import { withContentFeatureFallback } from '@/lib/content';
 import { getUserActivePaystackSubscription } from '@/lib/donation-subscriptions';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import {
+  getBookAccessBadgeLabel,
+  getBookDonorRequirementText,
+  getBookLockedAudienceLabel,
+  getBookSupportCallToAction,
+} from '@/lib/book-access-config';
 import Link from 'next/link';
 import Image from 'next/image';
 import DonationSection from '@/components/DonationSection';
@@ -47,6 +53,9 @@ export default async function BookDetailsPage({
   }
 
   const access = await getBookAccessState(book, session?.user);
+  const donorFeatureAccess = book.narrationEnabled
+    ? await getDonorFeatureAccessState(book, session?.user)
+    : null;
 
   if (!access.isPublished && !access.isPrivileged) {
     notFound();
@@ -69,6 +78,34 @@ export default async function BookDetailsPage({
   const progress = access.hasAccess && session?.user?.id ? book.readingProgress?.[0] : null;
   const donationStatus = resolvedSearchParams?.donation;
   const loginHref = `/login?callbackUrl=${encodeURIComponent(`/books/${book.id}`)}`;
+  const bookRequiresDonation = access.requiresDonation;
+  const bookRequiresRecurringSupport = access.requiresRecurringDonation;
+  const donorRequirementText = getBookDonorRequirementText(access.bookDonorAccessLevel);
+  const lockedAudienceLabel = getBookLockedAudienceLabel(access.bookDonorAccessLevel);
+  const supportCallToAction = getBookSupportCallToAction(access.bookDonorAccessLevel);
+  const accessBadgeLabel = getBookAccessBadgeLabel(access.bookDonorAccessLevel, access.hasAccess);
+  const lockedSupportMessage = session
+    ? bookRequiresRecurringSupport
+      ? 'Start or keep an active monthly donation to unlock this book and future recurring-supporter releases.'
+      : 'Make one completed donation to unlock this book and future donor releases.'
+    : bookRequiresRecurringSupport
+      ? 'Sign in first, then start monthly support to unlock this book and the recurring-supporter library.'
+      : 'Sign in first, then donate to unlock this book and the donor library.';
+  const defaultUnlockMessage = bookRequiresRecurringSupport
+    ? 'Start or keep an active monthly donation to unlock this recurring-donor title and future recurring-supporter releases on your account.'
+    : 'Make any completed donation to unlock this book and future donor releases on your account.';
+  const defaultNarrationUnlockMessage = bookRequiresRecurringSupport
+    ? 'Start or keep an active monthly donation to unlock donor narration for this title on your account.'
+    : 'Support the work once to unlock donor narration for this title on your account.';
+  const donorNarrationMessage = !book.narrationEnabled || !donorFeatureAccess
+    ? null
+    : donorFeatureAccess.hasAccess
+      ? 'Donor narration is unlocked on your account and will appear inside the reader whenever the signed audio is ready.'
+      : bookRequiresRecurringSupport
+        ? 'Narrated mode follows this title’s recurring-supporter access. Start or keep an active monthly donation to unlock the narration player.'
+        : bookRequiresDonation
+          ? 'Narrated mode follows this title’s donor access, so the narration player unlocks with the same support requirement.'
+          : 'Narrated mode is reserved for donors. Support the work once to unlock the narration player on your account.';
 
   return (
     <main className="page-shell">
@@ -122,7 +159,7 @@ export default async function BookDetailsPage({
                   href="#support-this-book"
                   className="brand-button mb-4 block w-full text-center"
                 >
-                  Donate to Unlock
+                  {supportCallToAction}
                 </a>
               ) : (
                 <Link
@@ -148,7 +185,7 @@ export default async function BookDetailsPage({
                 </div>
               )}
 
-              {book.donorOnly && (
+              {bookRequiresDonation && (
                 <div
                   className={`mb-4 rounded-2xl border px-4 py-4 ${
                     access.hasAccess
@@ -157,14 +194,20 @@ export default async function BookDetailsPage({
                   }`}
                 >
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-landing-accent">
-                    {access.hasAccess ? 'Donor access active' : 'Donor-only title'}
+                    {access.hasAccess
+                      ? bookRequiresRecurringSupport
+                        ? 'Recurring support active'
+                        : 'Donor access active'
+                      : bookRequiresRecurringSupport
+                        ? 'Recurring-supporter title'
+                        : 'Donor title'}
                   </p>
                   <p className="mt-2 text-sm leading-relaxed text-landing-text-muted">
                     {access.hasAccess
-                      ? 'Thanks for supporting the work — this donor release is unlocked on your account.'
-                      : session
-                        ? 'Make one completed donation to unlock this book and future donor releases.'
-                        : 'Sign in first, then donate to unlock this book and the donor library.'}
+                      ? bookRequiresRecurringSupport
+                        ? 'Thanks for sustaining the work monthly — this recurring-supporter release is unlocked on your account.'
+                        : 'Thanks for supporting the work — this donor release is unlocked on your account.'
+                      : lockedSupportMessage}
                   </p>
                 </div>
               )}
@@ -222,7 +265,7 @@ export default async function BookDetailsPage({
           <div className="space-y-6 lg:col-span-2 min-w-0">
             {donationStatus === 'success' && (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 px-5 py-4 text-sm text-emerald-800">
-                Donation received successfully. {book.donorOnly ? 'This donor-only title is now unlocked on your account.' : 'Thank you for supporting the work.'}
+                Donation received successfully. {bookRequiresDonation ? 'This title is now unlocked on your account.' : 'Thank you for supporting the work.'}
               </div>
             )}
 
@@ -232,7 +275,7 @@ export default async function BookDetailsPage({
               </div>
             )}
 
-            {(book.donationEnabled || book.donorOnly) && (
+            {(book.donationEnabled || bookRequiresDonation || book.narrationEnabled) && (
               <section id="support-this-book">
                 {paystackSubscription ? (
                   <div className="mb-6">
@@ -244,13 +287,13 @@ export default async function BookDetailsPage({
                   </div>
                 ) : null}
 
-                {book.donorOnly && !session ? (
+                {bookRequiresDonation && !session ? (
                   <div className="surface-card p-4 sm:p-6 lg:p-8 w-full">
                     <h2 className="font-playfair text-2xl sm:text-3xl font-semibold text-landing-text">
                       Sign in before donating
                     </h2>
                     <p className="mt-3 leading-relaxed text-landing-text-muted">
-                      Donor access is tied to your account, so please sign in first. Then any completed donation will unlock this book.
+                      Access is tied to your account, so please sign in first. Then {donorRequirementText} will unlock this book.
                     </p>
                     <Link href={loginHref} className="brand-button mt-6 inline-flex px-6 py-3">
                       Sign in to continue
@@ -260,12 +303,15 @@ export default async function BookDetailsPage({
                   <DonationSection
                     bookId={book.id}
                     bookTitle={book.title}
+                    bookDonorAccessLevel={access.bookDonorAccessLevel}
                     donorOnly={book.donorOnly}
                     currentUserEmail={session?.user?.email ?? null}
                     message={
                       book.donationMessage ||
-                      (book.donorOnly
-                        ? 'Make any completed donation to unlock this donor-only book and future donor releases on your account.'
+                      (bookRequiresDonation
+                        ? defaultUnlockMessage
+                        : book.narrationEnabled
+                          ? defaultNarrationUnlockMessage
                         : undefined)
                     }
                     goal={book.donationGoal ? Number(book.donationGoal) : undefined}
@@ -284,7 +330,18 @@ export default async function BookDetailsPage({
                 <span className="rounded-full bg-landing-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-landing-accent">
                   {book.status}
                 </span>
-                {book.donorOnly && (
+                {book.narrationEnabled && (
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                      donorFeatureAccess?.hasAccess
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-sky-100 text-sky-700'
+                    }`}
+                  >
+                    {donorFeatureAccess?.hasAccess ? 'Narration Unlocked' : 'Donor Narration'}
+                  </span>
+                )}
+                {bookRequiresDonation && (
                   <span
                     className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
                       access.hasAccess
@@ -292,7 +349,7 @@ export default async function BookDetailsPage({
                         : 'bg-amber-100 text-amber-700'
                     }`}
                   >
-                    {access.hasAccess ? 'Donor Access' : 'Donors Only'}
+                    {accessBadgeLabel}
                   </span>
                 )}
                 {book.language && book.language !== 'en' && (
@@ -342,11 +399,36 @@ export default async function BookDetailsPage({
                 </div>
               )}
 
-              {book.donorOnly && !access.hasAccess && (
+              {book.narrationEnabled && donorNarrationMessage ? (
+                <div
+                  className={`mt-6 rounded-2xl border px-5 py-4 ${
+                    donorFeatureAccess?.hasAccess
+                      ? 'border-emerald-200 bg-emerald-50/70'
+                      : 'border-sky-200 bg-sky-50/80'
+                  }`}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-landing-accent">
+                    Donor narration
+                  </p>
+                  <p className="mt-2 text-sm leading-relaxed text-landing-text-muted">
+                    {donorNarrationMessage}
+                  </p>
+
+                  {!donorFeatureAccess?.hasAccess ? (
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                      <a href="#support-this-book" className="ghost-button px-5 py-3 text-center">
+                        Unlock donor narration
+                      </a>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {bookRequiresDonation && !access.hasAccess && (
                 <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/80 p-5">
-                  <h3 className="text-lg font-semibold text-landing-text">This book is part of the donor library</h3>
+                  <h3 className="text-lg font-semibold text-landing-text">This book is reserved for {lockedAudienceLabel}</h3>
                   <p className="mt-2 leading-relaxed text-landing-text-muted">
-                    Access is unlocked after at least one completed donation on your account.
+                    Access is unlocked after {donorRequirementText} on your account.
                     {session
                       ? ' Once that donation clears, you can open this title immediately.'
                       : ' Sign in first so we can attach donor access to your library.'}
@@ -354,7 +436,7 @@ export default async function BookDetailsPage({
                   <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                     {session ? (
                       <a href="#support-this-book" className="brand-button px-5 py-3 text-center">
-                        Donate and unlock
+                        {supportCallToAction}
                       </a>
                     ) : (
                       <Link href={loginHref} className="brand-button px-5 py-3 text-center">

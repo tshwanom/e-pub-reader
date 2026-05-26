@@ -21,6 +21,7 @@ type NarrationObjectLookupResult =
         id: string;
         status: string;
         donorOnly: boolean;
+        donorAccessLevel: string;
       };
     }
   | {
@@ -68,6 +69,7 @@ async function findNarrationObject(objectKey: string): Promise<NarrationObjectLo
               id: true,
               status: true,
               donorOnly: true,
+              donorAccessLevel: true,
             },
           },
         },
@@ -112,6 +114,7 @@ async function findNarrationObject(objectKey: string): Promise<NarrationObjectLo
           id: true,
           status: true,
           donorOnly: true,
+          donorAccessLevel: true,
         },
       },
     },

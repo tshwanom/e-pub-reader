@@ -6,6 +6,15 @@ import { useRouter } from 'next/navigation';
 import { useForm, useFieldArray } from 'react-hook-form';
 import Link from 'next/link';
 import { ArrowLeft, BookOpenText, ImageIcon, Save, Sparkles, Trash2 } from 'lucide-react';
+import {
+  BOOK_DONOR_ACCESS_LEVEL_OPTIONS,
+  type BookDonorAccessLevel,
+  formatBookDonorAccessLevel,
+  getBookDonorRequirementText,
+  isDonorRestrictedBook,
+  isRecurringDonorBook,
+  resolveBookDonorAccessLevel,
+} from '@/lib/book-access-config';
 import NarrationStudio from './_components/NarrationStudio';
 
 interface PrintLink {
@@ -29,7 +38,7 @@ interface BookForm {
   author: string;
   description: string;
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
-  donorOnly: boolean;
+  donorAccessLevel: BookDonorAccessLevel;
   narrationEnabled: boolean;
   donationEnabled: boolean;
   donationMessage?: string;
@@ -49,7 +58,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
   
   const { register, handleSubmit, reset, control, watch } = useForm<BookForm>({
     defaultValues: {
-      donorOnly: false,
+      donorAccessLevel: 'PUBLIC',
       narrationEnabled: false,
       printLinks: [],
       supplementaryContents: [],
@@ -66,9 +75,11 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
     name: 'supplementaryContents',
   });
 
-  const donorOnly = watch('donorOnly');
+  const donorAccessLevel = watch('donorAccessLevel');
   const bookTitle = watch('title');
   const bookStatus = watch('status');
+  const isRestrictedBook = isDonorRestrictedBook(donorAccessLevel);
+  const requiresRecurringSupport = isRecurringDonorBook(donorAccessLevel);
 
   const fetchBook = useCallback(async (id: string) => {
     try {
@@ -80,7 +91,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
         author: data.author,
         description: data.description,
         status: data.status,
-        donorOnly: data.donorOnly || false,
+        donorAccessLevel: resolveBookDonorAccessLevel(data),
         narrationEnabled: data.narrationEnabled || false,
         donationEnabled: data.donationEnabled || false,
         donationMessage: data.donationMessage || '',
@@ -213,9 +224,13 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
                   {bookStatus || 'DRAFT'}
                 </span>
                 <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                  donorOnly ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-700'
+                  donorAccessLevel === 'RECURRING_DONORS'
+                    ? 'bg-amber-100 text-amber-700'
+                    : donorAccessLevel === 'ALL_DONORS'
+                      ? 'bg-violet-100 text-violet-700'
+                      : 'bg-slate-100 text-slate-700'
                 }`}>
-                  {donorOnly ? 'Donor-only access' : 'Public access'}
+                  {formatBookDonorAccessLevel(donorAccessLevel)} access
                 </span>
               </div>
               <p className="mt-4 max-w-3xl text-sm leading-6 text-landing-text-muted sm:text-[15px]">
@@ -317,22 +332,45 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
                 <h2 className="mt-2 text-xl font-semibold text-landing-text">Who can open this book?</h2>
               </div>
 
-              <div className="rounded-2xl bg-white/70 p-4 ring-1 ring-white/65">
-                <div className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    {...register('donorOnly')}
-                    className="mt-1 h-4 w-4 rounded border-landing-border text-landing-accent focus:ring-landing-accent"
-                  />
-                  <div>
-                    <label className="block text-sm font-semibold text-landing-text">
-                      Restrict this book to donors
+              <div className="grid gap-3">
+                {BOOK_DONOR_ACCESS_LEVEL_OPTIONS.map((option) => {
+                  const checked = donorAccessLevel === option.id;
+
+                  return (
+                    <label
+                      key={option.id}
+                      className={`rounded-2xl border p-4 transition-all duration-200 ${
+                        checked
+                          ? 'border-landing-accent bg-white shadow-sm ring-2 ring-landing-accent/15'
+                          : 'border-white/65 bg-white/70 hover:border-landing-accent/35'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        value={option.id}
+                        {...register('donorAccessLevel')}
+                        className="sr-only"
+                      />
+
+                      <div className="flex items-start gap-3">
+                        <span
+                          aria-hidden="true"
+                          className={`mt-1 h-3 w-3 rounded-full transition-colors ${
+                            checked ? 'bg-landing-accent' : 'bg-landing-border'
+                          }`}
+                        />
+                        <div>
+                          <span className="block text-sm font-semibold text-landing-text">
+                            {option.label}
+                          </span>
+                          <p className="mt-2 text-sm leading-6 text-landing-text-muted">
+                            {option.description}
+                          </p>
+                        </div>
+                      </div>
                     </label>
-                    <p className="mt-2 text-sm leading-6 text-landing-text-muted">
-                      Readers must be signed in and have at least one completed donation before they can open this title. The narration player will follow the same donor gate.
-                    </p>
-                  </div>
-                </div>
+                  );
+                })}
               </div>
 
               <div className="rounded-2xl bg-white/70 p-4 ring-1 ring-white/65 mt-4">
@@ -344,10 +382,10 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
                   />
                   <div>
                     <label className="block text-sm font-semibold text-landing-text">
-                      Enable Narration Feature
+                      Enable donor narration
                     </label>
                     <p className="mt-2 text-sm leading-6 text-landing-text-muted">
-                      Show the narration headphones icon and allow users to stream AI-generated audio. Hide this if narration is not yet confirmed.
+                      Show the narration headphones icon and allow donors to stream AI-generated audio once the signed narration assets are ready. Non-donors will still see narrated mode as locked.
                     </p>
                   </div>
                 </div>
@@ -483,9 +521,11 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">Publishing note</p>
                   <h2 className="mt-2 text-xl font-semibold text-landing-text">Reader-facing impact</h2>
                   <p className="mt-2 text-sm leading-6 text-landing-text-muted">
-                    {donorOnly
-                      ? 'This book will require a completed donation before readers can open it or access the narrated mode.'
-                      : 'This book is currently public, but narrated mode can still remain donor-only even if the main EPUB is open to everyone.'}
+                    {!isRestrictedBook
+                      ? 'This book is currently public, so readers can open the EPUB without donating, but narrated mode stays reserved for donors.'
+                      : requiresRecurringSupport
+                        ? `This book will require ${getBookDonorRequirementText(donorAccessLevel)} before readers can open it or access the narrated mode.`
+                        : `This book will require ${getBookDonorRequirementText(donorAccessLevel)} before readers can open it or access the narrated mode.`}
                   </p>
                   <p className="mt-4 text-sm text-landing-text-muted">
                     After saving, open the reader and donor journey from the public side to verify access and playback exactly as a supporter would see it.

@@ -14,9 +14,14 @@ const { prisma } = jest.requireMock('@/lib/prisma') as {
   prisma: { donation: { findFirst: jest.MockedFunction<any>; updateMany: jest.MockedFunction<any> } };
 };
 
-const publishedFreeBook = { status: 'PUBLISHED', donorOnly: false };
-const publishedDonorBook = { status: 'PUBLISHED', donorOnly: true };
-const draftBook = { status: 'DRAFT', donorOnly: false };
+const publishedFreeBook = { status: 'PUBLISHED', donorOnly: false, donorAccessLevel: 'PUBLIC' };
+const publishedDonorBook = { status: 'PUBLISHED', donorOnly: true, donorAccessLevel: 'ALL_DONORS' };
+const publishedRecurringDonorBook = {
+  status: 'PUBLISHED',
+  donorOnly: true,
+  donorAccessLevel: 'RECURRING_DONORS',
+};
+const draftBook = { status: 'DRAFT', donorOnly: false, donorAccessLevel: 'PUBLIC' };
 
 describe('isPrivilegedUser', () => {
   it('returns true for ADMIN role', () => {
@@ -70,10 +75,36 @@ describe('getBookAccessState', () => {
   });
 
   it('grants access to a donor-only book for donors', async () => {
-    prisma.donation.findFirst.mockResolvedValue({ id: 'donation1' });
+    prisma.donation.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'donation1' });
     const result = await getBookAccessState(publishedDonorBook, { id: 'user1', role: 'USER' });
     expect(result.hasAccess).toBe(true);
     expect(result.isDonor).toBe(true);
+  });
+
+  it('keeps recurring-donor books locked for one-time donors', async () => {
+    prisma.donation.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'one-time-donation' });
+
+    const result = await getBookAccessState(publishedRecurringDonorBook, { id: 'user1', role: 'USER' });
+
+    expect(result.hasAccess).toBe(false);
+    expect(result.isDonor).toBe(true);
+    expect(result.isRecurringDonor).toBe(false);
+    expect(result.requiresRecurringDonation).toBe(true);
+  });
+
+  it('grants access to recurring-donor books for recurring donors', async () => {
+    prisma.donation.findFirst.mockResolvedValueOnce({ id: 'monthly-donation' });
+
+    const result = await getBookAccessState(publishedRecurringDonorBook, { id: 'user1', role: 'USER' });
+
+    expect(result.hasAccess).toBe(true);
+    expect(result.isDonor).toBe(true);
+    expect(result.isRecurringDonor).toBe(true);
+    expect(result.requiresRecurringDonation).toBe(true);
   });
 
   it('grants access to draft books for ADMINs', async () => {
@@ -108,7 +139,9 @@ describe('getDonorFeatureAccessState', () => {
   });
 
   it('grants donor features to donors on published free books', async () => {
-    prisma.donation.findFirst.mockResolvedValue({ id: 'donation1' });
+    prisma.donation.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'donation1' });
     const result = await getDonorFeatureAccessState(publishedFreeBook, {
       id: 'user1',
       role: 'USER',
@@ -166,7 +199,9 @@ describe('getDonorAccessState', () => {
   });
 
   it('grants donor narration access to donors', async () => {
-    prisma.donation.findFirst.mockResolvedValue({ id: 'donation1' });
+    prisma.donation.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'donation1' });
 
     const result = await getDonorAccessState({
       id: 'user1',
@@ -180,7 +215,9 @@ describe('getDonorAccessState', () => {
   });
 
   it('recognizes completed guest donations again after the user signs in with the same email', async () => {
-    prisma.donation.findFirst.mockResolvedValue({ id: 'donation-email-linked' });
+    prisma.donation.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'donation-email-linked' });
 
     const result = await getDonorAccessState({
       id: 'user-linked',
@@ -190,7 +227,25 @@ describe('getDonorAccessState', () => {
 
     expect(result.hasAccess).toBe(true);
     expect(result.isDonor).toBe(true);
-    expect(prisma.donation.findFirst).toHaveBeenCalledWith({
+    expect(prisma.donation.findFirst).toHaveBeenNthCalledWith(1, {
+      where: {
+        status: 'COMPLETED',
+        frequency: 'MONTHLY',
+        OR: [
+          { userId: 'user-linked' },
+          {
+            donorEmail: {
+              equals: 'guest@example.com',
+              mode: 'insensitive',
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+      },
+    });
+    expect(prisma.donation.findFirst).toHaveBeenNthCalledWith(2, {
       where: {
         status: 'COMPLETED',
         OR: [
@@ -207,6 +262,21 @@ describe('getDonorAccessState', () => {
         id: true,
       },
     });
+  });
+
+  it('marks recurring donors as a higher donor tier', async () => {
+    prisma.donation.findFirst.mockResolvedValueOnce({ id: 'monthly-donation' });
+
+    const result = await getDonorAccessState({
+      id: 'user1',
+      role: 'USER',
+      email: 'reader@example.com',
+    });
+
+    expect(result.hasAccess).toBe(true);
+    expect(result.isDonor).toBe(true);
+    expect(result.isRecurringDonor).toBe(true);
+    expect(result.donorTier).toBe('RECURRING');
   });
 
   it('grants donor narration access to privileged users without donation checks', async () => {

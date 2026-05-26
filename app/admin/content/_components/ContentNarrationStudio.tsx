@@ -276,9 +276,9 @@ export default function ContentNarrationStudio({ contentId }: { contentId: strin
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">Content narration</p>
-          <h2 className="mt-2 font-playfair text-2xl text-landing-text sm:text-3xl">Platform-wide voice studio</h2>
+          <h2 className="mt-2 font-playfair text-2xl text-landing-text sm:text-3xl">Donor voice studio</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-landing-text-muted sm:text-[15px]">
-            Generate narrated audio for articles, videos, poems, and quotes — not only EPUBs. The public content pages will show the player once narration is enabled and ready.
+            Generate narrated audio for articles, videos, poems, and quotes — not only EPUBs. The public content pages will surface it as donor narration once it is enabled and ready.
           </p>
         </div>
 

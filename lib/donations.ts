@@ -137,7 +137,7 @@ export const DONATION_GATEWAYS = [
   {
     id: 'PAYSTACK',
     label: 'Paystack',
-    description: 'Paystack checkout is created in ZAR after a live conversion from the system USD base, including recurring monthly support.',
+    description: 'Paystack checkout is created in ZAR after a live conversion from the system USD base.',
     checkoutCurrency: PAYSTACK_CHECKOUT_CURRENCY,
   },
 ] as const satisfies ReadonlyArray<{

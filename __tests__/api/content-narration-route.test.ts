@@ -89,6 +89,8 @@ describe('content narration route', () => {
     mockGetDonorAccessState.mockResolvedValue({
       hasAccess: false,
       isDonor: false,
+      isRecurringDonor: false,
+      donorTier: 'NONE',
       isPrivileged: false,
       isSignedIn: false,
       requiresDonation: true,
@@ -115,6 +117,8 @@ describe('content narration route', () => {
     mockGetDonorAccessState.mockResolvedValue({
       hasAccess: false,
       isDonor: false,
+      isRecurringDonor: false,
+      donorTier: 'NONE',
       isPrivileged: false,
       isSignedIn: true,
       requiresDonation: true,
@@ -138,6 +142,8 @@ describe('content narration route', () => {
     mockGetDonorAccessState.mockResolvedValue({
       hasAccess: true,
       isDonor: true,
+      isRecurringDonor: false,
+      donorTier: 'ONE_TIME',
       isPrivileged: false,
       isSignedIn: true,
       requiresDonation: false,
