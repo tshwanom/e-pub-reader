@@ -1838,7 +1838,7 @@ export default function Reader({
   const isToolbarVisible = showMobileToolbar || Boolean(sidePanel) || showMenu || showSearch || showGoTo || showNarrationModal;
 
   return (
-    <div className="relative h-screen w-full overflow-hidden">
+    <div className="reader-shell relative h-screen w-full overflow-hidden">
 
       {/* ── Reading area ──────────────────────────────────────────────── */}
       <div className={`absolute inset-0 flex items-stretch bg-landing-bg ${readerViewportInsetClass}`}>
@@ -1848,7 +1848,7 @@ export default function Reader({
           {/* Drag wrapper — translates during swipe animation */}
           <div ref={dragWrapperRef} className="flex w-full h-full min-h-0 items-stretch justify-center md:items-stretch" style={{ willChange: 'transform' }}>
             <div
-              className={`overflow-hidden flex flex-col w-full h-full bg-white transition-opacity duration-150 ${isFading ? 'opacity-0' : 'opacity-100'}`}
+              className={`reader-viewport overflow-hidden flex flex-col w-full h-full bg-white transition-opacity duration-150 ${isFading ? 'opacity-0' : 'opacity-100'}`}
               style={flow === 'scrolled' ? {
                 maxWidth: '680px',
               } : {

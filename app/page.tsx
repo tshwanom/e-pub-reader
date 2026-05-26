@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma';
 import Header from '@/components/landing/Header';
 import HeroSection from '@/components/landing/HeroSection';
 import BookCard from '@/components/landing/BookCard';
+import DonationSection from '@/components/DonationSection';
 import Footer from '@/components/landing/Footer';
 import Link from 'next/link';
 import { getServerSession } from 'next-auth';
@@ -49,82 +50,6 @@ export default async function LandingPage() {
       <Header />
       {/* Hero Section */}
       <HeroSection />
-
-      {/* Core Narrative Section */}
-      <section className="page-container py-14 sm:py-20">
-        <div className="mx-auto mb-10 max-w-3xl text-center sm:mb-14">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-landing-accent">
-            The Foundation
-          </p>
-          <h2 className="mt-4 font-playfair text-4xl font-semibold text-landing-text md:text-5xl">
-            What it is. Why it exists.
-          </h2>
-          <p className="mt-4 text-base leading-relaxed text-landing-text-muted sm:text-lg">
-            Two truths that frame the project: inner sovereignty first, and
-            deprogramming over ideology.
-          </p>
-        </div>
-
-        <div className="relative grid gap-5 lg:grid-cols-2 lg:gap-6">
-          <div className="pointer-events-none absolute bottom-8 left-1/2 top-8 hidden w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-landing-accent/30 to-transparent lg:block" />
-
-          <article className="surface-card h-full p-8 sm:p-10">
-            <span className="inline-flex rounded-full bg-landing-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-landing-accent">
-              01 · What Is
-            </span>
-            <h3 className="mt-5 font-playfair text-3xl font-semibold text-landing-text sm:text-4xl">
-              What Is the One Man Revolution?
-            </h3>
-
-            <div className="mt-6 space-y-5 text-base leading-relaxed text-landing-text sm:text-lg">
-              <p>
-                It is not about overthrowing governments or building followings.
-              </p>
-              <p>
-                It is about dismantling the invisible systems that program
-                obedience, medicalize awakening, and turn human beings into
-                compliant units.
-              </p>
-              <p>
-                This revolution begins in one place only:
-                <br />
-                <strong>the inner sovereignty of a single human being.</strong>
-              </p>
-            </div>
-
-            <p className="mt-7 border-l-2 border-landing-accent/40 pl-4 text-sm italic text-landing-text-muted sm:text-base">
-              No leaders. No hierarchy. No permission required.
-            </p>
-          </article>
-
-          <article className="surface-muted h-full p-8 sm:p-10">
-            <span className="inline-flex rounded-full bg-landing-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-landing-accent">
-              02 · Why This Exists
-            </span>
-            <h3 className="mt-5 font-playfair text-3xl font-semibold text-landing-text sm:text-4xl">
-              Why This Exists
-            </h3>
-
-            <div className="mt-6 space-y-5 text-base leading-relaxed text-landing-text sm:text-lg">
-              <p>
-                The world does not suffer from lack of information. It suffers
-                from the suppression of inner truth.
-              </p>
-              <p>
-                This work exists to expose spiritual warfare disguised as
-                progress, reclaim human purpose beyond systems, and awaken
-                remembrance — not belief.
-              </p>
-            </div>
-
-            <p className="mt-7 border-l-2 border-landing-accent/40 pl-4 text-sm italic text-landing-text-muted sm:text-base">
-              This is not ideology.
-              <br />
-              It is deprogramming.
-            </p>
-          </article>
-        </div>
-      </section>
 
       {/* Books Section */}
       <section className="page-container py-14 sm:py-20">
@@ -198,12 +123,24 @@ export default async function LandingPage() {
               If it resonates, you may choose to support its continuation. Your contribution preserves our independence and makes this expansion possible. If you cannot donate, we encourage you to at least share our work to help spread the word.
             </p>
           </div>
-          <Link
-            href="/library"
-            className="brand-button px-8 py-4 text-base"
-          >
-            Explore the Library
-          </Link>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <DonationSection
+              bookTitle="One Man Revolution"
+              currentUserEmail={session?.user?.email ?? null}
+              triggerVariant="button"
+              triggerLabel="Support the Revolution"
+              triggerClassName="brand-button min-w-[15rem] px-8 py-4 text-base shadow-md shadow-landing-accent/20 ring-1 ring-landing-accent/15 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-landing-accent/20"
+              modalBadgeLabel="Reader-supported"
+              modalTitle="Support the Work"
+              modalDescription="Keep the library independent, expand narration, and help the writings travel further. Choose one-time or monthly support in the currency and checkout flow that suits you."
+            />
+            <Link
+              href="/library"
+              className="ghost-button min-w-[15rem] bg-white/80 px-8 py-4 text-base"
+            >
+              Explore the Library
+            </Link>
+          </div>
           <p className="mt-6 text-sm italic text-landing-text-muted">
             Give only if moved. Never out of obligation.
           </p>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import {
   getBookDonorRequirementText,
@@ -43,13 +44,19 @@ function isAbortError(error: unknown) {
 }
 
 interface DonationSectionProps {
-  bookId: string;
-  bookTitle: string;
+  bookId?: string | null;
+  bookTitle?: string;
   bookDonorAccessLevel?: string | null;
   donorOnly?: boolean;
   message?: string | null;
   goal?: any; // Decimal type from Prisma
   currentUserEmail?: string | null;
+  triggerVariant?: 'card' | 'button';
+  triggerLabel?: string;
+  triggerClassName?: string;
+  modalTitle?: string;
+  modalDescription?: string;
+  modalBadgeLabel?: string;
 }
 
 type DonationPresetOptionsResponse = DonationPresetOptions & {
@@ -58,13 +65,24 @@ type DonationPresetOptionsResponse = DonationPresetOptions & {
 
 export default function DonationSection({
   bookId,
-  bookTitle,
+  bookTitle = 'the work',
   bookDonorAccessLevel,
   donorOnly = false,
   message,
   goal,
   currentUserEmail,
+  triggerVariant = 'card',
+  triggerLabel,
+  triggerClassName,
+  modalBadgeLabel,
+  modalTitle,
+  modalDescription,
 }: DonationSectionProps) {
+  const normalizedBookId = typeof bookId === 'string' && bookId.trim().length > 0
+    ? bookId.trim()
+    : undefined;
+  const hasBookContext = Boolean(normalizedBookId);
+  const normalizedBookTitle = bookTitle.trim() || 'the work';
   const resolvedBookDonorAccessLevel = resolveBookDonorAccessLevel({
     donorAccessLevel: bookDonorAccessLevel,
     donorOnly,
@@ -80,6 +98,7 @@ export default function DonationSection({
   const [displayLocale, setDisplayLocale] = useState('en-US');
   const [isCurrencyReady, setIsCurrencyReady] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   const [frequency, setFrequency] = useState<DonationFrequency>(
     requiresRecurringUnlock ? 'MONTHLY' : DEFAULT_DONATION_FREQUENCY
   );
@@ -95,6 +114,14 @@ export default function DonationSection({
   );
   const [suggestedAmountsLoading, setSuggestedAmountsLoading] = useState(false);
   const [suggestedAmountsError, setSuggestedAmountsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    setPortalContainer(document.body);
+  }, []);
 
   useEffect(() => {
     const browserLocales = typeof navigator === 'undefined'
@@ -154,13 +181,26 @@ export default function DonationSection({
   const requiresPaystackEmail = gateway === 'PAYSTACK' && !currentUserEmail;
   const numericAmount = Number(amount);
   const hasValidAmount = Number.isFinite(numericAmount) && numericAmount >= 1;
-  const donateButtonLabel = getBookSupportCallToAction(resolvedBookDonorAccessLevel);
+  const donateButtonLabel = triggerLabel
+    ?? (hasBookContext
+      ? getBookSupportCallToAction(resolvedBookDonorAccessLevel)
+      : 'Support the Revolution');
   const checkoutButtonLabel = frequency === 'MONTHLY'
     ? `Start monthly support with ${selectedGateway.label}`
     : `Continue to ${selectedGateway.label}`;
   const minimumEquivalentError = quote && quote.baseAmount < 1
     ? 'Minimum donation is the equivalent of USD 1.00.'
     : null;
+  const donationModalBadge = modalBadgeLabel
+    ?? (hasBookContext ? 'Secure checkout' : 'Reader-supported');
+  const donationModalHeading = modalTitle
+    ?? (hasBookContext ? `Support “${normalizedBookTitle}”` : 'Support the Work');
+  const donationModalSummary = modalDescription
+    ?? (requiresRecurringUnlock
+      ? `This book unlocks with ${getBookDonorRequirementText(resolvedBookDonorAccessLevel)}, so this checkout is set to monthly support.`
+      : hasBookContext
+        ? 'Pick one-time or monthly support, then choose the amount, currency, and checkout option.'
+        : 'Choose one-time or monthly support, then set the amount, currency, and checkout option that works best for you.');
   const disableCheckout = loading
     || !hasValidAmount
     || Boolean(minimumEquivalentError)
@@ -382,7 +422,7 @@ export default function DonationSection({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          bookId,
+          ...(normalizedBookId ? { bookId: normalizedBookId } : {}),
           amount: numericAmount,
           currency,
           frequency,
@@ -472,7 +512,9 @@ export default function DonationSection({
                 ? 'This title is reserved for recurring supporters, so the unlock checkout is monthly only.'
                 : requiresDonorUnlock
                   ? 'Any completed donation unlocks donor-only books on this signed-in account — or on the same email when you sign in later.'
-                  : 'Choose one-time or monthly support for this title.'}
+                  : hasBookContext
+                    ? 'Choose one-time or monthly support for this title.'
+                    : 'Choose one-time or monthly support for the work.'}
             </p>
           </div>
 
@@ -720,93 +762,108 @@ export default function DonationSection({
 
   return (
     <>
-      <div className="mx-auto w-full max-w-3xl rounded-2xl border border-landing-border/80 bg-white/78 px-4 py-3 shadow-sm ring-1 ring-white/65 backdrop-blur-xl sm:px-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-landing-accent/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-landing-accent">
-                Support
-              </span>
-              {goal ? (
-                <span className="rounded-full bg-landing-surface-muted px-2.5 py-1 text-[11px] font-medium text-landing-text-muted">
-                  Goal {formatCurrencyAmount(Number(goal), DONATION_BASE_CURRENCY, displayLocale)}
-                </span>
-              ) : null}
-            </div>
-
-            <p className="mt-2 truncate text-sm font-medium text-landing-text sm:text-[15px]">
-              {requiresDonorUnlock
-                ? requiresRecurringUnlock
-                  ? 'Unlock this title with monthly recurring support.'
-                  : 'Unlock this title in a quick donation modal.'
-                : `Support “${bookTitle}” in a quick donation modal.`}
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={openDonationModal}
-            className="brand-button shrink-0 px-4 py-2.5 sm:px-5"
-          >
-            {donateButtonLabel}
-          </button>
-        </div>
-      </div>
-
-      {isModalOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-4 backdrop-blur-sm sm:items-center"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              closeDonationModal();
-            }
-          }}
+      {triggerVariant === 'button' ? (
+        <button
+          type="button"
+          onClick={openDonationModal}
+          className={triggerClassName ?? 'brand-button px-4 py-2.5'}
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={donationModalTitleId}
-            aria-describedby={donationModalDescriptionId}
-            className="surface-card w-full max-w-4xl overflow-hidden shadow-2xl"
-          >
-            <div className="flex items-start justify-between gap-3 border-b border-landing-border/70 bg-white/70 px-4 py-3 backdrop-blur-sm sm:px-5">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-landing-accent/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-landing-accent">
-                    Secure checkout
+          {donateButtonLabel}
+        </button>
+      ) : (
+        <div className="mx-auto w-full max-w-3xl rounded-2xl border border-landing-border/80 bg-white/78 px-4 py-3 shadow-sm ring-1 ring-white/65 backdrop-blur-xl sm:px-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-landing-accent/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-landing-accent">
+                  Support
+                </span>
+                {goal ? (
+                  <span className="rounded-full bg-landing-surface-muted px-2.5 py-1 text-[11px] font-medium text-landing-text-muted">
+                    Goal {formatCurrencyAmount(Number(goal), DONATION_BASE_CURRENCY, displayLocale)}
                   </span>
-                  {goal ? (
-                    <span className="rounded-full bg-landing-surface-muted px-2.5 py-1 text-[11px] font-medium text-landing-text-muted">
-                      Goal {formatCurrencyAmount(Number(goal), DONATION_BASE_CURRENCY, displayLocale)}
-                    </span>
-                  ) : null}
-                </div>
-                <h2 id={donationModalTitleId} className="mt-2 truncate font-playfair text-xl font-semibold text-landing-text sm:text-2xl">
-                  Support “{bookTitle}”
-                </h2>
-                <p id={donationModalDescriptionId} className="mt-1 text-xs text-landing-text-muted sm:text-sm">
-                  {requiresRecurringUnlock
-                    ? `This book unlocks with ${getBookDonorRequirementText(resolvedBookDonorAccessLevel)}, so this checkout is set to monthly support.`
-                    : 'Pick one-time or monthly support, then choose the amount, currency, and checkout option.'}
-                </p>
+                ) : null}
               </div>
 
-              <button
-                type="button"
-                onClick={closeDonationModal}
-                className="rounded-full border border-landing-border bg-white p-1.5 text-landing-text-muted transition-colors hover:border-landing-accent/35 hover:text-landing-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 sm:p-2"
-                aria-label="Close donation modal"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <p className="mt-2 truncate text-sm font-medium text-landing-text sm:text-[15px]">
+                {requiresDonorUnlock
+                  ? requiresRecurringUnlock
+                    ? 'Unlock this title with monthly recurring support.'
+                    : 'Unlock this title in a quick donation modal.'
+                  : hasBookContext
+                    ? `Support “${normalizedBookTitle}” in a quick donation modal.`
+                    : 'Open a quick donation modal for one-time or monthly support.'}
+              </p>
             </div>
 
-            <div className="max-h-[85vh] overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
-              {donationForm}
-            </div>
+            <button
+              type="button"
+              onClick={openDonationModal}
+              className="brand-button shrink-0 px-4 py-2.5 sm:px-5"
+            >
+              {donateButtonLabel}
+            </button>
           </div>
         </div>
-      ) : null}
+      )}
+
+      {isModalOpen && portalContainer
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[80] overflow-y-auto bg-black/55 p-4 backdrop-blur-sm"
+              onClick={(event) => {
+                if (event.target === event.currentTarget) {
+                  closeDonationModal();
+                }
+              }}
+            >
+              <div className="flex min-h-full items-end justify-center sm:items-center">
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby={donationModalTitleId}
+                  aria-describedby={donationModalDescriptionId}
+                  className="surface-card my-6 w-full max-w-4xl overflow-hidden shadow-2xl"
+                >
+                  <div className="flex items-start justify-between gap-4 border-b border-landing-border/70 bg-white/75 px-5 py-4 backdrop-blur-sm sm:px-6 sm:py-5">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-landing-accent/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-landing-accent">
+                          {donationModalBadge}
+                        </span>
+                        {goal ? (
+                          <span className="rounded-full bg-landing-surface-muted px-2.5 py-1 text-[11px] font-medium text-landing-text-muted">
+                            Goal {formatCurrencyAmount(Number(goal), DONATION_BASE_CURRENCY, displayLocale)}
+                          </span>
+                        ) : null}
+                      </div>
+                      <h2 id={donationModalTitleId} className="mt-3 font-playfair text-2xl font-semibold leading-tight text-landing-text sm:text-3xl">
+                        {donationModalHeading}
+                      </h2>
+                      <p id={donationModalDescriptionId} className="mt-2 max-w-2xl text-xs leading-6 text-landing-text-muted sm:text-sm">
+                        {donationModalSummary}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={closeDonationModal}
+                      className="rounded-full border border-landing-border bg-white/90 p-1.5 text-landing-text-muted shadow-sm transition-colors hover:border-landing-accent/35 hover:text-landing-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 sm:p-2"
+                      aria-label="Close donation modal"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="max-h-[85vh] overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
+                    {donationForm}
+                  </div>
+                </div>
+              </div>
+            </div>,
+            portalContainer,
+          )
+        : null}
     </>
   );
 }

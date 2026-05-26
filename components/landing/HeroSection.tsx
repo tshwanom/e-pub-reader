@@ -45,14 +45,15 @@ export default function HeroSection() {
         </h1>
 
         <p className="fade-in-element mx-auto max-w-3xl text-lg leading-relaxed text-landing-text-muted md:text-2xl md:leading-relaxed">
-          A quiet rebellion against systems that dehumanize, silence, and
-          fracture the human spirit.
+          The One Man Revolution exists to dismantle the invisible systems that
+          program obedience, reclaim human purpose beyond systems, and awaken
+          inner sovereignty.
         </p>
 
         <p className="fade-in-element mx-auto max-w-2xl font-crimson text-lg italic text-landing-text-muted md:text-xl">
-          This is not a movement you join.
+          Not ideology — deprogramming.
           <br />
-          It&apos;s a truth you remember.
+          No leaders. No hierarchy. No permission required.
         </p>
 
         <div className="fade-in-element flex flex-wrap items-center justify-center gap-3 pt-3">

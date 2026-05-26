@@ -133,7 +133,7 @@ describe('DonationSection', () => {
   it('starts as a compact CTA and opens the donation flow in a modal', async () => {
     const user = userEvent.setup();
 
-    render(<DonationSection bookId="book-1" bookTitle="Test Book" />);
+    const { container } = render(<DonationSection bookId="book-1" bookTitle="Test Book" />);
 
     expect(screen.getByRole('button', { name: /Open donation/i })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -142,6 +142,8 @@ describe('DonationSection', () => {
     await openDonationModal(user);
 
     expect(screen.getByLabelText(/Amount in USD/i)).toBeInTheDocument();
+    expect(container.querySelector('[role="dialog"]')).not.toBeInTheDocument();
+    expect(document.body.querySelector('[role="dialog"]')).toBeInTheDocument();
   });
 
   it('prefers the detected South African currency and requests a live quote immediately', async () => {
@@ -313,6 +315,40 @@ describe('DonationSection', () => {
       amount: 10,
       currency: 'USD',
       frequency: 'MONTHLY',
+      gateway: 'PAYPAL',
+    });
+  });
+
+  it('supports a landing-page button trigger and omits bookId for general donations', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <DonationSection
+        bookTitle="One Man Revolution"
+        triggerVariant="button"
+        triggerLabel="Support the Revolution"
+        modalTitle="Support the Work"
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /Support the Revolution/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /Support the Work/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /Continue to PayPal/i }));
+
+    const postCall = await waitFor(() => {
+      const call = (global.fetch as jest.Mock).mock.calls.find(([, request]) => request?.method === 'POST');
+      expect(call).toBeDefined();
+      return call;
+    });
+
+    expect(JSON.parse(postCall?.[1].body)).toEqual({
+      amount: 10,
+      currency: 'USD',
+      frequency: 'ONE_TIME',
       gateway: 'PAYPAL',
     });
   });

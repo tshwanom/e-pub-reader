@@ -119,6 +119,16 @@
     background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.45));
   }
 
+  .reader-shell :where(.surface-card, .surface-muted, [class*='shadow-']) {
+    box-shadow: none !important;
+  }
+
+  .reader-shell .reader-viewport,
+  .reader-shell .reader-viewport :where(.epub-container, .epub-view, iframe) {
+    box-shadow: none !important;
+    filter: none !important;
+  }
+
   .brand-button {
     @apply inline-flex items-center justify-center rounded-xl bg-landing-accent px-5 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-landing-accent-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2;
   }

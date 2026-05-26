@@ -2,7 +2,26 @@ require('dotenv').config()
 const { PrismaClient } = require('@prisma/client')
 const { hash } = require('bcryptjs')
 
-const prisma = new PrismaClient()
+function createPrismaClient() {
+  const databaseUrl = String(process.env.DATABASE_URL || '').trim().toLowerCase()
+  const usesAccelerateProtocol = databaseUrl.startsWith('prisma://')
+    || databaseUrl.startsWith('prisma+postgres://')
+
+  if (usesAccelerateProtocol) {
+    return new PrismaClient()
+  }
+
+  return new PrismaClient({
+    __internal: {
+      configOverride: (config) => ({
+        ...config,
+        copyEngine: true,
+      }),
+    },
+  })
+}
+
+const prisma = createPrismaClient()
 
 function trimEnv(value) {
   return value?.trim() || ''

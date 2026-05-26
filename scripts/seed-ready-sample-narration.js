@@ -19,7 +19,26 @@ const LEGACY_PUBLIC_BOOK_UPLOAD_DIR = path.join(process.cwd(), 'public', 'upload
 process.env.PRISMA_CLIENT_ENGINE_TYPE = process.env.PRISMA_CLIENT_ENGINE_TYPE || 'binary';
 process.env.DATABASE_URL = normalizeDatabaseUrl(process.env.DATABASE_URL);
 
-const prisma = new PrismaClient();
+function createPrismaClient() {
+  const databaseUrl = String(process.env.DATABASE_URL || '').trim().toLowerCase();
+  const usesAccelerateProtocol = databaseUrl.startsWith('prisma://')
+    || databaseUrl.startsWith('prisma+postgres://');
+
+  if (usesAccelerateProtocol) {
+    return new PrismaClient();
+  }
+
+  return new PrismaClient({
+    __internal: {
+      configOverride: (config) => ({
+        ...config,
+        copyEngine: true,
+      }),
+    },
+  });
+}
+
+const prisma = createPrismaClient();
 
 function normalizeDatabaseUrl(databaseUrl) {
   if (!databaseUrl) {
