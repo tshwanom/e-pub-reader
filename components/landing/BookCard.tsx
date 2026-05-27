@@ -13,9 +13,11 @@ interface BookCardProps {
   author: string;
   description: string;
   coverUrl: string;
+  status?: string | null;
   donorAccessLevel?: string | null;
   donorOnly?: boolean;
   isAccessible?: boolean;
+  hasPrintVersion?: boolean;
   readingProgress?: number | null; // 0–100
 }
 
@@ -25,9 +27,11 @@ export default function BookCard({
   author,
   description,
   coverUrl,
+  status,
   donorAccessLevel,
   donorOnly = false,
   isAccessible,
+  hasPrintVersion = false,
   readingProgress,
 }: BookCardProps) {
   const bookDonorAccessLevel = resolveBookDonorAccessLevel({ donorAccessLevel, donorOnly });
@@ -36,31 +40,57 @@ export default function BookCard({
   const resolvedAccessibility = typeof isAccessible === 'boolean'
     ? isAccessible
     : !isRestrictedBook;
-  const ctaLabel = !isRestrictedBook
-    ? 'Read free'
-    : resolvedAccessibility
-      ? requiresRecurringSupport
-        ? 'Open recurring edition'
-        : 'Open donor edition'
-      : requiresRecurringSupport
-        ? 'Monthly donor access'
-        : 'Donor access';
 
-  const hasProgress = resolvedAccessibility && readingProgress != null && readingProgress > 0;
+  const isComingSoon = status === 'COMING_SOON';
+  const isPreRelease = status === 'PRE_RELEASE';
+
+  const ctaLabel = isComingSoon
+    ? 'Coming soon'
+    : !isRestrictedBook
+      ? 'Read free'
+      : resolvedAccessibility
+        ? requiresRecurringSupport
+          ? 'Open recurring edition'
+          : 'Open donor edition'
+        : requiresRecurringSupport
+          ? 'Monthly donor access'
+          : 'Donor access';
+
+  const hasProgress = resolvedAccessibility && !isComingSoon && readingProgress != null && readingProgress > 0;
+
+  // Collect all tags to display on the cover
+  const coverTags: Array<{ label: string; className: string }> = [];
+  if (isComingSoon) {
+    coverTags.push({ label: 'Coming Soon', className: 'bg-amber-500/90 text-white border-amber-400/50' });
+  } else if (isPreRelease) {
+    coverTags.push({ label: 'Pre Release', className: 'bg-violet-600/90 text-white border-violet-400/50' });
+  }
+  if (isRestrictedBook) {
+    coverTags.push({
+      label: resolvedAccessibility
+        ? requiresRecurringSupport ? 'Recurring edition' : 'Donor edition'
+        : requiresRecurringSupport ? 'Recurring donors' : 'Donors Only',
+      className: 'bg-black/55 text-white border-white/40',
+    });
+  }
+  if (hasPrintVersion) {
+    coverTags.push({ label: 'Print Available', className: 'bg-emerald-600/90 text-white border-emerald-400/50' });
+  }
 
   return (
     <article className="group surface-card flex h-full flex-col overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
       {/* Book Cover */}
       <div className="relative aspect-[2/3] overflow-hidden bg-gradient-to-br from-landing-accent/10 to-landing-bg">
-        {isRestrictedBook && (
-          <div className="absolute left-3 top-3 z-10 rounded-full border border-white/40 bg-black/55 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white backdrop-blur-sm">
-            {resolvedAccessibility
-              ? requiresRecurringSupport
-                ? 'Recurring edition'
-                : 'Donor edition'
-              : requiresRecurringSupport
-                ? 'Recurring donors'
-                : 'All donors'}
+        {coverTags.length > 0 && (
+          <div className="absolute left-3 top-3 z-10 flex flex-col gap-1.5">
+            {coverTags.map((tag) => (
+              <span
+                key={tag.label}
+                className={`inline-block rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] backdrop-blur-sm ${tag.className}`}
+              >
+                {tag.label}
+              </span>
+            ))}
           </div>
         )}
 
@@ -101,7 +131,17 @@ export default function BookCard({
 
       {/* Book Info */}
       <div className="flex flex-1 flex-col p-6">
-        {isRestrictedBook && (
+        {isComingSoon && (
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-600">
+            Not yet available
+          </p>
+        )}
+        {isPreRelease && !isComingSoon && (
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-600">
+            Early access
+          </p>
+        )}
+        {!isComingSoon && !isPreRelease && isRestrictedBook && (
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-landing-accent">
             {resolvedAccessibility
               ? requiresRecurringSupport
@@ -124,25 +164,31 @@ export default function BookCard({
 
         {/* CTAs */}
         <div className="flex items-center gap-3">
-          <Link
-            href={`/books/${id}`}
-            className="inline-flex items-center text-sm font-semibold text-landing-accent transition-colors duration-200 hover:text-landing-accent-secondary"
-          >
-            {ctaLabel}
-            <svg
-              className="ml-2 h-4 w-4 transition-transform duration-200 group-hover:translate-x-1"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          {isComingSoon ? (
+            <span className="inline-flex cursor-default items-center text-sm font-semibold text-landing-text-muted">
+              {ctaLabel}
+            </span>
+          ) : (
+            <Link
+              href={`/books/${id}`}
+              className="inline-flex items-center text-sm font-semibold text-landing-accent transition-colors duration-200 hover:text-landing-accent-secondary"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2.2}
-                d="M9 5l7 7-7 7"
-              />
-            </svg>
-          </Link>
+              {ctaLabel}
+              <svg
+                className="ml-2 h-4 w-4 transition-transform duration-200 group-hover:translate-x-1"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.2}
+                  d="M9 5l7 7-7 7"
+                />
+              </svg>
+            </Link>
+          )}
 
           {hasProgress && resolvedAccessibility && (
             <BookReadLink

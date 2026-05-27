@@ -1,4 +1,11 @@
-import { isPrivilegedUser, getBookAccessState, getDonorAccessState, getDonorFeatureAccessState } from '@/lib/book-access';
+import {
+  isPrivilegedUser,
+  getBookAccessState,
+  getContentAccessState,
+  getContentAccessStateForViewer,
+  getDonorAccessState,
+  getDonorFeatureAccessState,
+} from '@/lib/book-access';
 
 // Mock prisma so we don't hit the database
 jest.mock('@/lib/prisma', () => ({
@@ -22,6 +29,12 @@ const publishedRecurringDonorBook = {
   donorAccessLevel: 'RECURRING_DONORS',
 };
 const draftBook = { status: 'DRAFT', donorOnly: false, donorAccessLevel: 'PUBLIC' };
+const publishedDonorContent = { status: 'PUBLISHED', donorOnly: true, donorAccessLevel: 'ALL_DONORS' };
+const publishedRecurringDonorContent = {
+  status: 'PUBLISHED',
+  donorOnly: true,
+  donorAccessLevel: 'RECURRING_DONORS',
+};
 
 describe('isPrivilegedUser', () => {
   it('returns true for ADMIN role', () => {
@@ -285,5 +298,52 @@ describe('getDonorAccessState', () => {
     expect(result.hasAccess).toBe(true);
     expect(result.isPrivileged).toBe(true);
     expect(prisma.donation.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe('getContentAccessState', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prisma.donation.findFirst.mockResolvedValue(null);
+    prisma.donation.updateMany.mockResolvedValue({ count: 0 });
+  });
+
+  it('lets anonymous visitors open published public content', async () => {
+    const viewer = await getDonorAccessState(null);
+    const result = getContentAccessStateForViewer(
+      { status: 'PUBLISHED', donorOnly: false, donorAccessLevel: 'PUBLIC' },
+      viewer
+    );
+
+    expect(result.hasAccess).toBe(true);
+    expect(result.contentDonorAccessLevel).toBe('PUBLIC');
+    expect(result.requiresDonation).toBe(false);
+  });
+
+  it('keeps donor-only content locked for signed-in non-donors', async () => {
+    const result = await getContentAccessState(publishedDonorContent, {
+      id: 'user1',
+      role: 'USER',
+      email: 'reader@example.com',
+    });
+
+    expect(result.hasAccess).toBe(false);
+    expect(result.contentDonorAccessLevel).toBe('ALL_DONORS');
+    expect(result.requiresDonation).toBe(true);
+  });
+
+  it('unlocks recurring-donor content for recurring supporters', async () => {
+    prisma.donation.findFirst.mockResolvedValueOnce({ id: 'monthly-donation' });
+
+    const viewer = await getDonorAccessState({
+      id: 'user1',
+      role: 'USER',
+      email: 'reader@example.com',
+    });
+    const result = getContentAccessStateForViewer(publishedRecurringDonorContent, viewer);
+
+    expect(result.hasAccess).toBe(true);
+    expect(result.isRecurringDonor).toBe(true);
+    expect(result.contentDonorAccessLevel).toBe('RECURRING_DONORS');
   });
 });

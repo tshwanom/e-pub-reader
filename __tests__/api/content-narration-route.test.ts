@@ -171,4 +171,34 @@ describe('content narration route', () => {
       's3'
     );
   });
+
+  it('keeps narration unavailable for video content even when the viewer is a donor', async () => {
+    mockFindContent.mockResolvedValue({
+      ...publishedContent,
+      type: 'VIDEO',
+      title: 'Library Trailer',
+    });
+    mockGetServerSession.mockResolvedValue({ user: { id: 'user-1', role: 'USER' } } as any);
+    mockGetDonorAccessState.mockResolvedValue({
+      hasAccess: true,
+      isDonor: true,
+      isRecurringDonor: false,
+      donorTier: 'ONE_TIME',
+      isPrivileged: false,
+      isSignedIn: true,
+      requiresDonation: false,
+    });
+
+    const response = await GET(new Request('http://localhost/api/content/content-1/narration'), {
+      params: Promise.resolve({ contentId: 'content-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      available: false,
+      reason: 'unsupported-type',
+      voices: [],
+    });
+    expect(mockCreatePresignedNarrationObjectUrl).not.toHaveBeenCalled();
+  });
 });

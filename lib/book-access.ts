@@ -13,10 +13,20 @@ type SessionUserLike = {
   email?: string | null;
 } | null | undefined;
 
-type BookAccessLike = {
+type AccessControlledLike = {
   status: string;
   donorOnly?: boolean | null;
   donorAccessLevel?: string | null;
+};
+
+type BookAccessLike = AccessControlledLike;
+
+type ViewerAccessLike = {
+  donorTier: DonorTier;
+  isPrivileged: boolean;
+  isDonor: boolean;
+  isRecurringDonor: boolean;
+  isSignedIn?: boolean;
 };
 
 export function isPrivilegedUser(user?: SessionUserLike) {
@@ -145,10 +155,28 @@ export async function getUserDonorProfile(
   };
 }
 
+function resolveControlledAccessState(item: AccessControlledLike, viewer: ViewerAccessLike) {
+  const donorAccessLevel = resolveBookDonorAccessLevel(item);
+  const isPublished = item.status === "PUBLISHED";
+  const meetsDonorRequirement = hasBookAccessForDonorTier(donorAccessLevel, viewer.donorTier);
+  const hasAccess = viewer.isPrivileged || (isPublished && meetsDonorRequirement);
+
+  return {
+    hasAccess,
+    isDonor: viewer.isPrivileged || viewer.isDonor,
+    isRecurringDonor: viewer.isRecurringDonor,
+    isPrivileged: viewer.isPrivileged,
+    isPublished,
+    donorTier: viewer.donorTier,
+    donorAccessLevel,
+    requiresDonation: isDonorRestrictedBook(donorAccessLevel),
+    requiresRecurringDonation: isRecurringDonorBook(donorAccessLevel),
+    isSignedIn: Boolean(viewer.isSignedIn),
+  };
+}
+
 export async function getBookAccessState(book: BookAccessLike, user?: SessionUserLike) {
   const isPrivileged = isPrivilegedUser(user);
-  const isPublished = book.status === "PUBLISHED";
-  const bookDonorAccessLevel = resolveBookDonorAccessLevel(book);
   const donorProfile = isPrivileged
     ? {
         tier: 'NONE' as DonorTier,
@@ -156,20 +184,48 @@ export async function getBookAccessState(book: BookAccessLike, user?: SessionUse
         isRecurringDonor: false,
       }
     : await getUserDonorProfile(user);
-  const meetsDonorRequirement = hasBookAccessForDonorTier(bookDonorAccessLevel, donorProfile.tier);
-  const hasAccess = isPrivileged || (isPublished && meetsDonorRequirement);
+  const accessState = resolveControlledAccessState(book, {
+    donorTier: donorProfile.tier,
+    isPrivileged,
+    isDonor: donorProfile.isDonor,
+    isRecurringDonor: donorProfile.isRecurringDonor,
+    isSignedIn: Boolean(user?.id),
+  });
+  const { donorAccessLevel, ...bookAccessState } = accessState;
 
   return {
-    hasAccess,
-    isDonor: isPrivileged || donorProfile.isDonor,
-    isRecurringDonor: donorProfile.isRecurringDonor,
-    isPrivileged,
-    isPublished,
-    donorTier: donorProfile.tier,
-    bookDonorAccessLevel,
-    requiresDonation: isDonorRestrictedBook(bookDonorAccessLevel),
-    requiresRecurringDonation: isRecurringDonorBook(bookDonorAccessLevel),
+    ...bookAccessState,
+    bookDonorAccessLevel: donorAccessLevel,
   };
+}
+
+export function getContentAccessStateForViewer(content: AccessControlledLike, viewer: ViewerAccessLike) {
+  const accessState = resolveControlledAccessState(content, viewer);
+  const { donorAccessLevel, ...contentAccessState } = accessState;
+
+  return {
+    ...contentAccessState,
+    contentDonorAccessLevel: donorAccessLevel,
+  };
+}
+
+export async function getContentAccessState(content: AccessControlledLike, user?: SessionUserLike) {
+  const isPrivileged = isPrivilegedUser(user);
+  const donorProfile = isPrivileged
+    ? {
+        tier: 'NONE' as DonorTier,
+        isDonor: true,
+        isRecurringDonor: false,
+      }
+    : await getUserDonorProfile(user);
+
+  return getContentAccessStateForViewer(content, {
+    donorTier: donorProfile.tier,
+    isPrivileged,
+    isDonor: donorProfile.isDonor,
+    isRecurringDonor: donorProfile.isRecurringDonor,
+    isSignedIn: Boolean(user?.id),
+  });
 }
 
 export async function getDonorAccessState(user?: SessionUserLike) {

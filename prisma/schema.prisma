@@ -23,6 +23,7 @@ model User {
   donations         Donation[]
   highlights        Highlight[]
   notes             Note[]
+  contentComments   ContentComment[]
   readingProgress   ReadingProgress[]
   sessions          Session[]
   audiobook         Audiobook?        @relation(fields: [audiobookId], references: [id])
@@ -316,14 +317,31 @@ model SupplementaryContent {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
   coverUrl            String?
+  donorOnly           Boolean            @default(false)
+  donorAccessLevel    BookDonorAccessLevel @default(PUBLIC)
   narrationEnabled    Boolean            @default(false)
   publishedAt         DateTime?
   slug                String?            @unique
   status              ContentStatus      @default(DRAFT)
   summary             String?
   narrationSourceHash String?
+  comments            ContentComment[]
   narrations          ContentNarration[]
   book                Book?              @relation(fields: [bookId], references: [id])
+}
+
+model ContentComment {
+  id        String               @id @default(cuid())
+  contentId String
+  userId    String
+  body      String
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  content   SupplementaryContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([contentId, createdAt])
+  @@index([userId, createdAt])
 }
 
 model ContentNarration {
@@ -357,6 +375,8 @@ enum UserRole {
 
 enum BookStatus {
   DRAFT
+  COMING_SOON
+  PRE_RELEASE
   PUBLISHED
   ARCHIVED
 }

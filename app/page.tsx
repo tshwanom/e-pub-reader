@@ -1,4 +1,5 @@
 import { getUserDonorProfile, isPrivilegedUser } from '@/lib/book-access';
+import { BookStatus } from '@prisma/client';
 import { authOptions } from '@/lib/auth';
 import {
   type DonorTier,
@@ -36,9 +37,12 @@ export default async function LandingPage() {
   try {
     // Fetch published books
     books = await prisma.book.findMany({
-      where: { status: 'PUBLISHED' },
+      where: { status: { in: [BookStatus.PUBLISHED, BookStatus.COMING_SOON, BookStatus.PRE_RELEASE] } },
       orderBy: { createdAt: 'desc' },
       take: 8, // Show max 8 books on landing page
+      include: {
+        printLinks: { select: { id: true } },
+      },
     });
   } catch (err) {
     console.error('[LandingPage] Failed to fetch books:', err);
@@ -81,8 +85,10 @@ export default async function LandingPage() {
                   author={book.author}
                   description={book.description}
                   coverUrl={book.coverUrl}
+                  status={book.status}
                   donorAccessLevel={book.donorAccessLevel}
                   donorOnly={book.donorOnly}
+                  hasPrintVersion={'printLinks' in book ? (book.printLinks as { id: string }[]).length > 0 : false}
                   isAccessible={
                     isPrivileged
                     || hasBookAccessForDonorTier(resolveBookDonorAccessLevel(book), donorTier)

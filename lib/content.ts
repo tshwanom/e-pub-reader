@@ -4,7 +4,7 @@ export const CONTENT_TYPES = ["ARTICLE", "VIDEO", "POEM", "QUOTE"] as const;
 export const CONTENT_STATUSES = ["DRAFT", "PUBLISHED", "ARCHIVED"] as const;
 
 const CONTENT_FEATURE_ERROR_CODES = new Set(["P2021", "P2022"]);
-const CONTENT_FEATURE_ERROR_PATTERN = /(supplementary[_\s]?content|supplementarycontents|content[_\s]?narration|narration[_\s]?source[_\s]?hash)/i;
+const CONTENT_FEATURE_ERROR_PATTERN = /(supplementary[_\s]?content|supplementarycontents|content[_\s]?narration|content[_\s]?comment|narration[_\s]?source[_\s]?hash)/i;
 
 export const CONTENT_FEATURE_UNAVAILABLE_MESSAGE = "Platform content is temporarily unavailable until the latest database migrations are applied.";
 

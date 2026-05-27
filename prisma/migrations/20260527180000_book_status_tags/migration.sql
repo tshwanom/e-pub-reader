@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "BookStatus" ADD VALUE 'COMING_SOON';
+ALTER TYPE "BookStatus" ADD VALUE 'PRE_RELEASE';

@@ -1,9 +1,11 @@
 "use client";
 
+import { BOOK_DONOR_ACCESS_LEVEL_OPTIONS, type BookDonorAccessLevel } from "@/lib/book-access-config";
 import type { OurFileRouter } from "@/app/api/uploadthing/core";
+import { getHostedVideoProvider } from "@/lib/video-source";
 import { UploadButton } from "@uploadthing/react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ImageIcon, Save, Trash2, X } from "lucide-react";
 import Link from "next/link";
 
@@ -19,6 +21,7 @@ type BookOption = {
 type ContentFormState = {
   type: ContentType;
   status: ContentStatus;
+  donorAccessLevel: BookDonorAccessLevel;
   title: string;
   slug: string;
   summary: string;
@@ -35,6 +38,7 @@ type InitialContent = {
   id?: string;
   type?: ContentType;
   status?: ContentStatus;
+  donorAccessLevel?: BookDonorAccessLevel | null;
   title?: string | null;
   slug?: string | null;
   summary?: string | null;
@@ -56,6 +60,7 @@ type ContentEditorFormProps = {
 const emptyContent: ContentFormState = {
   type: "ARTICLE",
   status: "DRAFT",
+  donorAccessLevel: "PUBLIC",
   title: "",
   slug: "",
   summary: "",
@@ -76,6 +81,7 @@ function toFormState(initialContent?: InitialContent | null): ContentFormState {
   return {
     type: initialContent.type || "ARTICLE",
     status: initialContent.status || "DRAFT",
+    donorAccessLevel: initialContent.donorAccessLevel || "PUBLIC",
     title: initialContent.title || "",
     slug: initialContent.slug || "",
     summary: initialContent.summary || "",
@@ -92,7 +98,7 @@ function toFormState(initialContent?: InitialContent | null): ContentFormState {
 function getTypeHint(type: ContentType) {
   switch (type) {
     case "VIDEO":
-      return "Add a YouTube/Vimeo/external URL and optional show notes for narration.";
+      return "Add an uploaded video file, direct stream URL, or hosted video URL plus an optional summary. Videos stay narration-free, and hosted embeds can still play inside the OMR watch page.";
     case "POEM":
       return "Use the body field for line-broken poetry. Narration can read the poem directly.";
     case "QUOTE":
@@ -100,6 +106,18 @@ function getTypeHint(type: ContentType) {
     case "ARTICLE":
     default:
       return "Use summary for cards and body for the full article/narration transcript.";
+  }
+}
+
+function getContentAccessDescription(level: BookDonorAccessLevel) {
+  switch (level) {
+    case "ALL_DONORS":
+      return "Any completed donation unlocks this content item across the site.";
+    case "RECURRING_DONORS":
+      return "Only readers with an active monthly donation can open this content item.";
+    case "PUBLIC":
+    default:
+      return "Anyone can open this content item without donating.";
   }
 }
 
@@ -113,10 +131,22 @@ export default function ContentEditorForm({ mode, initialContent, books }: Conte
   const isEditMode = mode === "edit" && Boolean(initialContent?.id);
   const typeHint = useMemo(() => getTypeHint(form.type), [form.type]);
   const hasCoverPreview = Boolean(form.coverUrl.trim());
+  const isVideoType = form.type === "VIDEO";
+  const hasVideoSource = Boolean(form.url.trim());
+  const hostedVideoProvider = useMemo(
+    () => (isVideoType ? getHostedVideoProvider(form.url) : null),
+    [isVideoType, form.url]
+  );
 
   const updateField = <K extends keyof ContentFormState>(key: K, value: ContentFormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
+
+  useEffect(() => {
+    if (isVideoType && form.narrationEnabled) {
+      setForm((current) => ({ ...current, narrationEnabled: false }));
+    }
+  }, [isVideoType, form.narrationEnabled]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -197,7 +227,7 @@ export default function ContentEditorForm({ mode, initialContent, books }: Conte
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">Content details</p>
               <h2 className="mt-2 text-xl font-semibold text-landing-text">Publish platform-wide content</h2>
               <p className="mt-2 text-sm leading-6 text-landing-text-muted">
-                Articles, videos, poems, and quotes can stand alone or be connected to a book. If donor narration is enabled, the saved title, summary, and body become the sync-tracked narration transcript.
+                Articles, videos, poems, and quotes can stand alone or be connected to a book. Articles, poems, and quotes can expose donor narration after generation. Videos use the watch-page player only and always stay narration-free.
               </p>
             </div>
 
@@ -277,8 +307,53 @@ export default function ContentEditorForm({ mode, initialContent, books }: Conte
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">Workflow</p>
               <h3 className="mt-2 text-lg font-semibold text-landing-text">Production controls</h3>
               <p className="mt-2 text-sm leading-6 text-landing-text-muted">
-                Draft first, publish when approved, then generate donor narration from the content editor. Later text edits automatically trigger a fresh sync pass so old audio does not linger on the donor player like an accidental director's cut.
+                Draft first, publish when approved, then generate donor narration for written content from the editor. Later text edits automatically trigger a fresh sync pass so old audio does not linger on the donor player like an accidental director's cut.
               </p>
+            </div>
+
+            <div className="surface-muted p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">Audience</p>
+              <h3 className="mt-2 text-lg font-semibold text-landing-text">Who can open this content?</h3>
+              <div className="mt-4 grid gap-3">
+                {BOOK_DONOR_ACCESS_LEVEL_OPTIONS.map((option) => {
+                  const checked = form.donorAccessLevel === option.id;
+
+                  return (
+                    <label
+                      key={option.id}
+                      className={`rounded-2xl border p-4 transition-all duration-200 ${
+                        checked
+                          ? "border-landing-accent bg-white shadow-sm ring-2 ring-landing-accent/15"
+                          : "border-white/65 bg-white/70 hover:border-landing-accent/35"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="contentDonorAccessLevel"
+                        value={option.id}
+                        checked={checked}
+                        onChange={(event) => updateField("donorAccessLevel", event.target.value as BookDonorAccessLevel)}
+                        className="sr-only"
+                      />
+
+                      <div className="flex items-start gap-3">
+                        <span
+                          aria-hidden="true"
+                          className={`mt-1 h-3 w-3 rounded-full transition-colors ${
+                            checked ? "bg-landing-accent" : "bg-landing-border"
+                          }`}
+                        />
+                        <div>
+                          <span className="block text-sm font-semibold text-landing-text">{option.label}</span>
+                          <p className="mt-2 text-sm leading-6 text-landing-text-muted">
+                            {getContentAccessDescription(option.id)}
+                          </p>
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
 
             <label className="block text-sm text-landing-text-muted">
@@ -304,15 +379,95 @@ export default function ContentEditorForm({ mode, initialContent, books }: Conte
               />
             </label>
 
-            <label className="block text-sm text-landing-text-muted">
-              <span className="mb-2 block font-medium text-landing-text">External URL</span>
-              <input
-                value={form.url}
-                onChange={(event) => updateField("url", event.target.value)}
-                placeholder="https://..."
-                className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
-              />
-            </label>
+            {isVideoType ? (
+              <div className="space-y-3 text-sm text-landing-text-muted">
+                <div>
+                  <span className="mb-2 block font-medium text-landing-text">Video source</span>
+                  <p className="text-xs leading-5 text-landing-text-muted">
+                    Upload a direct video file for the cleanest in-library player, or paste a hosted URL from YouTube, Vimeo, or another platform. We keep playback on the OMR watch page, but provider-hosted embeds may still show limited in-frame branding or links we cannot fully suppress.
+                  </p>
+                </div>
+
+                <div className="overflow-hidden rounded-2xl border border-landing-border bg-white shadow-sm">
+                  <div className="border-b border-landing-border/70 px-4 py-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-landing-text">Upload video</p>
+                        <p className="mt-1 text-xs leading-5 text-landing-text-muted">Accepted: direct video files up to 512 MB. For YouTube, Vimeo, HLS, or another hosted source, paste the URL below instead.</p>
+                      </div>
+
+                      {hasVideoSource ? (
+                        <button
+                          type="button"
+                          onClick={() => updateField("url", "")}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-200"
+                        >
+                          <X className="h-4 w-4" />
+                          Clear source
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-4">
+                      <UploadButton<OurFileRouter, "videoUploader">
+                        endpoint="videoUploader"
+                        onClientUploadComplete={(files) => {
+                          const uploadedUrl = files?.[0]?.serverData?.url ?? files?.[0]?.ufsUrl;
+
+                          if (!uploadedUrl) {
+                            setError("Upload completed, but no video URL was returned.");
+                            return;
+                          }
+
+                          updateField("url", uploadedUrl);
+                          setError(null);
+                        }}
+                        onUploadError={(uploadError: Error) => {
+                          setError(uploadError.message || "Failed to upload the video.");
+                        }}
+                        appearance={{
+                          container: "w-full items-stretch",
+                          button: "w-full rounded-xl bg-landing-accent px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-landing-accent-secondary ut-uploading:cursor-not-allowed ut-uploading:bg-landing-accent/70",
+                          allowedContent: "mt-2 text-xs text-landing-text-muted",
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-4">
+                    <label className="block text-sm text-landing-text-muted">
+                      <span className="mb-2 block font-medium text-landing-text">Video / stream URL</span>
+                      <input
+                        value={form.url}
+                        onChange={(event) => updateField("url", event.target.value)}
+                        placeholder="Upload above or paste a YouTube / Vimeo / .mp4 / .m3u8 URL"
+                        className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+                      />
+                    </label>
+
+                    {hostedVideoProvider ? (
+                      <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/90 p-4 text-sm leading-6 text-amber-800 ring-1 ring-amber-100">
+                        This source is hosted on {hostedVideoProvider === "youtube" ? "YouTube" : "Vimeo"}. It can stay embedded on the OMR watch page, but the provider may still show limited branding or in-frame links that we cannot fully remove.
+                      </div>
+                    ) : (
+                      <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50/90 p-4 text-sm leading-6 text-emerald-800 ring-1 ring-emerald-100">
+                        Best for the cleanest OMR-only playback: uploaded files, CDN file URLs, and direct stream URLs keep the experience most tightly inside the site.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <label className="block text-sm text-landing-text-muted">
+                <span className="mb-2 block font-medium text-landing-text">External URL</span>
+                <input
+                  value={form.url}
+                  onChange={(event) => updateField("url", event.target.value)}
+                  placeholder="https://..."
+                  className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+                />
+              </label>
+            )}
 
             <div className="space-y-3 text-sm text-landing-text-muted">
               <div>
@@ -405,25 +560,34 @@ export default function ContentEditorForm({ mode, initialContent, books }: Conte
               />
             </label>
 
-            <div className="rounded-2xl bg-white/70 p-4 ring-1 ring-white/65">
-              <div className="flex items-start gap-3">
-                <input
-                  id="narrationEnabled"
-                  type="checkbox"
-                  checked={form.narrationEnabled}
-                  onChange={(event) => updateField("narrationEnabled", event.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-landing-border text-landing-accent focus:ring-landing-accent"
-                />
-                <div>
-                  <label htmlFor="narrationEnabled" className="block text-sm font-semibold text-landing-text">
-                    Enable donor narration player
-                  </label>
-                  <p className="mt-2 text-sm leading-6 text-landing-text-muted">
-                    Generate audio below first, then keep this on when the article/video/poem should expose donor narration. Non-donors will stay locked out, and if the script changes later, older audio stays hidden until the fresh sync finishes.
-                  </p>
+            {isVideoType ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-900 ring-1 ring-amber-100">
+                <p className="font-semibold text-amber-950">Video narration is disabled</p>
+                <p className="mt-2 leading-6 text-amber-800">
+                  Videos use the in-library player only. Save an uploaded file, direct stream URL, or hosted video URL here, and we will keep donor narration switched off automatically for this content type.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-2xl bg-white/70 p-4 ring-1 ring-white/65">
+                <div className="flex items-start gap-3">
+                  <input
+                    id="narrationEnabled"
+                    type="checkbox"
+                    checked={form.narrationEnabled}
+                    onChange={(event) => updateField("narrationEnabled", event.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-landing-border text-landing-accent focus:ring-landing-accent"
+                  />
+                  <div>
+                    <label htmlFor="narrationEnabled" className="block text-sm font-semibold text-landing-text">
+                      Enable donor narration player
+                    </label>
+                    <p className="mt-2 text-sm leading-6 text-landing-text-muted">
+                      Generate audio below first, then keep this on when the article, poem, or quote should expose donor narration. Non-donors will stay locked out, and if the script changes later, older audio stays hidden until the fresh sync finishes.
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </aside>
         </div>
       </section>
@@ -432,7 +596,7 @@ export default function ContentEditorForm({ mode, initialContent, books }: Conte
         <div>
           <p className="text-sm font-semibold text-landing-text">Save content changes</p>
           <p className="mt-1 text-sm text-landing-text-muted">
-            Publishing state, platform placement, and donor narration visibility are saved together. Transcript edits also mark existing narration for automatic re-sync.
+            Publishing state, donor access, platform placement, and narration visibility are saved together. Transcript edits also mark existing narration for automatic re-sync.
           </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">

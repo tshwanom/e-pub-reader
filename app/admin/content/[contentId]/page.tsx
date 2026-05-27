@@ -17,6 +17,8 @@ export default async function EditContentPage({ params }: { params: Promise<{ co
           id: true,
           type: true,
           status: true,
+          donorOnly: true,
+          donorAccessLevel: true,
           title: true,
           slug: true,
           summary: true,
@@ -52,7 +54,7 @@ export default async function EditContentPage({ params }: { params: Promise<{ co
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">Content editor</p>
         <h1 className="mt-2 font-playfair text-3xl text-landing-text sm:text-4xl">{content.title}</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-landing-text-muted sm:text-[15px]">
-          Update publishing details, page placement, and donor-only narration for this content item.
+          Update publishing details, donor access, page placement, and narration settings for this content item. Videos open on their own watch page, never expose narration, and can use direct uploads or hosted platforms while staying inside the OMR watch flow.
         </p>
       </section>
 

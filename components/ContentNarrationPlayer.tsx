@@ -86,6 +86,7 @@ export default function ContentNarrationPlayer({ contentId, compact = false }: {
   const shouldHideUnavailableState = compact && (
     data?.reason === "disabled"
     || data?.reason === "not-generated"
+    || data?.reason === "unsupported-type"
   );
 
   if (loading) {

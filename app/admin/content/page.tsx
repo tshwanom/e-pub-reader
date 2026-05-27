@@ -1,4 +1,5 @@
 import { getContentTypeLabel, withContentFeatureFallback } from "@/lib/content";
+import { formatBookDonorAccessLevel, isDonorRestrictedBook, resolveBookDonorAccessLevel } from '@/lib/book-access-config';
 import { prisma } from "@/lib/prisma";
 import { format } from "date-fns";
 import { FileText, Headphones, Plus, Video } from "lucide-react";
@@ -54,6 +55,7 @@ export default async function AdminContentPage() {
   const standaloneCount = content.filter((item) => !item.bookId).length;
   const readyNarrationCount = content.filter((item) => item.narrations[0]?.status === "READY").length;
   const videoCount = content.filter((item) => item.type === "VIDEO").length;
+  const restrictedCount = content.filter((item) => isDonorRestrictedBook(resolveBookDonorAccessLevel(item))).length;
 
   return (
     <div className="space-y-6">
@@ -96,6 +98,11 @@ export default async function AdminContentPage() {
               <p className="mt-3 text-3xl font-semibold text-landing-text">{videoCount}</p>
               <p className="mt-2 text-sm text-landing-text-muted">Media records in the library.</p>
             </div>
+            <div className="surface-muted p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-text-muted">Donor-locked</p>
+              <p className="mt-3 text-3xl font-semibold text-landing-text">{restrictedCount}</p>
+              <p className="mt-2 text-sm text-landing-text-muted">Content items reserved for supporters.</p>
+            </div>
           </div>
         </div>
       </section>
@@ -104,6 +111,7 @@ export default async function AdminContentPage() {
         {content.map((item) => {
           const narration = item.narrations[0];
           const Icon = item.type === "VIDEO" ? Video : FileText;
+          const donorAccessLevel = resolveBookDonorAccessLevel(item);
 
           return (
             <article key={item.id} className="surface-card flex min-w-0 flex-col p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
@@ -116,6 +124,13 @@ export default async function AdminContentPage() {
                     <div className="flex flex-wrap gap-2">
                       <span className="rounded-full bg-landing-accent/10 px-2.5 py-1 text-xs font-semibold text-landing-accent">{getContentTypeLabel(item.type)}</span>
                       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(item.status)}`}>{item.status}</span>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                        donorAccessLevel === 'RECURRING_DONORS'
+                          ? 'bg-amber-100 text-amber-700'
+                          : donorAccessLevel === 'ALL_DONORS'
+                            ? 'bg-violet-100 text-violet-700'
+                            : 'bg-slate-100 text-slate-700'
+                      }`}>{formatBookDonorAccessLevel(donorAccessLevel)}</span>
                     </div>
                     <h2 className="mt-3 line-clamp-2 text-lg font-semibold text-landing-text">{item.title}</h2>
                     <p className="mt-2 text-sm leading-6 text-landing-text-muted line-clamp-2">
@@ -125,15 +140,25 @@ export default async function AdminContentPage() {
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-3 rounded-2xl bg-white/60 p-4 text-sm ring-1 ring-white/65 sm:grid-cols-2">
+              <div className="mt-5 grid gap-3 rounded-2xl bg-white/60 p-4 text-sm ring-1 ring-white/65 sm:grid-cols-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-text-muted">Placement</p>
                   <p className="mt-1 font-medium text-landing-text">{item.book?.title || "Standalone"}</p>
                 </div>
                 <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-text-muted">Access</p>
+                  <p className="mt-1 font-medium text-landing-text">{formatBookDonorAccessLevel(donorAccessLevel)}</p>
+                </div>
+                <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-text-muted">Narration</p>
                   <p className="mt-1 font-medium text-landing-text">
-                    {narration ? `${narration.status}${narration.voice?.name ? ` · ${narration.voice.name}` : ""}` : item.narrationEnabled ? "Enabled, not generated" : "Disabled"}
+                    {item.type === 'VIDEO'
+                      ? 'Not available for videos'
+                      : narration
+                        ? `${narration.status}${narration.voice?.name ? ` · ${narration.voice.name}` : ""}`
+                        : item.narrationEnabled
+                          ? "Enabled, not generated"
+                          : "Disabled"}
                   </p>
                 </div>
               </div>

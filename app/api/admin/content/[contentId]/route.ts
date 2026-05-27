@@ -1,4 +1,5 @@
 import { authOptions } from "@/lib/auth";
+import { BOOK_DONOR_ACCESS_LEVEL_VALUES } from "@/lib/book-access-config";
 import {
   CONTENT_FEATURE_UNAVAILABLE_MESSAGE,
   CONTENT_STATUSES,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/content-narration-jobs";
 import { buildContentNarrationSourceHash } from "@/lib/content-narration-sync";
 import { prisma } from "@/lib/prisma";
+import { resolveVideoCoverUrl } from "@/lib/video-source";
 import { getServerSession } from "next-auth";
 import type { Session } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
@@ -31,6 +33,7 @@ const contentPayloadSchema = z.object({
   author: z.preprocess(normalizeNullableText, z.string().nullable()).optional().default(null),
   coverUrl: z.preprocess(normalizeNullableText, z.string().nullable()).optional().default(null),
   bookId: z.preprocess(normalizeNullableText, z.string().nullable()).optional().default(null),
+  donorAccessLevel: z.enum(BOOK_DONOR_ACCESS_LEVEL_VALUES).optional().default("PUBLIC"),
   narrationEnabled: z.boolean().optional().default(false),
   order: z.coerce.number().int().optional().default(0),
 });
@@ -162,6 +165,12 @@ export async function PATCH(
 
     const payload = contentPayloadSchema.parse(await req.json());
     const slug = await buildUniqueContentSlug(contentId, payload.title, payload.slug);
+    const narrationEnabled = payload.type === "VIDEO" ? false : payload.narrationEnabled;
+    const coverUrl = await resolveVideoCoverUrl({
+      type: payload.type,
+      url: payload.url,
+      coverUrl: payload.coverUrl,
+    });
     const currentNarrationSourceHash = buildContentNarrationSourceHash(current);
     const nextNarrationSourceHash = buildContentNarrationSourceHash({
       type: payload.type,
@@ -187,9 +196,11 @@ export async function PATCH(
         content: payload.content,
         url: payload.url,
         author: payload.author,
-        coverUrl: payload.coverUrl,
+        coverUrl,
         bookId: payload.bookId,
-        narrationEnabled: payload.narrationEnabled,
+        donorOnly: payload.donorAccessLevel !== "PUBLIC",
+        donorAccessLevel: payload.donorAccessLevel,
+        narrationEnabled,
         narrationSourceHash: nextNarrationSourceHash,
         order: payload.order,
         publishedAt,

@@ -30,10 +30,11 @@ export default async function LibraryPage({
   const paystackSubscription = session?.user ? await getUserActivePaystackSubscription(session.user) : null;
   
   const books = await prisma.book.findMany({
-    where: privileged ? undefined : { status: 'PUBLISHED' },
+    where: privileged ? undefined : { status: { in: ['PUBLISHED', 'COMING_SOON', 'PRE_RELEASE'] } },
     orderBy: { createdAt: "desc" },
     include: {
       epubFile: true,
+      printLinks: { select: { id: true } },
       readingProgress: session?.user?.id
         ? { where: { userId: session.user.id }, take: 1 }
         : false,
@@ -91,8 +92,10 @@ export default async function LibraryPage({
                 author={book.author}
                 description={book.description}
                 coverUrl={book.coverUrl}
+                status={book.status}
                 donorAccessLevel={book.donorAccessLevel}
                 donorOnly={book.donorOnly}
+                hasPrintVersion={book.printLinks.length > 0}
                 isAccessible={
                   privileged
                   || hasBookAccessForDonorTier(resolveBookDonorAccessLevel(book), donorTier)

@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { getBookAccessState, getDonorFeatureAccessState } from '@/lib/book-access';
+import { getBookAccessState, getContentAccessStateForViewer, getDonorFeatureAccessState } from '@/lib/book-access';
 import { withContentFeatureFallback } from '@/lib/content';
 import { getUserActivePaystackSubscription } from '@/lib/donation-subscriptions';
 import { prisma } from '@/lib/prisma';
@@ -19,7 +19,17 @@ import Header from '@/components/landing/Header';
 import Footer from '@/components/landing/Footer';
 import ContentNarrationPlayer from '@/components/ContentNarrationPlayer';
 import BookReadLink from '@/components/BookReadLink';
-import OMRVideoPlayer from '@/components/OMRVideoPlayer';
+import DonorAccessLock from '@/components/DonorAccessLock';
+import { getVideoWatchPath } from '@/lib/video-source';
+import { ArrowRight, Play } from 'lucide-react';
+
+function truncatePreview(text: string | null | undefined, maxLength = 260) {
+  if (!text) {
+    return null;
+  }
+
+  return text.length > maxLength ? `${text.slice(0, maxLength).trimEnd()}...` : text;
+}
 
 export default async function BookDetailsPage({
   params,
@@ -106,6 +116,13 @@ export default async function BookDetailsPage({
         : bookRequiresDonation
           ? 'Narrated mode follows this title’s donor access, so the narration player unlocks with the same support requirement.'
           : 'Narrated mode is reserved for donors. Support the work once to unlock the narration player on your account.';
+    const contentViewerAccess = {
+      donorTier: access.donorTier,
+      isPrivileged: access.isPrivileged,
+      isDonor: access.isDonor,
+      isRecurringDonor: access.isRecurringDonor,
+      isSignedIn: Boolean(session?.user?.id),
+    };
 
   return (
     <main className="page-shell">
@@ -455,79 +472,159 @@ export default async function BookDetailsPage({
               <div className="space-y-4">
                 <h2 className="font-playfair text-3xl font-semibold text-landing-text">Explore More</h2>
                 <div className="grid gap-4">
-                  {supplementaryContents.map((item) => (
-                    <div key={item.id} className="surface-card p-4 sm:p-6 w-full">
-                      {item.type === 'VIDEO' && (
-                        <div>
-                          <h3 className="mb-3 text-lg font-semibold text-landing-text">{item.title}</h3>
-                          {item.summary || item.content ? (
-                            <p className="mb-3 text-sm leading-relaxed text-landing-text-muted">
-                              {item.summary || item.content}
-                            </p>
+                  {supplementaryContents.map((item) => {
+                    const itemAccess = getContentAccessStateForViewer(item, contentViewerAccess);
+                    const accessBadgeLabel = getBookAccessBadgeLabel(itemAccess.contentDonorAccessLevel, itemAccess.hasAccess);
+                    const accessBadgeClasses = itemAccess.hasAccess
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : itemAccess.contentDonorAccessLevel === 'RECURRING_DONORS'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-violet-100 text-violet-700';
+                    const posterUrl = item.coverUrl || book.coverUrl || null;
+
+                    return (
+                      <div key={item.id} className="surface-card p-4 sm:p-6 w-full">
+                        <div className="mb-3 flex flex-wrap items-center gap-2">
+                          {itemAccess.requiresDonation ? (
+                            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${accessBadgeClasses}`}>
+                              {accessBadgeLabel}
+                            </span>
                           ) : null}
-                          {item.url && (
-                             <div className="aspect-video overflow-hidden rounded-xl border border-landing-border bg-landing-surface-muted relative">
-                                {item.url.includes('youtube.com') || item.url.includes('youtu.be') || item.url.includes('vimeo.com') ? (
-                                   <OMRVideoPlayer
-                                     url={item.url}
-                                     title={item.title}
-                                     className="absolute inset-0 h-full w-full"
-                                   />
-                                ) : (
-                                   <a href={item.url} target="_blank" rel="noopener noreferrer" className="flex h-full items-center justify-center text-landing-accent hover:underline">
-                                     Watch Video ↗
-                                   </a>
-                                )}
-                             </div>
-                          )}
+                          <span className="rounded-full bg-landing-accent/10 px-2.5 py-1 text-xs font-semibold text-landing-accent">
+                            {item.type}
+                          </span>
                         </div>
-                      )}
 
-                      {item.type === 'ARTICLE' && (
-                        <div>
-                          <h3 className="mb-2 text-lg font-semibold text-landing-text">{item.title}</h3>
-                          {(item.summary || item.content) && (
-                            <div className="mb-3 whitespace-pre-wrap text-sm leading-relaxed text-landing-text-muted">
-                              {(item.summary || item.content || '').length > 300 ? `${(item.summary || item.content || '').slice(0, 300)}...` : (item.summary || item.content)}
-                            </div>
-                          )}
-                          {item.url && (
-                            <a href={item.url} target="_blank" rel="noopener noreferrer" className="font-medium text-landing-accent hover:text-landing-accent-secondary">
-                              Read Full Article ↗
-                            </a>
-                          )}
-                        </div>
-                      )}
+                        {item.type === 'VIDEO' && (
+                          <div>
+                            <h3 className="mb-3 text-lg font-semibold text-landing-text">{item.title}</h3>
+                            {item.summary || item.content ? (
+                              <p className="mb-3 text-sm leading-relaxed text-landing-text-muted">
+                                {item.summary || item.content}
+                              </p>
+                            ) : null}
 
-                      {item.type === 'POEM' && (
-                        <div className="surface-muted p-4 sm:p-6 text-center font-serif italic">
-                          <h3 className="mb-4 font-playfair text-xl sm:text-2xl font-semibold not-italic text-landing-text">{item.title}</h3>
-                          <div className="mx-auto max-w-lg whitespace-pre-wrap leading-relaxed text-landing-text-muted">
-                            {item.content}
+                            {(() => {
+                              const videoHref = getVideoWatchPath(item);
+
+                              return (
+                                <>
+                                  <Link
+                                    href={videoHref}
+                                    className="group block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2"
+                                  >
+                                    <div className="relative aspect-video overflow-hidden rounded-xl border border-landing-border bg-landing-surface-muted">
+                                      {posterUrl ? (
+                                        <img src={posterUrl} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" />
+                                      ) : (
+                                        <div className="h-full w-full bg-[radial-gradient(circle_at_top,rgba(61,115,122,0.3),rgba(15,23,42,0.92)_65%)]" />
+                                      )}
+                                      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.15),rgba(2,6,23,0.72))]" />
+                                      <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-4 text-white">
+                                        <span className="rounded-full bg-white/12 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/85 ring-1 ring-white/15 backdrop-blur-md">
+                                          Dedicated watch page
+                                        </span>
+                                        {itemAccess.requiresDonation ? (
+                                          <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${accessBadgeClasses}`}>
+                                            {accessBadgeLabel}
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                      <div className="absolute inset-0 flex items-center justify-center">
+                                        <span className="flex h-16 w-16 items-center justify-center rounded-full border border-white/20 bg-white/14 text-white shadow-[0_16px_40px_-18px_rgba(15,23,42,0.95)] backdrop-blur-md transition-transform duration-300 group-hover:scale-105">
+                                          <Play className="ml-1 h-8 w-8" fill="currentColor" />
+                                        </span>
+                                      </div>
+                                      <div className="absolute inset-x-0 bottom-0 px-5 py-4 text-center text-sm text-white/88">
+                                        {itemAccess.hasAccess
+                                          ? 'Open the dedicated video page to watch this screening.'
+                                          : 'Open the video page for access details and donor unlock options.'}
+                                      </div>
+                                    </div>
+                                  </Link>
+
+                                  <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+                                    <Link href={videoHref} className="inline-flex items-center gap-2 font-semibold text-landing-accent transition-colors hover:text-landing-accent-secondary">
+                                      Open video page
+                                      <ArrowRight className="h-4 w-4" />
+                                    </Link>
+                                    <span className="text-landing-text-muted">
+                                      {itemAccess.hasAccess
+                                        ? 'Playback now happens on its own watch page.'
+                                        : 'Unlock and playback both happen from the watch page.'}
+                                    </span>
+                                  </div>
+                                </>
+                              );
+                            })()}
                           </div>
-                          {item.author && (
-                            <p className="mt-4 text-sm text-landing-text-muted not-italic">— {item.author}</p>
-                          )}
-                        </div>
-                      )}
+                        )}
 
-                      {item.type === 'QUOTE' && (
-                        <div className="my-2 border-l-4 border-landing-accent pl-6 py-2">
-                           <blockquote className="mb-2 text-xl font-medium italic text-landing-text">
-                             &ldquo;{item.content}&rdquo;
-                           </blockquote>
-                           {item.author && (
-                             <cite className="text-sm font-medium not-italic text-landing-text-muted">
-                               — {item.author}
-                             </cite>
-                           )}
-                           {item.title && <p className="mt-1 text-xs text-landing-text-muted">{item.title}</p>}
-                        </div>
-                      )}
+                        {item.type === 'ARTICLE' && (
+                          <div>
+                            <h3 className="mb-2 text-lg font-semibold text-landing-text">{item.title}</h3>
+                            {(item.summary || item.content) && (
+                              <div className="mb-3 whitespace-pre-wrap text-sm leading-relaxed text-landing-text-muted">
+                                {itemAccess.hasAccess
+                                  ? truncatePreview(item.summary || item.content, 300)
+                                  : truncatePreview(item.summary || item.content, 220)}
+                              </div>
+                            )}
+                            {itemAccess.hasAccess && item.url ? (
+                              <a href={item.url} target="_blank" rel="noopener noreferrer" className="font-medium text-landing-accent hover:text-landing-accent-secondary">
+                                Read Full Article ↗
+                              </a>
+                            ) : null}
+                          </div>
+                        )}
 
-                      <ContentNarrationPlayer contentId={item.id} compact />
-                    </div>
-                  ))}
+                        {item.type === 'POEM' && (
+                          <div className="surface-muted p-4 sm:p-6 text-center font-serif italic">
+                            <h3 className="mb-4 font-playfair text-xl sm:text-2xl font-semibold not-italic text-landing-text">{item.title}</h3>
+                            <div className="mx-auto max-w-lg whitespace-pre-wrap leading-relaxed text-landing-text-muted">
+                              {itemAccess.hasAccess ? item.content : truncatePreview(item.summary || item.content, 240)}
+                            </div>
+                            {item.author && (
+                              <p className="mt-4 text-sm text-landing-text-muted not-italic">— {item.author}</p>
+                            )}
+                          </div>
+                        )}
+
+                        {item.type === 'QUOTE' && (
+                          <div className="my-2 border-l-4 border-landing-accent pl-6 py-2">
+                            <blockquote className="mb-2 text-xl font-medium italic text-landing-text">
+                              &ldquo;{itemAccess.hasAccess ? item.content : truncatePreview(item.content, 120)}&rdquo;
+                            </blockquote>
+                            {item.author && (
+                              <cite className="text-sm font-medium not-italic text-landing-text-muted">
+                                — {item.author}
+                              </cite>
+                            )}
+                            {item.title && <p className="mt-1 text-xs text-landing-text-muted">{item.title}</p>}
+                          </div>
+                        )}
+
+                        {!itemAccess.hasAccess ? (
+                          <DonorAccessLock
+                            accessLevel={itemAccess.contentDonorAccessLevel}
+                            isSignedIn={Boolean(session?.user?.id)}
+                            loginHref={loginHref}
+                            supportHref="#support-this-book"
+                            supportLabel={getBookSupportCallToAction(itemAccess.contentDonorAccessLevel)}
+                            secondaryHref="/library"
+                            secondaryLabel="Browse library"
+                            title={`Donor-only ${item.type.toLowerCase()}`}
+                            message={item.type === 'VIDEO'
+                              ? 'This video is reserved for supporters. Unlock it on your account to start playback from the dedicated watch page.'
+                              : `This ${item.type.toLowerCase()} is reserved for supporters. Unlock it on your account to open the full piece here.`}
+                            className="mt-4"
+                          />
+                        ) : item.type !== 'VIDEO' ? (
+                          <ContentNarrationPlayer contentId={item.id} compact />
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

@@ -37,7 +37,7 @@ interface BookForm {
   title: string;
   author: string;
   description: string;
-  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  status: 'DRAFT' | 'COMING_SOON' | 'PRE_RELEASE' | 'PUBLISHED' | 'ARCHIVED';
   donorAccessLevel: BookDonorAccessLevel;
   narrationEnabled: boolean;
   donationEnabled: boolean;
@@ -219,9 +219,15 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
               </h1>
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                  bookStatus === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700' : bookStatus === 'ARCHIVED' ? 'bg-slate-100 text-slate-700' : 'bg-amber-100 text-amber-700'
+                  bookStatus === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700'
+                  : bookStatus === 'ARCHIVED' ? 'bg-slate-100 text-slate-700'
+                  : bookStatus === 'COMING_SOON' ? 'bg-amber-100 text-amber-700'
+                  : bookStatus === 'PRE_RELEASE' ? 'bg-violet-100 text-violet-700'
+                  : 'bg-stone-100 text-stone-600'
                 }`}>
-                  {bookStatus || 'DRAFT'}
+                  {bookStatus === 'COMING_SOON' ? 'Coming Soon'
+                  : bookStatus === 'PRE_RELEASE' ? 'Pre Release'
+                  : (bookStatus || 'DRAFT')}
                 </span>
                 <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
                   donorAccessLevel === 'RECURRING_DONORS'
@@ -320,6 +326,8 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
                   className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
                 >
                   <option value="DRAFT">Draft</option>
+                  <option value="COMING_SOON">Coming Soon</option>
+                  <option value="PRE_RELEASE">Pre Release</option>
                   <option value="PUBLISHED">Published</option>
                   <option value="ARCHIVED">Archived</option>
                 </select>

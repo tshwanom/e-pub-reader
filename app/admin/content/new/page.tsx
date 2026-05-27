@@ -19,7 +19,7 @@ export default async function NewContentPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">New content</p>
         <h1 className="mt-2 font-playfair text-3xl text-landing-text sm:text-4xl">Add a platform content item</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-landing-text-muted sm:text-[15px]">
-          Create blog articles, videos, poems, or quotes that can appear across the public platform and receive their own narration.
+          Create blog articles, videos, poems, or quotes that can appear across the public platform, support donor-only access, and optionally receive narration when they are written content. Videos can use direct uploads or hosted platforms while still opening inside the OMR watch page.
         </p>
       </section>
 

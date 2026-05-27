@@ -156,7 +156,7 @@ export const DONATION_FREQUENCY_OPTIONS = [
   {
     id: 'MONTHLY',
     label: 'Monthly',
-    description: 'Recurring monthly support through PayPal or Paystack.',
+    description: 'Recurring monthly support through PayPal.',
   },
 ] as const satisfies ReadonlyArray<{
   id: DonationFrequency;

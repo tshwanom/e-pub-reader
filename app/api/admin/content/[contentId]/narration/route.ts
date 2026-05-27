@@ -180,7 +180,10 @@ export async function GET(
   const storageConfigured = Boolean(getNarrationStorageConfig(storageProvider));
   const geminiConfigured = isGeminiTtsConfigured();
   const transcript = getContentNarrationTranscript(content);
-  const missingRequirements = buildContentNarrationGenerationRequirements({
+  const isVideoContent = content.type === "VIDEO";
+  const missingRequirements = isVideoContent
+    ? ["Video content uses the in-library player and does not support narration generation."]
+    : buildContentNarrationGenerationRequirements({
     hasText: hasNarratableContent(content),
     geminiConfigured,
     storageConfigured,
@@ -200,7 +203,7 @@ export async function GET(
       slug: content.slug,
       type: content.type,
       status: content.status,
-      narrationEnabled: content.narrationEnabled,
+      narrationEnabled: isVideoContent ? false : content.narrationEnabled,
       transcriptCharacterCount: transcript.length,
       narrationSyncStatus: syncSummary.syncState,
       narrationSyncMessage: syncSummary.message,
@@ -221,7 +224,7 @@ export async function GET(
       configured: storageConfigured,
     },
     generation: {
-      canGenerate: missingRequirements.length === 0,
+      canGenerate: !isVideoContent && missingRequirements.length === 0,
       missingRequirements,
     },
     narrations: content.narrations.map((narration) =>
@@ -249,6 +252,32 @@ export async function POST(
     const rawPayload = await req.json();
     const { action } = narrationActionSchema.parse(rawPayload);
 
+    const content = await prisma.supplementaryContent.findUnique({
+      where: { id: contentId },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        type: true,
+        status: true,
+        summary: true,
+        content: true,
+        author: true,
+        narrationSourceHash: true,
+      },
+    });
+
+    if (!content) {
+      return NextResponse.json({ error: "Content not found" }, { status: 404 });
+    }
+
+    if (content.type === "VIDEO") {
+      return NextResponse.json(
+        { error: "Video content uses the in-library player and does not support narration generation." },
+        { status: 400 }
+      );
+    }
+
     if (action === "sample") {
       const payload = sampleRequestSchema.parse(rawPayload);
 
@@ -274,25 +303,6 @@ export async function POST(
         audioBase64,
         audioDataUrl: `data:${sampleAudio.audioMimeType};base64,${audioBase64}`,
       });
-    }
-
-    const content = await prisma.supplementaryContent.findUnique({
-      where: { id: contentId },
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        type: true,
-        status: true,
-        summary: true,
-        content: true,
-        author: true,
-        narrationSourceHash: true,
-      },
-    });
-
-    if (!content) {
-      return NextResponse.json({ error: "Content not found" }, { status: 404 });
     }
 
     if (action === "set-default") {

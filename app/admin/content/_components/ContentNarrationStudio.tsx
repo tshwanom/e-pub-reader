@@ -278,7 +278,7 @@ export default function ContentNarrationStudio({ contentId }: { contentId: strin
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">Content narration</p>
           <h2 className="mt-2 font-playfair text-2xl text-landing-text sm:text-3xl">Donor voice studio</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-landing-text-muted sm:text-[15px]">
-            Generate narrated audio for articles, videos, poems, and quotes — not only EPUBs. The public content pages will surface it as donor narration once it is enabled and ready.
+            Generate narrated audio for articles, poems, and quotes — not only EPUBs. Videos use the custom player only and stay narration-free.
           </p>
         </div>
 
@@ -348,6 +348,19 @@ export default function ContentNarrationStudio({ contentId }: { contentId: strin
       ) : null}
 
       {summary ? (
+        summary.content.type === "VIDEO" ? (
+          <div className="mt-6 rounded-2xl bg-amber-50 p-5 ring-1 ring-amber-200">
+            <p className="text-sm font-semibold text-amber-900">Video narration is disabled for this item</p>
+            <p className="mt-2 text-sm leading-6 text-amber-800">
+              This content uses the clean in-library video player instead of donor narration. Any legacy video narration stays hidden from readers and new generation runs are blocked.
+            </p>
+            {summary.narrations.length > 0 ? (
+              <p className="mt-3 text-sm leading-6 text-amber-800">
+                Existing narration records: {summary.narrations.length}. They remain in the editor history for reference only.
+              </p>
+            ) : null}
+          </div>
+        ) : (
         <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.75fr)]">
           <div className="surface-muted p-5">
             <div className="grid gap-4 md:grid-cols-2">
@@ -462,6 +475,7 @@ export default function ContentNarrationStudio({ contentId }: { contentId: strin
             </div>
           </aside>
         </div>
+        )
       ) : null}
     </section>
   );

@@ -84,6 +84,15 @@ export async function GET(
     return NextResponse.json({ available: false, reason: "not-found", message: "Content not found." }, { status: 404 });
   }
 
+  if (content.type === "VIDEO") {
+    return NextResponse.json({
+      available: false,
+      reason: "unsupported-type",
+      message: `Narration is not available for video content like “${content.title}”.`,
+      voices: [],
+    });
+  }
+
   if (!donorAccess.hasAccess) {
     return NextResponse.json(
       {

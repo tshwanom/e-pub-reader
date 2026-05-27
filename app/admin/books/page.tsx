@@ -143,9 +143,15 @@ export default async function AdminBooksPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
-                      book.status === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                      book.status === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700'
+                      : book.status === 'ARCHIVED' ? 'bg-slate-100 text-slate-600'
+                      : book.status === 'COMING_SOON' ? 'bg-amber-100 text-amber-700'
+                      : book.status === 'PRE_RELEASE' ? 'bg-violet-100 text-violet-700'
+                      : 'bg-stone-100 text-stone-600'
                     }`}>
-                      {book.status}
+                      {book.status === 'COMING_SOON' ? 'Coming Soon'
+                      : book.status === 'PRE_RELEASE' ? 'Pre Release'
+                      : book.status}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
