@@ -1,5 +1,4 @@
 import { getUserDonorProfile, isPrivilegedUser } from '@/lib/book-access';
-import { BookStatus } from '@prisma/client';
 import { authOptions } from '@/lib/auth';
 import {
   type DonorTier,
@@ -37,12 +36,9 @@ export default async function LandingPage() {
   try {
     // Fetch published books
     books = await prisma.book.findMany({
-      where: { status: { in: [BookStatus.PUBLISHED, BookStatus.COMING_SOON, BookStatus.PRE_RELEASE] } },
+      where: { status: 'PUBLISHED' },
       orderBy: { createdAt: 'desc' },
       take: 8, // Show max 8 books on landing page
-      include: {
-        printLinks: { select: { id: true } },
-      },
     });
   } catch (err) {
     console.error('[LandingPage] Failed to fetch books:', err);
@@ -56,17 +52,21 @@ export default async function LandingPage() {
       <HeroSection />
 
       {/* Books Section */}
-      <section className="page-container scroll-mt-36 py-14 sm:scroll-mt-40 sm:py-20">
-        <div className="mx-auto mb-12 max-w-4xl text-center">
+      <section className="page-container py-14 sm:py-20">
+        <div className="mb-12 max-w-4xl">
           <h2 className="font-playfair text-4xl font-semibold text-landing-text md:text-5xl">
-            The Books
+            The Writings
           </h2>
-          <div className="mx-auto mt-6 max-w-3xl space-y-4 text-lg leading-relaxed text-landing-text-muted">
+          <div className="mt-6 space-y-4 text-lg leading-relaxed text-landing-text-muted">
+            <p>Most of these books are free.</p>
             <p>
-              Most of these books are free. Not as a promotion. Not as a tactic. But because truth should travel
-              further than any sales funnel. Some special editions are reserved for donors who keep the work
-              independent.
+              Not as a promotion.
+              <br />
+              Not as a tactic.
+              <br />
+              But because truth should travel further than any sales funnel.
             </p>
+            <p>Some special editions are reserved for donors who keep the work independent.</p>
           </div>
         </div>
 
@@ -77,15 +77,12 @@ export default async function LandingPage() {
                 <BookCard
                   key={book.id}
                   id={book.id}
-                  slug={book.slug}
                   title={book.title}
                   author={book.author}
                   description={book.description}
                   coverUrl={book.coverUrl}
-                  status={book.status}
                   donorAccessLevel={book.donorAccessLevel}
                   donorOnly={book.donorOnly}
-                  hasPrintVersion={'printLinks' in book ? (book.printLinks as { id: string }[]).length > 0 : false}
                   isAccessible={
                     isPrivileged
                     || hasBookAccessForDonorTier(resolveBookDonorAccessLevel(book), donorTier)

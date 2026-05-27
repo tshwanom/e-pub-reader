@@ -16,6 +16,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "repair:book-donor-hierarchy": "node scripts/repair-book-donor-hierarchy-migration.js",
+    "repair:supplementary-content": "npx prisma db execute --file prisma/repairs/supplementary_content_repair.sql --schema prisma/schema.prisma",
     "db:push": "prisma db push",
     "db:seed": "node prisma/seed.js",
     "db:seed:ready-narration": "node scripts/seed-ready-sample-narration.js",

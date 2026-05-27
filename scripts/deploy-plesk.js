@@ -45,6 +45,14 @@ try {
   // 1. Install Dependencies
   runCommand(NPM_CMD, ['install']);
 
+  // 1.5 Auto-repair missing tables and enums needed for initial migrations
+  console.log('\n🔧 Checking and preparing base database tables...');
+  runCommand(NPX_CMD, [
+    'prisma', 'db', 'execute',
+    '--file', 'prisma/repairs/supplementary_content_repair.sql',
+    '--schema', 'prisma/schema.prisma'
+  ]);
+
   // 2. Apply pending Prisma migrations
   runCommand(NPX_CMD, ['prisma', 'migrate', 'deploy']);
 
