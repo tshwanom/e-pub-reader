@@ -88,6 +88,7 @@ export default async function LibraryPage({
               <BookCard
                 key={book.id}
                 id={book.id}
+                slug={book.slug}
                 title={book.title}
                 author={book.author}
                 description={book.description}

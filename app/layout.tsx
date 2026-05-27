@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Playfair_Display, Crimson_Pro } from "next/font/google";
 import "./globals.css";
 import OfflineSupport from "@/components/OfflineSupport";
+import { getSiteUrl } from "@/lib/site";
 
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -18,8 +19,32 @@ const crimson = Crimson_Pro({
 });
 
 export const metadata: Metadata = {
+  metadataBase: getSiteUrl(),
   title: "One Man Revolution | A Quiet Rebellion",
   description: "A quiet rebellion against systems that dehumanize, silence, and fracture the human spirit. Free books on spiritual awakening and inner sovereignty.",
+  applicationName: 'One Man Revolution',
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    title: 'One Man Revolution | A Quiet Rebellion',
+    description: 'A quiet rebellion against systems that dehumanize, silence, and fracture the human spirit. Free books on spiritual awakening and inner sovereignty.',
+    url: '/',
+    siteName: 'One Man Revolution',
+    type: 'website',
+    images: [
+      {
+        url: '/logo.png',
+        alt: 'One Man Revolution',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'One Man Revolution | A Quiet Rebellion',
+    description: 'A quiet rebellion against systems that dehumanize, silence, and fracture the human spirit. Free books on spiritual awakening and inner sovereignty.',
+    images: ['/logo.png'],
+  },
   icons: {
     icon: '/logo.png',
   },

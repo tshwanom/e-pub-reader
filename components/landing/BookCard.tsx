@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import BookReadLink from '@/components/BookReadLink';
+import { getBookPath } from '@/lib/book-paths';
 import {
   isDonorRestrictedBook,
   isRecurringDonorBook,
@@ -9,6 +10,7 @@ import {
 
 interface BookCardProps {
   id: string;
+  slug?: string | null;
   title: string;
   author: string;
   description: string;
@@ -23,6 +25,7 @@ interface BookCardProps {
 
 export default function BookCard({
   id,
+  slug,
   title,
   author,
   description,
@@ -170,7 +173,7 @@ export default function BookCard({
             </span>
           ) : (
             <Link
-              href={`/books/${id}`}
+              href={getBookPath({ id, slug })}
               className="inline-flex items-center text-sm font-semibold text-landing-accent transition-colors duration-200 hover:text-landing-accent-secondary"
             >
               {ctaLabel}
@@ -193,6 +196,7 @@ export default function BookCard({
           {hasProgress && resolvedAccessibility && (
             <BookReadLink
               bookId={id}
+              bookSlug={slug}
               className="ml-auto rounded-lg bg-landing-accent/10 px-3 py-1.5 text-xs font-semibold text-landing-accent transition hover:bg-landing-accent hover:text-white"
             >
               Resume {Math.round(readingProgress ?? 0)}%

@@ -1,4 +1,5 @@
-import { notFound } from 'next/navigation';
+import type { Metadata } from 'next';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { getBookAccessState, getContentAccessStateForViewer, getDonorFeatureAccessState } from '@/lib/book-access';
 import { withContentFeatureFallback } from '@/lib/content';
 import { getUserActivePaystackSubscription } from '@/lib/donation-subscriptions';
@@ -21,7 +22,11 @@ import ContentNarrationPlayer from '@/components/ContentNarrationPlayer';
 import BookReadLink from '@/components/BookReadLink';
 import DonorAccessLock from '@/components/DonorAccessLock';
 import { getVideoWatchPath } from '@/lib/video-source';
+import { getBookPath } from '@/lib/book-paths';
+import { getAbsoluteSiteAssetUrl, getSiteUrl } from '@/lib/site';
 import { ArrowRight, Play } from 'lucide-react';
+
+type BookPageSearchParams = Record<string, string | string[] | undefined>;
 
 function truncatePreview(text: string | null | undefined, maxLength = 260) {
   if (!text) {
@@ -31,20 +36,130 @@ function truncatePreview(text: string | null | undefined, maxLength = 260) {
   return text.length > maxLength ? `${text.slice(0, maxLength).trimEnd()}...` : text;
 }
 
+function getSingleSearchParamValue(searchParams: BookPageSearchParams | undefined, key: string) {
+  const value = searchParams?.[key];
+
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+
+  return typeof value === 'string' ? value : undefined;
+}
+
+function buildSearchParamsSuffix(searchParams: BookPageSearchParams | undefined) {
+  const urlSearchParams = new URLSearchParams();
+
+  Object.entries(searchParams || {}).forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      value.forEach((entry) => {
+        if (typeof entry === 'string') {
+          urlSearchParams.append(key, entry);
+        }
+      });
+      return;
+    }
+
+    if (typeof value === 'string') {
+      urlSearchParams.append(key, value);
+    }
+  });
+
+  const queryString = urlSearchParams.toString();
+  return queryString ? `?${queryString}` : '';
+}
+
+function buildBookSeoDescription(book: { title: string; author: string; description?: string | null }) {
+  return truncatePreview(book.description, 160)
+    || `Read “${book.title}” by ${book.author} on One Man Revolution.`;
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ bookId: string }>;
+}): Promise<Metadata> {
+  const { bookId } = await params;
+  const book = await prisma.book.findFirst({
+    where: {
+      status: 'PUBLISHED',
+      OR: [{ id: bookId }, { slug: bookId }],
+    },
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+      author: true,
+      description: true,
+      coverUrl: true,
+      publisher: true,
+      language: true,
+      subjects: true,
+    },
+  });
+
+  if (!book) {
+    return {
+      title: 'Book not found | One Man Revolution',
+      description: 'The requested book could not be found.',
+    };
+  }
+
+  const canonicalPath = getBookPath(book);
+  const description = buildBookSeoDescription(book);
+  const coverImageUrl = getAbsoluteSiteAssetUrl(book.coverUrl, '/logo.png');
+  const keywords = [...new Set([
+    ...(book.subjects || []),
+    book.author,
+    book.publisher,
+    book.language,
+    'One Man Revolution',
+  ].filter((value): value is string => Boolean(value && value.trim())))];
+
+  return {
+    title: `${book.title} by ${book.author} | One Man Revolution`,
+    description,
+    alternates: {
+      canonical: canonicalPath,
+    },
+    keywords,
+    openGraph: {
+      title: book.title,
+      description,
+      url: canonicalPath,
+      siteName: 'One Man Revolution',
+      type: 'website',
+      images: [
+        {
+          url: coverImageUrl,
+          alt: `${book.title} cover`,
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `${book.title} by ${book.author}`,
+      description,
+      images: [coverImageUrl],
+    },
+  };
+}
+
 export default async function BookDetailsPage({
   params,
   searchParams,
 }: {
   params: Promise<{ bookId: string }>;
-  searchParams?: Promise<{ donation?: string; subscription?: string }>;
+  searchParams?: Promise<BookPageSearchParams>;
 }) {
   const { bookId } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const session = await getServerSession(authOptions);
   const paystackSubscription = session?.user ? await getUserActivePaystackSubscription(session.user) : null;
 
-  const book = await prisma.book.findUnique({
-    where: { id: bookId },
+  const book = await prisma.book.findFirst({
+    where: {
+      OR: [{ id: bookId }, { slug: bookId }],
+    },
     include: {
       epubFile: true,
       audiobook: true,
@@ -71,6 +186,12 @@ export default async function BookDetailsPage({
     notFound();
   }
 
+  const canonicalBookPath = getBookPath(book);
+
+  if (bookId !== (book.slug?.trim() || book.id)) {
+    permanentRedirect(`${canonicalBookPath}${buildSearchParamsSuffix(resolvedSearchParams)}`);
+  }
+
   const supplementaryContents = await withContentFeatureFallback(
     () => prisma.supplementaryContent.findMany({
       where: {
@@ -86,8 +207,9 @@ export default async function BookDetailsPage({
   );
 
   const progress = access.hasAccess && session?.user?.id ? book.readingProgress?.[0] : null;
-  const donationStatus = resolvedSearchParams?.donation;
-  const loginHref = `/login?callbackUrl=${encodeURIComponent(`/books/${book.id}`)}`;
+  const donationStatus = getSingleSearchParamValue(resolvedSearchParams, 'donation');
+  const subscriptionStatus = getSingleSearchParamValue(resolvedSearchParams, 'subscription');
+  const loginHref = `/login?callbackUrl=${encodeURIComponent(canonicalBookPath)}`;
   const bookRequiresDonation = access.requiresDonation;
   const bookRequiresRecurringSupport = access.requiresRecurringDonation;
   const donorRequirementText = getBookDonorRequirementText(access.bookDonorAccessLevel);
@@ -116,16 +238,44 @@ export default async function BookDetailsPage({
         : bookRequiresDonation
           ? 'Narrated mode follows this title’s donor access, so the narration player unlocks with the same support requirement.'
           : 'Narrated mode is reserved for donors. Support the work once to unlock the narration player on your account.';
-    const contentViewerAccess = {
-      donorTier: access.donorTier,
-      isPrivileged: access.isPrivileged,
-      isDonor: access.isDonor,
-      isRecurringDonor: access.isRecurringDonor,
-      isSignedIn: Boolean(session?.user?.id),
-    };
+  const contentViewerAccess = {
+    donorTier: access.donorTier,
+    isPrivileged: access.isPrivileged,
+    isDonor: access.isDonor,
+    isRecurringDonor: access.isRecurringDonor,
+    isSignedIn: Boolean(session?.user?.id),
+  };
+  const absoluteBookUrl = getSiteUrl(canonicalBookPath).toString();
+  const absoluteCoverUrl = getAbsoluteSiteAssetUrl(book.coverUrl, '/logo.png');
+  const seoDescription = buildBookSeoDescription(book);
+  const bookStructuredData = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'Book',
+    name: book.title,
+    url: absoluteBookUrl,
+    description: seoDescription,
+    image: [absoluteCoverUrl],
+    author: [
+      {
+        '@type': 'Person',
+        name: book.author,
+      },
+    ],
+    inLanguage: book.language || 'en',
+    publisher: {
+      '@type': 'Organization',
+      name: book.publisher || 'One Man Revolution',
+    },
+    datePublished: book.publishedAt?.toISOString(),
+    isbn: book.isbn || undefined,
+    genre: book.subjects?.length ? book.subjects : undefined,
+    isAccessibleForFree: !bookRequiresDonation,
+    bookFormat: 'https://schema.org/EBook',
+  });
 
   return (
     <main className="page-shell">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: bookStructuredData }} />
       <Header />
 
       <div className="page-container py-8 sm:py-12">
@@ -166,6 +316,7 @@ export default async function BookDetailsPage({
               {access.hasAccess ? (
                 <BookReadLink
                   bookId={book.id}
+                  bookSlug={book.slug}
                   prefetchOnMount
                   className="brand-button mb-4 block w-full text-center"
                 >
@@ -298,8 +449,8 @@ export default async function BookDetailsPage({
                   <div className="mb-6">
                     <PaystackSubscriptionManager
                       subscription={paystackSubscription}
-                      returnTo={`/books/${book.id}`}
-                      status={resolvedSearchParams?.subscription}
+                      returnTo={canonicalBookPath}
+                      status={subscriptionStatus}
                     />
                   </div>
                 ) : null}

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useForm, useFieldArray } from 'react-hook-form';
 import Link from 'next/link';
 import { ArrowLeft, BookOpenText, ImageIcon, Save, Sparkles, Trash2 } from 'lucide-react';
+import { getBookPath } from '@/lib/book-paths';
 import {
   BOOK_DONOR_ACCESS_LEVEL_OPTIONS,
   type BookDonorAccessLevel,
@@ -53,6 +54,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [bookId, setBookId] = useState<string>('');
+  const [bookSlug, setBookSlug] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState<string>('');
   const [extractingCover, setExtractingCover] = useState(false);
   
@@ -100,6 +102,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
         printLinks: data.printLinks || [],
         supplementaryContents: data.supplementaryContents || [],
       });
+      setBookSlug(data.slug || null);
       setCoverUrl(data.coverUrl);
     } catch (err) {
       setError('Could not load book details');
@@ -539,7 +542,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
                     After saving, open the reader and donor journey from the public side to verify access and playback exactly as a supporter would see it.
                   </p>
                   <div className="mt-5">
-                    <Link href={`/books/${bookId}`} className="ghost-button gap-2">
+                    <Link href={getBookPath({ id: bookId, slug: bookSlug })} className="ghost-button gap-2">
                       Preview public page
                     </Link>
                   </div>

@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { Metadata } from 'next';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -16,6 +16,7 @@ import OMRVideoPlayer from '@/components/OMRVideoPlayer';
 import VideoCommentsModal from '@/components/VideoCommentsModal';
 import { withContentFeatureFallback } from '@/lib/content';
 import { prisma } from '@/lib/prisma';
+import { getAbsoluteSiteAssetUrl } from '@/lib/site';
 import { extractVideoChapters } from '@/lib/video-chapters';
 import { getVideoThumbnailUrl, getVideoWatchPath } from '@/lib/video-source';
 
@@ -127,9 +128,35 @@ export async function generateMetadata({ params }: VideoPageParams): Promise<Met
     };
   }
 
+  const canonicalPath = getVideoWatchPath(video);
+  const description = video.summary || video.content || 'A curated One Man Revolution screening.';
+  const coverImageUrl = getAbsoluteSiteAssetUrl(video.coverUrl || video.book?.coverUrl, '/logo.png');
+
   return {
     title: `${video.title} | Videos | One Man Revolution`,
-    description: video.summary || video.content || 'A curated One Man Revolution screening.',
+    description,
+    alternates: {
+      canonical: canonicalPath,
+    },
+    openGraph: {
+      title: video.title,
+      description,
+      url: canonicalPath,
+      siteName: 'One Man Revolution',
+      type: 'video.other',
+      images: [
+        {
+          url: coverImageUrl,
+          alt: video.title,
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `${video.title} | Videos`,
+      description,
+      images: [coverImageUrl],
+    },
   };
 }
 
@@ -142,6 +169,10 @@ export default async function VideoWatchPage({ params }: VideoPageParams) {
 
   if (!videoRecord) {
     notFound();
+  }
+
+  if (videoSlug !== (videoRecord.slug?.trim() || videoRecord.id)) {
+    permanentRedirect(getVideoWatchPath(videoRecord));
   }
 
   const [video, relatedRawVideos, commentsResult] = await Promise.all([

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { getBookAccessState, getDonorFeatureAccessState } from "@/lib/book-access";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
@@ -5,15 +6,64 @@ import { authOptions } from "@/lib/auth";
 import { getBookDonorRequirementText, getBookLockedAudienceLabel } from '@/lib/book-access-config';
 import Reader from "@/components/Reader";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { normalizeReaderPreferences } from "@/lib/reader-preferences";
+import { getBookPath, getBookReadPath } from '@/lib/book-paths';
 
-export default async function ReadBookPage({ params }: { params: Promise<{ bookId: string }> }) {
+type ReadBookPageParams = {
+  params: Promise<{ bookId: string }>;
+};
+
+export async function generateMetadata({ params }: ReadBookPageParams): Promise<Metadata> {
+  const { bookId } = await params;
+  const book = await prisma.book.findFirst({
+    where: {
+      status: 'PUBLISHED',
+      OR: [{ id: bookId }, { slug: bookId }],
+    },
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+      author: true,
+    },
+  });
+
+  if (!book) {
+    return {
+      title: 'Reader | One Man Revolution',
+      robots: {
+        index: false,
+        follow: false,
+      },
+    };
+  }
+
+  return {
+    title: `${book.title} Reader | One Man Revolution`,
+    description: `Read “${book.title}” by ${book.author} in the One Man Revolution reader.`,
+    alternates: {
+      canonical: getBookPath(book),
+    },
+    robots: {
+      index: false,
+      follow: false,
+      googleBot: {
+        index: false,
+        follow: false,
+      },
+    },
+  };
+}
+
+export default async function ReadBookPage({ params }: ReadBookPageParams) {
   const { bookId } = await params;
   const session = await getServerSession(authOptions);
   
-  const book = await prisma.book.findUnique({
-    where: { id: bookId },
+  const book = await prisma.book.findFirst({
+    where: {
+      OR: [{ id: bookId }, { slug: bookId }],
+    },
     include: { epubFile: true }
   });
 
@@ -24,12 +74,18 @@ export default async function ReadBookPage({ params }: { params: Promise<{ bookI
   const access = await getBookAccessState(book, session?.user);
   const donorRequirementText = getBookDonorRequirementText(access.bookDonorAccessLevel);
   const lockedAudienceLabel = getBookLockedAudienceLabel(access.bookDonorAccessLevel);
+  const canonicalBookPath = getBookPath(book);
+  const canonicalReadPath = getBookReadPath(book);
+
+  if (!access.isPublished && !access.isPrivileged) {
+    notFound();
+  }
+
+  if (bookId !== (book.slug?.trim() || book.id)) {
+    permanentRedirect(canonicalReadPath);
+  }
 
   if (!access.hasAccess) {
-    if (!access.isPublished) {
-      notFound();
-    }
-
     return (
       <main className="flex min-h-screen items-center justify-center bg-landing-bg px-4 py-12">
         <div className="surface-card max-w-xl p-8 text-center sm:p-10">
@@ -44,12 +100,12 @@ export default async function ReadBookPage({ params }: { params: Promise<{ bookI
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <Link href={`/books/${book.id}`} className="brand-button px-6 py-3">
+            <Link href={canonicalBookPath} className="brand-button px-6 py-3">
               Back to book page
             </Link>
             {!session && (
               <Link
-                href={`/login?callbackUrl=${encodeURIComponent(`/books/${book.id}`)}`}
+                href={`/login?callbackUrl=${encodeURIComponent(canonicalBookPath)}`}
                 className="ghost-button px-6 py-3"
               >
                 Sign in
@@ -65,8 +121,8 @@ export default async function ReadBookPage({ params }: { params: Promise<{ bookI
   const sessionUserId = typeof session?.user?.id === 'string' && session.user.id.trim().length > 0
     ? session.user.id
     : null;
-  const loginHref = `/login?callbackUrl=${encodeURIComponent(`/books/${book.id}`)}`;
-  const narrationManageHref = sessionUserId ? `/books/${book.id}#support-this-book` : loginHref;
+  const loginHref = `/login?callbackUrl=${encodeURIComponent(canonicalBookPath)}`;
+  const narrationManageHref = sessionUserId ? `${canonicalBookPath}#support-this-book` : loginHref;
 
   // TODO: Fetch saved progress if user is logged in
   let initialLocation = null;

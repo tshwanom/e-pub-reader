@@ -10,6 +10,7 @@ import type {
   NarrationManifestCue,
 } from '@/lib/narration';
 import { clearCachedBookBinary, isBookLoadErrorCode, loadBookBinary } from '@/lib/book-client-cache';
+import { applyReaderContentStyles } from '@/lib/reader-content-styles';
 
 interface ReaderProps {
   url: string;
@@ -831,6 +832,14 @@ export default function Reader({
     });
   }, []);
 
+  const ensureReaderEmbeddedContentStyles = useCallback(() => {
+    const contents = (renditionRef.current as any)?.getContents?.() ?? [];
+
+    contents.forEach((content: any) => {
+      applyReaderContentStyles(content?.document as Document | undefined);
+    });
+  }, []);
+
   const clearNarrationCueHighlight = useCallback(() => {
     if (renditionRef.current && activeNarrationCueCfiRef.current) {
       try {
@@ -1359,7 +1368,7 @@ export default function Reader({
       renditionRef.current = rendition;
 
       // Register themes
-      rendition.themes.default({
+      rendition.themes.default?.({
         body: {
           'box-shadow': 'none !important',
           'border': 'none !important',
@@ -1403,6 +1412,8 @@ export default function Reader({
         console.error('Failed to resume the saved reader location, falling back to the beginning of the book', error);
         await rendition.display();
       }
+
+      ensureReaderEmbeddedContentStyles();
 
       if (!destroyed) {
         setReaderLoadError(null);
@@ -1449,6 +1460,7 @@ export default function Reader({
       rendition.on('touchmove', onIframeTouchMove);
       rendition.on('touchend', onIframeTouchEnd);
       rendition.on('rendered', () => {
+        ensureReaderEmbeddedContentStyles();
         ensureNarrationCueStyles();
 
         if (activeNarrationCueRef.current) {
@@ -1568,6 +1580,7 @@ export default function Reader({
   }, [
     applyNarrationCueHighlight,
     bookId,
+    ensureReaderEmbeddedContentStyles,
     ensureNarrationCueStyles,
     flow,
     initialLocation,

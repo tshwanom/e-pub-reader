@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef } from 'react';
 import { warmBookOfflineCache } from '@/lib/book-client-cache';
+import { getBookReadPath } from '@/lib/book-paths';
 
 interface BookReadLinkProps {
   bookId: string;
+  bookSlug?: string | null;
   children: React.ReactNode;
   className?: string;
   ariaLabel?: string;
@@ -14,6 +16,7 @@ interface BookReadLinkProps {
 
 export default function BookReadLink({
   bookId,
+  bookSlug,
   children,
   className,
   ariaLabel,
@@ -43,7 +46,7 @@ export default function BookReadLink({
 
   return (
     <Link
-      href={`/read/${bookId}`}
+      href={getBookReadPath({ id: bookId, slug: bookSlug })}
       className={className}
       aria-label={ariaLabel}
       onMouseEnter={warmBookCache}

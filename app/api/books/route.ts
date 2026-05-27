@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { saveBookUpload } from '@/lib/book-storage';
+import { slugifyBookTitle } from '@/lib/book-paths';
 import { prisma } from '@/lib/prisma';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
@@ -10,6 +11,19 @@ import { parseString } from 'xml2js';
 import { promisify } from 'util';
 
 const parseXml = promisify(parseString);
+
+async function buildUniqueBookSlug(title: string) {
+  const baseSlug = slugifyBookTitle(title);
+  let candidate = baseSlug;
+  let suffix = 2;
+
+  while (await prisma.book.findUnique({ where: { slug: candidate }, select: { id: true } })) {
+    candidate = `${baseSlug}-${suffix}`;
+    suffix += 1;
+  }
+
+  return candidate;
+}
 
 // Helper function to extract metadata from EPUB
 async function extractEpubMetadata(buffer: Buffer) {
@@ -176,11 +190,8 @@ export async function POST(req: NextRequest) {
       coverUrl = `/covers/${coverFilename}`;
     }
 
-    // Generate slug from title
-    const slug = metadata.title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '');
+    // Generate a clean unique slug from the title
+    const slug = await buildUniqueBookSlug(metadata.title);
 
     // Create book record with extracted metadata
     const book = await prisma.book.create({
@@ -194,7 +205,7 @@ export async function POST(req: NextRequest) {
         // isbn: metadata.isbn,
         // subjects: metadata.subjects,
         coverUrl,
-        slug: `${slug}-${timestamp}`,
+        slug,
         status: 'DRAFT',
         publishedAt: metadata.publishedDate ? new Date(metadata.publishedDate) : null,
         epubFile: {

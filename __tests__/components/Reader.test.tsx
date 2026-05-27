@@ -4,6 +4,7 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Reader from '@/components/Reader';
+import { BOOK_FILE_CACHE_NAME } from '@/lib/book-client-cache';
 
 const mockDisplay = jest.fn().mockResolvedValue(undefined);
 const mockPrev = jest.fn();
@@ -457,7 +458,7 @@ describe('Reader component', () => {
     const cacheStorageMock = createCacheStorageMock();
     (global as any).caches = cacheStorageMock;
     await cacheStorageMock.seed(
-      'omr-book-files-v1',
+      BOOK_FILE_CACHE_NAME,
       '/api/books/test-book-id/file',
       createMockResponse({
         status: 200,
@@ -481,7 +482,7 @@ describe('Reader component', () => {
     const cacheStorageMock = createCacheStorageMock();
     (global as any).caches = cacheStorageMock;
     await cacheStorageMock.seed(
-      'omr-book-files-v1',
+      BOOK_FILE_CACHE_NAME,
       '/api/books/test-book-id/file',
       createMockResponse({
         status: 200,
