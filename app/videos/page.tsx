@@ -108,9 +108,6 @@ export default async function VideosPage() {
               <h1 className="mt-5 font-playfair text-4xl font-semibold tracking-tight text-landing-text md:text-5xl lg:text-[3.6rem]">
                 Video Library
               </h1>
-              <p className="mt-4 max-w-2xl text-lg leading-relaxed text-landing-text-muted">
-                Open interviews, supplementary documentaries, and book-linked video essays on dedicated watch pages built for focused viewing — no autoplay-in-a-card circus.
-              </p>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[320px] lg:max-w-sm lg:flex-1">
