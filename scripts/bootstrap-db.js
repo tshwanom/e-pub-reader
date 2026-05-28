@@ -47,7 +47,7 @@ console.log('🚀 Bootstrapping Plesk Production Database from scratch...');
 
 // 1. Run db push to create all tables and types safely
 console.log('\n1️⃣ Pushing schema to create tables...');
-runCommand(NPX_CMD, ['prisma', 'db', 'push', '--schema', SCHEMA_PATH]);
+runCommand(NPX_CMD, ['prisma', 'db', 'push', '--schema', SCHEMA_PATH, '--accept-data-loss']);
 
 // 2. Resolve all migrations as applied so they are in sync
 console.log('\n2️⃣ Registering all migrations as applied...');
