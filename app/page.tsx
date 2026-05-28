@@ -53,21 +53,13 @@ export default async function LandingPage() {
 
       {/* Books Section */}
       <section className="page-container py-14 sm:py-20">
-        <div className="mb-12 max-w-4xl">
+        <div className="mx-auto mb-12 max-w-3xl text-center">
           <h2 className="font-playfair text-4xl font-semibold text-landing-text md:text-5xl">
             The Writings
           </h2>
-          <div className="mt-6 space-y-4 text-lg leading-relaxed text-landing-text-muted">
-            <p>Most of these books are free.</p>
-            <p>
-              Not as a promotion.
-              <br />
-              Not as a tactic.
-              <br />
-              But because truth should travel further than any sales funnel.
-            </p>
-            <p>Some special editions are reserved for donors who keep the work independent.</p>
-          </div>
+          <p className="mt-6 text-lg leading-relaxed text-landing-text-muted">
+            Most of these books are free—not as a promotion, not as a tactic, but because truth should travel further than any sales funnel. Some special editions are reserved for donors who keep the work independent.
+          </p>
         </div>
 
         {books.length > 0 ? (
