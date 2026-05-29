@@ -30,20 +30,30 @@ function ensureReaderContentStyleSheet(doc: Document) {
     html,
     body {
       margin: 0 !important;
-      padding: 0 !important;
+      max-width: none !important;
+    }
+
+    html {
       width: 100% !important;
       height: 100% !important;
-      max-width: none !important;
       min-height: 100% !important;
     }
 
     body {
       box-sizing: border-box !important;
+      padding: 76px 0 36px 0 !important;
+    }
+
+    @media (min-width: 768px) {
+      body {
+        padding: 40px 0 !important;
+      }
     }
 
     body[${READER_FULL_BLEED_COVER_ATTRIBUTE}="true"] {
       overflow: hidden !important;
       background: transparent !important;
+      padding: 0 !important;
     }
 
     body[${READER_FULL_BLEED_COVER_ATTRIBUTE}="true"] img,
@@ -97,9 +107,11 @@ export function applyReaderContentStyles(doc?: Document | null) {
   setImportantStyle(doc.documentElement, 'width', '100%');
   setImportantStyle(doc.documentElement, 'height', '100%');
   setImportantStyle(doc.body, 'margin', '0');
-  setImportantStyle(doc.body, 'padding', '0');
-  setImportantStyle(doc.body, 'width', '100%');
-  setImportantStyle(doc.body, 'height', '100%');
+  if (isProbablyFullBleedCoverDocument(doc)) {
+    setImportantStyle(doc.body, 'padding', '0');
+  } else {
+    (doc.body as any).style?.removeProperty('padding');
+  }
   setImportantStyle(doc.body, 'max-width', 'none');
 
   doc.body.removeAttribute(READER_FULL_BLEED_COVER_ATTRIBUTE);

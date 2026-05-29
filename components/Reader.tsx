@@ -1971,35 +1971,6 @@ export default function Reader({
           </button>
 
           <button
-            onClick={() => setSidePanel(sidePanel === 'notes' ? null : 'notes')}
-            aria-label="My notes"
-            title="My notes"
-            aria-pressed={sidePanel === 'notes'}
-            className={`flex h-10 w-10 items-center justify-center rounded-full border shadow-sm backdrop-blur-md transition focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
-              sidePanel === 'notes'
-                ? 'bg-landing-accent border-landing-accent text-white'
-                : 'bg-landing-surface-muted/80 border-landing-border text-landing-text hover:bg-landing-border/40 hover:text-landing-accent'
-            }`}
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-          </button>
-
-          <button
-            onClick={toggleBookmark}
-            aria-label={isBookmarkedHere ? 'Remove bookmark' : 'Add bookmark'}
-            title={isBookmarkedHere ? 'Remove bookmark' : 'Add bookmark'}
-            className={`flex h-10 w-10 items-center justify-center rounded-full border shadow-sm backdrop-blur-md transition hover:bg-landing-border/40 focus-visible:ring-2 focus-visible:ring-landing-accent focus-visible:ring-offset-2 ${
-              isBookmarkedHere ? 'bg-landing-accent border-landing-accent text-white' : 'bg-landing-surface-muted/80 border-landing-border text-landing-text hover:text-landing-accent'
-            }`}
-          >
-            <svg className="h-4 w-4" fill={isBookmarkedHere ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16l-7-4-7 4V5z" />
-            </svg>
-          </button>
-
-          <button
             onClick={() => setSidePanel(sidePanel === 'toc' ? null : 'toc')}
             aria-label="Table of contents"
             title="Table of contents"
