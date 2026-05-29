@@ -859,3 +859,64 @@ export async function queueBookNarrationGeneration(
     queuedChapterCount: selectedChapters.length,
   };
 }
+
+export async function retryFailedNarrationChapters(params: {
+  bookId: string;
+  narrationId: string;
+}) {
+  const { bookId, narrationId } = params;
+
+  const narration = await prisma.bookNarration.findFirst({
+    where: { id: narrationId, bookId },
+    include: {
+      chapters: {
+        where: { status: "FAILED" },
+      },
+    },
+  });
+
+  if (!narration) {
+    throw new Error("Narration not found");
+  }
+
+  if (narration.status !== "FAILED") {
+    throw new Error("Only failed narrations can be retried.");
+  }
+
+  const failedChapters = narration.chapters;
+  if (failedChapters.length === 0) {
+    throw new Error("No failed chapters found to retry.");
+  }
+
+  const jobKey = randomUUID();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.narrationChapter.updateMany({
+      where: {
+        narrationId: narration.id,
+        status: "FAILED",
+      },
+      data: {
+        status: "PENDING",
+      },
+    });
+
+    await tx.bookNarration.update({
+      where: { id: narration.id },
+      data: {
+        status: "PENDING",
+        jobKey,
+        readyAt: null,
+        errorMessage: null,
+      },
+    });
+  });
+
+  ensureBookNarrationBackgroundProcessing(bookId);
+
+  return {
+    narrationId: narration.id,
+    retriedChapterCount: failedChapters.length,
+  };
+}
+

@@ -163,6 +163,7 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [samplingVoiceName, setSamplingVoiceName] = useState<string | null>(null);
   const [settingDefaultNarrationId, setSettingDefaultNarrationId] = useState<string | null>(null);
+  const [retryingNarrationId, setRetryingNarrationId] = useState<string | null>(null);
   const [generationProgress, setGenerationProgress] = useState<{
     current: number;
     total: number;
@@ -491,6 +492,47 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
       });
     } finally {
       setSettingDefaultNarrationId(null);
+    }
+  };
+
+  const handleRetryFailedChapters = async (narrationId: string) => {
+    setRetryingNarrationId(narrationId);
+    setNotice(null);
+    setError(null);
+    setSamplePreview(null);
+
+    try {
+      const response = await fetch(`/api/admin/books/${bookId}/narration`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "retry-failed",
+          narrationId,
+        }),
+      });
+
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.details || payload.error || "Failed to retry failed narration chapters.");
+      }
+
+      setNotice({
+        type: "success",
+        message: payload.message || "Retry started for failed chapters.",
+      });
+      await loadSummary({ quiet: true });
+    } catch (retryError) {
+      setNotice({
+        type: "error",
+        message: retryError instanceof Error
+          ? retryError.message
+          : "Failed to retry failed narration chapters.",
+      });
+    } finally {
+      setRetryingNarrationId(null);
     }
   };
 
@@ -1188,6 +1230,32 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
                             </span>
                           ) : null}
                         </div>
+
+                        {narration.status === "FAILED" && chapterCounts.failed > 0 ? (
+                          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-landing-border/40 pt-4">
+                            <p className="text-sm text-landing-text-muted">
+                              Generate only the failed chapters of this narration.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => void handleRetryFailedChapters(narration.id)}
+                              disabled={retryingNarrationId === narration.id}
+                              className="brand-button gap-2 px-4 py-2 text-sm disabled:cursor-not-allowed disabled:bg-landing-accent/50"
+                            >
+                              {retryingNarrationId === narration.id ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Retrying...
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCcw className="h-4 w-4" />
+                                  Retry failed chapters
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        ) : null}
                       </>
                     );
                   })()}

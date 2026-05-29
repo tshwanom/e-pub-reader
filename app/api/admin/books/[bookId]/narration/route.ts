@@ -3,6 +3,7 @@ import {
   buildBookNarrationGenerationRequirements,
   ensureBookNarrationBackgroundProcessing,
   queueBookNarrationGeneration,
+  retryFailedNarrationChapters,
 } from "@/lib/book-narration-jobs";
 import {
   GEMINI_TTS_MODELS,
@@ -25,7 +26,7 @@ import { z, ZodError } from "zod";
 export const runtime = "nodejs";
 
 const narrationActionSchema = z.object({
-  action: z.enum(["generate", "sample", "set-default"]).default("generate"),
+  action: z.enum(["generate", "sample", "set-default", "retry-failed"]).default("generate"),
 });
 
 const generationRequestSchema = z.object({
@@ -59,6 +60,11 @@ const sampleRequestSchema = z.object({
 
 const setDefaultRequestSchema = z.object({
   action: z.literal("set-default"),
+  narrationId: z.string().trim().min(1),
+});
+
+const retryFailedRequestSchema = z.object({
+  action: z.literal("retry-failed"),
   narrationId: z.string().trim().min(1),
 });
 
@@ -359,6 +365,21 @@ export async function POST(
       return NextResponse.json({
         message: `${getGeminiVoiceOptionName(finalNarration.voice.name) || finalNarration.voice.name} is now the default narration voice for “${book.title}”.`,
         narration: formatNarrationForAdmin(finalNarration),
+      });
+    }
+
+    if (action === "retry-failed") {
+      const payload = retryFailedRequestSchema.parse(rawPayload);
+
+      const result = await retryFailedNarrationChapters({
+        bookId,
+        narrationId: payload.narrationId,
+      });
+
+      return NextResponse.json({
+        message: `Retry queued for ${result.retriedChapterCount} failed chapter(s) of "${book.title}".`,
+        narrationId: result.narrationId,
+        retriedChapterCount: result.retriedChapterCount,
       });
     }
 
