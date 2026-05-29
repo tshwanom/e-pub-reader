@@ -158,7 +158,14 @@ export default function ContentNarrationPlayer({ contentId, compact = false }: {
         ) : null}
       </div>
 
-      <audio controls src={selectedVoice.audioUrl} className="mt-4 w-full" preload="none" />
+      <audio
+        controls
+        controlsList="nodownload"
+        onContextMenu={(e) => e.preventDefault()}
+        src={selectedVoice.audioUrl}
+        className="mt-4 w-full"
+        preload="none"
+      />
     </div>
   );
 }

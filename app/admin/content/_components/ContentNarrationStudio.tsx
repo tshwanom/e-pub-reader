@@ -307,7 +307,15 @@ export default function ContentNarrationStudio({ contentId }: { contentId: strin
           {notice.type === "success" ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <XCircle className="mt-0.5 h-4 w-4 shrink-0" />}
           <div className="w-full">
             <p>{notice.message}</p>
-            {samplePreview ? <audio src={samplePreview.audioDataUrl} controls className="mt-3 h-10 w-full max-w-md rounded-lg" /> : null}
+            {samplePreview ? (
+              <audio
+                src={samplePreview.audioDataUrl}
+                controls
+                controlsList="nodownload"
+                onContextMenu={(e) => e.preventDefault()}
+                className="mt-3 h-10 w-full max-w-md rounded-lg"
+              />
+            ) : null}
           </div>
         </div>
       ) : null}

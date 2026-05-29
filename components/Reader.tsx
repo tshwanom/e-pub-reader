@@ -2052,7 +2052,16 @@ export default function Reader({
         </div>
       </div>
 
-      {narrationFeatureEnabled && <audio ref={audioRef} preload="metadata" data-testid="narration-audio" className="hidden" />}
+      {narrationFeatureEnabled && (
+        <audio
+          ref={audioRef}
+          preload="metadata"
+          data-testid="narration-audio"
+          className="hidden"
+          controlsList="nodownload"
+          onContextMenu={(e) => e.preventDefault()}
+        />
+      )}
 
       {narrationHasReadyPlayer && activeNarrationChapter && (
         <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-3 sm:px-4">

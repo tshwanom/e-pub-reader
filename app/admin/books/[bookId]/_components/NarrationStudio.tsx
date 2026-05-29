@@ -649,6 +649,8 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
                 <audio
                   src={samplePreview.audioDataUrl}
                   controls
+                  controlsList="nodownload"
+                  onContextMenu={(e) => e.preventDefault()}
                   autoPlay
                   className="h-10 w-full max-w-md rounded-lg"
                 />
@@ -992,7 +994,13 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
                         {formatDuration(samplePreview.durationMs)}
                       </span>
                     </div>
-                    <audio controls className="mt-4 w-full" src={samplePreview.audioDataUrl} />
+                    <audio
+                      controls
+                      controlsList="nodownload"
+                      onContextMenu={(e) => e.preventDefault()}
+                      className="mt-4 w-full"
+                      src={samplePreview.audioDataUrl}
+                    />
                     <p className="mt-3 text-sm leading-6 text-landing-text-muted">
                       This preview uses the current director notes, language code, and sample copy above.
                     </p>
