@@ -94,25 +94,33 @@ const ttsClientsCache =
 export function getGeminiApiKeys(): string[] {
   const keys: string[] = [];
 
-  const envKeys = process.env.GEMINI_API_KEYS;
-  if (envKeys) {
-    envKeys.split(",").forEach((key) => {
-      const trimmed = key.trim();
-      if (trimmed) {
+  function addRawKeys(raw: string | undefined) {
+    if (!raw) {
+      return;
+    }
+    // Strip leading/trailing double or single quotes
+    const cleaned = raw.trim().replace(/^["']|["']$/g, "").trim();
+    if (!cleaned) {
+      return;
+    }
+
+    // Split on commas
+    cleaned.split(",").forEach((key) => {
+      const trimmed = key.trim().replace(/^["']|["']$/g, "").trim();
+      if (trimmed && !keys.includes(trimmed)) {
         keys.push(trimmed);
       }
     });
   }
 
-  const singleGeminiKey = process.env.GEMINI_API_KEY?.trim();
-  if (singleGeminiKey && !keys.includes(singleGeminiKey)) {
-    keys.push(singleGeminiKey);
-  }
+  // Parse from GEMINI_API_KEYS (plural)
+  addRawKeys(process.env.GEMINI_API_KEYS);
 
-  const googleKey = process.env.GOOGLE_API_KEY?.trim();
-  if (googleKey && !keys.includes(googleKey)) {
-    keys.push(googleKey);
-  }
+  // Parse from GEMINI_API_KEY (singular)
+  addRawKeys(process.env.GEMINI_API_KEY);
+
+  // Parse from GOOGLE_API_KEY
+  addRawKeys(process.env.GOOGLE_API_KEY);
 
   return keys;
 }
