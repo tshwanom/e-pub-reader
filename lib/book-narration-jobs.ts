@@ -76,11 +76,34 @@ type ClaimedNarrationChapter = {
 
 const globalWorkerState = globalThis as typeof globalThis & {
   __omrBookNarrationActiveBooks?: Set<string>;
+  __omrGlobalChapterMutex?: {
+    promise: Promise<void>;
+  };
 };
 
 const activeBookNarrationWorkers =
   globalWorkerState.__omrBookNarrationActiveBooks
   ?? (globalWorkerState.__omrBookNarrationActiveBooks = new Set<string>());
+
+const globalChapterMutex =
+  globalWorkerState.__omrGlobalChapterMutex
+  ?? (globalWorkerState.__omrGlobalChapterMutex = { promise: Promise.resolve() });
+
+async function runGloballySerialized<T>(fn: () => Promise<T>): Promise<T> {
+  const currentPromise = globalChapterMutex.promise;
+  let resolveMutex: () => void;
+  const nextPromise = new Promise<void>((resolve) => {
+    resolveMutex = resolve;
+  });
+  globalChapterMutex.promise = nextPromise;
+
+  try {
+    await currentPromise;
+    return await fn();
+  } finally {
+    resolveMutex!();
+  }
+}
 
 function buildNarrationObjectKeys(bookId: string, narrationId: string, chapterIndex: number) {
   const storageProvider = getNarrationStorageProvider();
@@ -515,40 +538,47 @@ async function processNarration(params: {
     }
 
     try {
-      const consistencyPrompt = buildBookNarrationConsistencyPrompt({
-        bookTitle: narration.book.title,
-        bookAuthor: narration.book.author,
-        chapterTitle: sourceChapter.title,
-        stylePrompt,
-        referenceExcerpt,
-      });
-      const chunks = buildNarrationGenerationChunks(sourceChapter.blocks);
+      const { mergedAudio, chapterKey } = await runGloballySerialized(async () => {
+        const consistencyPrompt = buildBookNarrationConsistencyPrompt({
+          bookTitle: narration.book.title,
+          bookAuthor: narration.book.author,
+          chapterTitle: sourceChapter.title,
+          stylePrompt,
+          referenceExcerpt,
+        });
+        const chunks = buildNarrationGenerationChunks(sourceChapter.blocks);
 
-      if (chunks.length === 0) {
-        throw new Error("No readable blocks were found for this chapter.");
-      }
+        if (chunks.length === 0) {
+          throw new Error("No readable blocks were found for this chapter.");
+        }
 
-      const chunkAudio = [] as Awaited<ReturnType<typeof synthesizeGeminiSpeech>>[];
+        const chunkAudio = [] as Awaited<ReturnType<typeof synthesizeGeminiSpeech>>[];
 
-      for (const chunk of chunks) {
-        chunkAudio.push(
-          await synthesizeGeminiSpeech({
-            transcript: chunk.transcript,
-            voiceName,
-            model,
-            stylePrompt: consistencyPrompt,
-            languageCode: narration.voice.language,
-          })
+        for (const chunk of chunks) {
+          chunkAudio.push(
+            await synthesizeGeminiSpeech({
+              transcript: chunk.transcript,
+              voiceName,
+              model,
+              stylePrompt: consistencyPrompt,
+              languageCode: narration.voice.language,
+            })
+          );
+        }
+
+        const merged = mergeGeminiPcmAudio(chunkAudio);
+        const { chapterKey: key } = buildNarrationObjectKeys(
+          narration.bookId,
+          narration.id,
+          claimedChapter.chapterIndex
         );
-      }
+        await uploadNarrationObject(key, merged.wavBuffer, merged.audioMimeType);
 
-      const mergedAudio = mergeGeminiPcmAudio(chunkAudio);
-      const { chapterKey } = buildNarrationObjectKeys(
-        narration.bookId,
-        narration.id,
-        claimedChapter.chapterIndex
-      );
-      await uploadNarrationObject(chapterKey, mergedAudio.wavBuffer, mergedAudio.audioMimeType);
+        return {
+          mergedAudio: merged,
+          chapterKey: key,
+        };
+      });
 
       const latestNarration = await prisma.bookNarration.findUnique({
         where: { id: narration.id },
