@@ -82,15 +82,48 @@ export interface GeminiSpeechSynthesisOptions {
   retryDelayMs?: number;
 }
 
-let geminiClient: GoogleGenAI | null = null;
-let geminiClientApiKey: string | null = null;
+const globalTtsState = globalThis as typeof globalThis & {
+  __omrTtsApiKeyIndex?: number;
+  __omrTtsClientsCache?: Map<string, GoogleGenAI>;
+};
 
-export function getGeminiApiKey() {
-  return process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || null;
+const ttsClientsCache =
+  globalTtsState.__omrTtsClientsCache
+  ?? (globalTtsState.__omrTtsClientsCache = new Map<string, GoogleGenAI>());
+
+export function getGeminiApiKeys(): string[] {
+  const keys: string[] = [];
+
+  const envKeys = process.env.GEMINI_API_KEYS;
+  if (envKeys) {
+    envKeys.split(",").forEach((key) => {
+      const trimmed = key.trim();
+      if (trimmed) {
+        keys.push(trimmed);
+      }
+    });
+  }
+
+  const singleGeminiKey = process.env.GEMINI_API_KEY?.trim();
+  if (singleGeminiKey && !keys.includes(singleGeminiKey)) {
+    keys.push(singleGeminiKey);
+  }
+
+  const googleKey = process.env.GOOGLE_API_KEY?.trim();
+  if (googleKey && !keys.includes(googleKey)) {
+    keys.push(googleKey);
+  }
+
+  return keys;
+}
+
+export function getGeminiApiKey(): string | null {
+  const keys = getGeminiApiKeys();
+  return keys[0] || null;
 }
 
 export function isGeminiTtsConfigured() {
-  return Boolean(getGeminiApiKey());
+  return getGeminiApiKeys().length > 0;
 }
 
 export function getDefaultGeminiTtsModel() {
@@ -157,21 +190,32 @@ export function getGeminiModelFromProvider(provider?: string | null) {
   return normalizedProvider.slice("gemini-tts:".length) || null;
 }
 
-function getGeminiClient() {
-  const apiKey = getGeminiApiKey();
+function getGeminiClient(): GoogleGenAI {
+  const keys = getGeminiApiKeys();
 
-  if (!apiKey) {
+  if (keys.length === 0) {
     throw new Error(
-      "Gemini TTS is not configured. Add GEMINI_API_KEY or GOOGLE_API_KEY to the server environment."
+      "Gemini TTS is not configured. Add GEMINI_API_KEYS, GEMINI_API_KEY, or GOOGLE_API_KEY to the server environment."
     );
   }
 
-  if (!geminiClient || geminiClientApiKey !== apiKey) {
-    geminiClient = new GoogleGenAI({ apiKey });
-    geminiClientApiKey = apiKey;
+  let currentIndex = globalTtsState.__omrTtsApiKeyIndex ?? 0;
+  currentIndex = currentIndex % keys.length;
+  const activeKey = keys[currentIndex];
+
+  globalTtsState.__omrTtsApiKeyIndex = (currentIndex + 1) % keys.length;
+
+  let client = ttsClientsCache.get(activeKey);
+  if (!client) {
+    client = new GoogleGenAI({ apiKey: activeKey });
+    ttsClientsCache.set(activeKey, client);
   }
 
-  return geminiClient;
+  console.log(
+    `[gemini-tts] Rotating API Key: Using index ${currentIndex}/${keys.length} (Prefix: ${activeKey.slice(0, 6)}...)`
+  );
+
+  return client;
 }
 
 function delay(ms: number) {
