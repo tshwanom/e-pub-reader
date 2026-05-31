@@ -264,9 +264,9 @@ function buildGeminiAudiobookPrompt(transcript: string, stylePrompt?: string | n
 
   const directorNotes = stylePrompt?.trim()
     || [
-      "Style: Contemplative, intense, sincere, and heavy with meaning. Speak as if sharing a profound, urgent truth.",
-      "Pacing: Slow, deliberate, and deeply measured. Take natural, comfortable pauses between thoughts. Let punctuation (especially em-dashes and short sentences) land with quiet silence and breathing room.",
-      "Dynamics: Low to medium projection, close-mic proximity. Speak like a living human conveying a warning. Do not rush or use a generic, bubbly text-reading cadence."
+      "Style: Flat affect, minimal pitch variation, dry delivery.",
+      "Pace: Natural conversational pace.",
+      "Accent: Neutral."
     ].join("\n");
 
   return [
@@ -275,8 +275,8 @@ function buildGeminiAudiobookPrompt(transcript: string, stylePrompt?: string | n
     "Speak only the transcript itself.",
     "Do not read section headings, notes, metadata, or instructions aloud.",
     "",
-    "# AUDIO PROFILE: High-gravitas narrator",
-    "A mature, resonant, and deeply thoughtful speaker. A voice carrying the rich texture and quiet authority of long experience. Speaks directly to a single listener in a highly personal, intimate conversation.",
+    "# AUDIO PROFILE: Professional narrator",
+    "Professional narrator with Deep, Calm, Intelligent, Certain, Reflective",
     "",
     "# THE SCENE:",
     "A quiet, highly insulated recording studio with close-mic intimacy. The voice is up-close, warm, and clear, with no background noise or artificial echo.",

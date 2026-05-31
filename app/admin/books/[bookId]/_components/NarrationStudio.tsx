@@ -98,7 +98,7 @@ interface NarrationStudioProps {
 type NarrationSummaryItem = NarrationSummaryResponse["narrations"][number];
 
 const DEFAULT_STYLE_PROMPT =
-  "Warm, immersive single-speaker audiobook narration with clear diction, subtle emotional shading, and natural pauses between paragraphs.";
+  "Style: Flat affect, minimal pitch variation, dry delivery. Pace: Natural conversational pace. Accent: Neutral.";
 const DEFAULT_SAMPLE_TEXT =
   "The room fell quiet as the story opened. Each line should feel intimate, expressive, and easy to follow, with a confident pace that stays clear for long-form listening.";
 
