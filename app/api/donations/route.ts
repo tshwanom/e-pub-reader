@@ -88,17 +88,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (requiresDonation && !session?.user?.id) {
-    return NextResponse.json(
-      {
-        error: requiresRecurringDonation
-          ? 'Please sign in before starting monthly support to unlock recurring-donor books.'
-          : 'Please sign in before donating to unlock donor-only books.',
-      },
-      { status: 401 }
-    );
-  }
-
   let pendingDonationId: string | null = null;
 
   try {
@@ -122,9 +111,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (gateway === 'PAYSTACK' && !donorEmail) {
+    if (!session?.user?.id && !donorEmail) {
       return NextResponse.json(
-        { error: 'Paystack needs an email address before checkout can begin.' },
+        { error: 'An email address is required before guest checkout can begin.' },
         { status: 400 }
       );
     }

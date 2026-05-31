@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useMemo, useState } from 'react';
+import { signIn } from 'next-auth/react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import {
@@ -178,7 +179,7 @@ export default function DonationSection({
   const availableFrequencyOptions = requiresRecurringUnlock
     ? DONATION_FREQUENCY_OPTIONS.filter((option) => option.id === 'MONTHLY')
     : DONATION_FREQUENCY_OPTIONS;
-  const requiresPaystackEmail = gateway === 'PAYSTACK' && !currentUserEmail;
+  const requiresEmail = !currentUserEmail;
   const numericAmount = Number(amount);
   const hasValidAmount = Number.isFinite(numericAmount) && numericAmount >= 1;
   const donateButtonLabel = triggerLabel
@@ -204,7 +205,7 @@ export default function DonationSection({
   const disableCheckout = loading
     || !hasValidAmount
     || Boolean(minimumEquivalentError)
-    || (requiresPaystackEmail && !donorEmail.trim());
+    || (requiresEmail && !donorEmail.trim());
 
   useEffect(() => {
     if (!isCurrencyReady || !isModalOpen) {
@@ -336,6 +337,50 @@ export default function DonationSection({
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('loginToken');
+    const email = params.get('email');
+
+    if (token && email) {
+      setLoading(true);
+      setErrorMessage(null);
+
+      // Perform credentials auto-login
+      signIn('credentials', {
+        email: email.trim().toLowerCase(),
+        password: token.trim(), // secure one-time verification token passed as password
+        redirect: false,
+      })
+        .then((res) => {
+          if (res?.error) {
+            setErrorMessage('Auto-login failed: ' + res.error);
+          } else {
+            // Clean up query parameters to keep URL spotless
+            const cleanUrl = window.location.pathname + window.location.search
+              .replace(/[?&]loginToken=[^&]*/, '')
+              .replace(/[?&]email=[^&]*/, '')
+              .replace(/^&/, '?'); // ensure formatting is valid
+            
+            window.history.replaceState(null, '', cleanUrl);
+            // Force reload to refresh server components/state with new session
+            window.location.reload();
+          }
+        })
+        .catch((err) => {
+          setErrorMessage('Auto-login error occurred.');
+          console.error(err);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
+  }, []);
+
+  useEffect(() => {
     if (!isModalOpen || typeof document === 'undefined') {
       return;
     }
@@ -409,8 +454,8 @@ export default function DonationSection({
       return;
     }
 
-    if (requiresPaystackEmail && !donorEmail.trim()) {
-      setErrorMessage('Paystack needs an email address before checkout can begin.');
+    if (requiresEmail && !donorEmail.trim()) {
+      setErrorMessage('Please enter an email address before checkout can begin.');
       return;
     }
 
@@ -586,10 +631,10 @@ export default function DonationSection({
           </div>
           </div>
 
-          {requiresPaystackEmail ? (
+          {requiresEmail ? (
             <div>
               <label htmlFor="donor-email" className="mb-2 block text-sm font-medium text-landing-text">
-                Email for Paystack
+                Your email address
               </label>
               <input
                 id="donor-email"
@@ -600,7 +645,7 @@ export default function DonationSection({
                 placeholder="you@example.com"
               />
               <p className="mt-2 text-xs leading-5 text-landing-text-muted">
-                Needed for checkout.
+                Your donation silently creates a password-free reader account, allowing you to access premium benefits automatically.
               </p>
             </div>
           ) : null}

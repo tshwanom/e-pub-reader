@@ -330,12 +330,20 @@ export default async function BookDetailsPage({
                   {supportCallToAction}
                 </a>
               ) : (
-                <Link
-                  href={loginHref}
-                  className="brand-button mb-4 block w-full text-center"
-                >
-                  Sign in to Unlock
-                </Link>
+                <>
+                  <a
+                    href="#support-this-book"
+                    className="brand-button mb-3 block w-full text-center"
+                  >
+                    {supportCallToAction}
+                  </a>
+                  <p className="mb-4 text-center text-xs text-landing-text-muted">
+                    Already supported?{' '}
+                    <Link href={loginHref} className="font-semibold text-landing-accent hover:underline">
+                      Sign in to unlock
+                    </Link>
+                  </p>
+                </>
               )}
 
               {progress && (
@@ -455,19 +463,6 @@ export default async function BookDetailsPage({
                   </div>
                 ) : null}
 
-                {bookRequiresDonation && !session ? (
-                  <div className="surface-card p-4 sm:p-6 lg:p-8 w-full">
-                    <h2 className="font-playfair text-2xl sm:text-3xl font-semibold text-landing-text">
-                      Sign in before donating
-                    </h2>
-                    <p className="mt-3 leading-relaxed text-landing-text-muted">
-                      Access is tied to your account, so please sign in first. Then {donorRequirementText} will unlock this book.
-                    </p>
-                    <Link href={loginHref} className="brand-button mt-6 inline-flex px-6 py-3">
-                      Sign in to continue
-                    </Link>
-                  </div>
-                ) : (
                   <DonationSection
                     bookId={book.id}
                     bookTitle={book.title}
@@ -484,7 +479,6 @@ export default async function BookDetailsPage({
                     }
                     goal={book.donationGoal ? Number(book.donationGoal) : undefined}
                   />
-                )}
               </section>
             )}
 
@@ -596,19 +590,18 @@ export default async function BookDetailsPage({
                 <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/80 p-5">
                   <h3 className="text-lg font-semibold text-landing-text">This book is reserved for {lockedAudienceLabel}</h3>
                   <p className="mt-2 leading-relaxed text-landing-text-muted">
-                    Access is unlocked after {donorRequirementText} on your account.
+                    Access is unlocked after {donorRequirementText}.
                     {session
                       ? ' Once that donation clears, you can open this title immediately.'
-                      : ' Sign in first so we can attach donor access to your library.'}
+                      : ' Enter your email in the support section below to unlock this title.'}
                   </p>
                   <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                    {session ? (
-                      <a href="#support-this-book" className="brand-button px-5 py-3 text-center">
-                        {supportCallToAction}
-                      </a>
-                    ) : (
-                      <Link href={loginHref} className="brand-button px-5 py-3 text-center">
-                        Sign in to continue
+                    <a href="#support-this-book" className="brand-button px-5 py-3 text-center">
+                      {supportCallToAction}
+                    </a>
+                    {!session && (
+                      <Link href={loginHref} className="ghost-button px-5 py-3 text-center">
+                        Already supported? Sign in
                       </Link>
                     )}
                     <Link href="/library" className="ghost-button px-5 py-3 text-center">

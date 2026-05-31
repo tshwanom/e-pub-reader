@@ -56,6 +56,46 @@ export const authOptions: NextAuthOptions = {
 
         const email = normalizeAuthEmail(credentials.email);
 
+        // 1. Check if password is a valid secure one-time verification token
+        const verificationToken = await prisma.verificationToken.findFirst({
+          where: {
+            identifier: email,
+            token: credentials.password,
+            expires: { gt: new Date() },
+          },
+        });
+
+        if (verificationToken) {
+          // Token matches and is valid! Consume it immediately
+          await prisma.verificationToken.delete({
+            where: { token: verificationToken.token },
+          });
+
+          // Find or silently create the user (since they verified via payment/email)
+          let user = await prisma.user.findUnique({
+            where: {
+              email,
+            },
+          });
+
+          if (!user) {
+            user = await prisma.user.create({
+              data: {
+                email,
+                emailVerified: new Date(),
+              },
+            });
+          }
+
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+          };
+        }
+
+        // 2. Fall back to standard password verification
         const user = await prisma.user.findUnique({
           where: {
             email,

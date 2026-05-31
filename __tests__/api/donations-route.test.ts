@@ -288,7 +288,7 @@ describe('donations route', () => {
     expect(mockCreateDonation).not.toHaveBeenCalled();
   });
 
-  it('requires sign-in before starting recurring support for recurring-donor books', async () => {
+  it('requires an email address before starting unauthenticated recurring support checkouts', async () => {
     mockGetServerSession.mockResolvedValueOnce(null as any);
     mockFindBook.mockResolvedValueOnce({
       id: 'book-1',
@@ -312,9 +312,9 @@ describe('donations route', () => {
       }) as any
     );
 
-    expect(response.status).toBe(401);
+    expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
-      error: 'Please sign in before starting monthly support to unlock recurring-donor books.',
+      error: 'An email address is required before guest checkout can begin.',
     });
     expect(mockCreateDonation).not.toHaveBeenCalled();
   });

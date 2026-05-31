@@ -215,6 +215,7 @@ describe('DonationSection', () => {
       expect(screen.getByLabelText(/Your currency/i)).toHaveTextContent('ZAR');
     });
 
+    await user.type(screen.getByLabelText(/Your email address/i), 'reader@example.com');
     await user.click(screen.getByRole('button', { name: /Continue to PayPal/i }));
 
     const postCall = await waitFor(() => {
@@ -232,20 +233,20 @@ describe('DonationSection', () => {
       currency: 'ZAR',
       frequency: 'ONE_TIME',
       gateway: 'PAYPAL',
+      donorEmail: 'reader@example.com',
     });
   });
 
-  it('requires an email before starting a guest Paystack checkout', async () => {
+  it('requires an email before starting a guest checkout', async () => {
     const user = userEvent.setup();
 
     render(<DonationSection bookId="book-1" bookTitle="Test Book" />);
 
     await openDonationModal(user);
 
-    await user.click(screen.getByRole('button', { name: /Paystack payment gateway/i }));
-    const continueButton = screen.getByRole('button', { name: /Continue to Paystack/i });
+    const continueButton = screen.getByRole('button', { name: /Continue to PayPal/i });
 
-    expect(screen.getByLabelText(/Email for Paystack/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Your email address/i)).toBeInTheDocument();
     expect(continueButton).toBeDisabled();
   });
 
@@ -266,7 +267,7 @@ describe('DonationSection', () => {
       );
     });
 
-    await user.type(screen.getByLabelText(/Email for Paystack/i), 'reader@example.com');
+    await user.type(screen.getByLabelText(/Your email address/i), 'reader@example.com');
     await user.clear(screen.getByLabelText(/Amount in ZAR/i));
     await user.type(screen.getByLabelText(/Amount in ZAR/i), '150');
     await user.click(screen.getByRole('button', { name: /Continue to Paystack/i }));
@@ -302,6 +303,7 @@ describe('DonationSection', () => {
     const paystackGatewayButton = screen.getByRole('button', { name: /Paystack payment gateway/i });
     expect(paystackGatewayButton).toBeEnabled();
 
+    await user.type(screen.getByLabelText(/Your email address/i), 'reader@example.com');
     await user.click(screen.getByRole('button', { name: /Start monthly support with PayPal/i }));
 
     const postCall = await waitFor(() => {
@@ -316,6 +318,7 @@ describe('DonationSection', () => {
       currency: 'USD',
       frequency: 'MONTHLY',
       gateway: 'PAYPAL',
+      donorEmail: 'reader@example.com',
     });
   });
 
@@ -337,6 +340,7 @@ describe('DonationSection', () => {
       expect(screen.getByRole('dialog', { name: /Support the Work/i })).toBeInTheDocument();
     });
 
+    await user.type(screen.getByLabelText(/Your email address/i), 'reader@example.com');
     await user.click(screen.getByRole('button', { name: /Continue to PayPal/i }));
 
     const postCall = await waitFor(() => {
@@ -350,6 +354,7 @@ describe('DonationSection', () => {
       currency: 'USD',
       frequency: 'ONE_TIME',
       gateway: 'PAYPAL',
+      donorEmail: 'reader@example.com',
     });
   });
 });

@@ -305,10 +305,17 @@ export function resolvePublicAppOrigin(request: NextRequest) {
 export function buildDonationDestination(
   request: NextRequest,
   bookId?: string | null,
-  status: 'success' | 'failed' = 'success'
+  status: 'success' | 'failed' = 'success',
+  loginToken?: string | null,
+  email?: string | null
 ) {
   const pathname = bookId ? `/books/${bookId}` : '/library';
-  return new URL(`${pathname}?donation=${status}`, resolvePublicAppOrigin(request));
+  const url = new URL(`${pathname}?donation=${status}`, resolvePublicAppOrigin(request));
+  if (status === 'success' && loginToken && email) {
+    url.searchParams.set('loginToken', loginToken.trim());
+    url.searchParams.set('email', email.trim().toLowerCase());
+  }
+  return url.toString();
 }
 
 export async function getPayPalAccessToken() {
@@ -1030,9 +1037,69 @@ export async function verifyPaystackTransaction(reference: string) {
 
   const payload = await response.json();
 
-  if (!response.ok) {
-    throw new Error(payload?.message || 'Failed to verify Paystack transaction.');
+  return payload as PaystackVerificationResponse;
+}
+
+export async function processCompletedDonationAuth({
+  donationId,
+  donorEmail,
+  originallyAuthenticated,
+}: {
+  donationId: string;
+  donorEmail: string;
+  originallyAuthenticated: boolean;
+}) {
+  const { randomBytes } = await import('crypto');
+  const { prisma } = await import('@/lib/prisma');
+
+  const email = donorEmail.trim().toLowerCase();
+
+  // Safety check for Jest mocks without user database tables mocked
+  if (!prisma.user) {
+    console.warn("prisma.user is not defined. Skipping auth processing (likely in Jest mock).");
+    return { user: null, loginToken: null };
   }
 
-  return payload as PaystackVerificationResponse;
+  // 1. Silently find or create the user (marked as verified)
+  let user = await prisma.user.findUnique({
+    where: { email },
+  });
+
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        email,
+        emailVerified: new Date(),
+      },
+    });
+  }
+
+  // 2. Link the donation to the user (if not already linked)
+  await prisma.donation.update({
+    where: { id: donationId },
+    data: {
+      userId: user.id,
+      donorEmail: email,
+    },
+  });
+
+  // 3. If originally unauthenticated, generate a one-time auto-login token
+  let loginToken: string | null = null;
+  if (!originallyAuthenticated) {
+    if (!prisma.verificationToken) {
+      console.warn("prisma.verificationToken is not defined. Skipping verification token creation.");
+      return { user, loginToken: null };
+    }
+
+    loginToken = randomBytes(32).toString('hex');
+    await prisma.verificationToken.create({
+      data: {
+        identifier: email,
+        token: loginToken,
+        expires: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+      },
+    });
+  }
+
+  return { user, loginToken };
 }

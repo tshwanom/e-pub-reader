@@ -6,6 +6,7 @@ import {
   isPayPalSubscriptionId,
   getPayPalSubscription,
   isSuccessfulPayPalSubscription,
+  processCompletedDonationAuth,
 } from '@/lib/donation-payments';
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
@@ -38,6 +39,7 @@ export async function GET(request: NextRequest) {
       amount: true,
       currency: true,
       paypalId: true,
+      userId: true,
     },
   });
 
@@ -54,6 +56,8 @@ export async function GET(request: NextRequest) {
       || requestedFrequency === 'MONTHLY'
       || request.nextUrl.searchParams.has('subscription_id')
       || isPayPalSubscriptionId(donation.paypalId);
+
+    let finalDonorEmail: string | undefined = undefined;
 
     if (isRecurringDonation) {
       const subscriptionId = request.nextUrl.searchParams.get('subscription_id')
@@ -81,12 +85,14 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(buildDonationDestination(request, donation.bookId, 'failed'));
       }
 
+      finalDonorEmail = getPayPalDonorEmail(subscriptionData) ?? undefined;
+
       await prisma.donation.update({
         where: { id: donation.id },
         data: {
           status: 'COMPLETED',
           paypalId: subscriptionId,
-          donorEmail: getPayPalDonorEmail(subscriptionData) ?? undefined,
+          donorEmail: finalDonorEmail,
         },
       });
     } else {
@@ -113,26 +119,42 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(buildDonationDestination(request, donation.bookId, "failed"));
       }
 
+      finalDonorEmail = getPayPalDonorEmail(captureData) ?? undefined;
+
       await prisma.donation.update({
         where: { id: donation.id },
         data: {
           status: 'COMPLETED',
           paypalId: orderId,
-          donorEmail: getPayPalDonorEmail(captureData) ?? undefined,
+          donorEmail: finalDonorEmail,
         },
       });
     }
 
-    return NextResponse.redirect(buildDonationDestination(request, donation.bookId, "success"));
+    let loginToken: string | null = null;
+    if (finalDonorEmail) {
+      const authResult = await processCompletedDonationAuth({
+        donationId: donation.id,
+        donorEmail: finalDonorEmail,
+        originallyAuthenticated: Boolean(donation.userId),
+      });
+      loginToken = authResult.loginToken;
+    }
+
+    return NextResponse.redirect(
+      buildDonationDestination(request, donation.bookId, "success", loginToken, finalDonorEmail)
+    );
   } catch (error) {
     console.error("Donation capture error:", error);
 
-    await prisma.donation
-      .update({
+    try {
+      await prisma.donation.update({
         where: { id: donation.id },
         data: { status: "FAILED" },
-      })
-      .catch(() => undefined);
+      });
+    } catch (dbError) {
+      console.error("Failed to mark donation as failed in DB:", dbError);
+    }
 
     return NextResponse.redirect(buildDonationDestination(request, donation.bookId, "failed"));
   }

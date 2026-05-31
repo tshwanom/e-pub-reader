@@ -8,6 +8,7 @@ import {
   isSuccessfulPaystackVerification,
   toPaystackMinorUnits,
   verifyPaystackTransaction,
+  processCompletedDonationAuth,
 } from '@/lib/donation-payments';
 import { prisma } from '@/lib/prisma';
 
@@ -41,6 +42,7 @@ export async function GET(request: NextRequest) {
       paystackPlanCode: true,
       paystackSubscriptionCode: true,
       paystackCustomerCode: true,
+      userId: true,
     },
   });
 
@@ -79,28 +81,44 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(buildDonationDestination(request, donation.bookId, 'failed'));
     }
 
+    const finalDonorEmail = getPaystackDonorEmail(verification) ?? undefined;
+
     await prisma.donation.update({
       where: { id: donation.id },
       data: {
         status: 'COMPLETED',
         paystackReference: reference,
-        donorEmail: getPaystackDonorEmail(verification) ?? undefined,
+        donorEmail: finalDonorEmail,
         paystackPlanCode: getPaystackPlanCode(verification.data?.plan) ?? donation.paystackPlanCode ?? undefined,
         paystackSubscriptionCode: getPaystackSubscriptionCode(verification.data?.subscription) ?? donation.paystackSubscriptionCode ?? undefined,
         paystackCustomerCode: getPaystackCustomerCode(verification.data?.customer) ?? donation.paystackCustomerCode ?? undefined,
       },
     });
 
-    return NextResponse.redirect(buildDonationDestination(request, donation.bookId, 'success'));
+    let loginToken: string | null = null;
+    if (finalDonorEmail) {
+      const authResult = await processCompletedDonationAuth({
+        donationId: donation.id,
+        donorEmail: finalDonorEmail,
+        originallyAuthenticated: Boolean(donation.userId),
+      });
+      loginToken = authResult.loginToken;
+    }
+
+    return NextResponse.redirect(
+      buildDonationDestination(request, donation.bookId, 'success', loginToken, finalDonorEmail)
+    );
   } catch (error) {
     console.error('Paystack callback error:', error);
 
-    await prisma.donation
-      .update({
+    try {
+      await prisma.donation.update({
         where: { id: donation.id },
         data: { status: 'FAILED' },
-      })
-      .catch(() => undefined);
+      });
+    } catch (dbError) {
+      console.error('Failed to mark donation as failed in DB:', dbError);
+    }
 
     return NextResponse.redirect(buildDonationDestination(request, donation.bookId, 'failed'));
   }
