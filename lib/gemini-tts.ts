@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 
 const DEFAULT_GEMINI_TTS_MODEL = "gemini-3.1-flash-tts-preview";
-const DEFAULT_GEMINI_TTS_VOICE = "Kore";
+const DEFAULT_GEMINI_TTS_VOICE = "Algenib";
 const DEFAULT_PCM_SAMPLE_RATE = 24000;
 const DEFAULT_PCM_CHANNELS = 1;
 const DEFAULT_PCM_BITS_PER_SAMPLE = 16;
@@ -263,13 +263,23 @@ function buildGeminiAudiobookPrompt(transcript: string, stylePrompt?: string | n
   }
 
   const directorNotes = stylePrompt?.trim()
-    || "Deliver this as polished, immersive single-speaker audiobook narration. Keep the pacing clear, natural, and emotionally grounded without sounding theatrical.";
+    || [
+      "Style: Contemplative, intense, sincere, and heavy with meaning. Speak as if sharing a profound, urgent truth.",
+      "Pacing: Slow, deliberate, and deeply measured. Take natural, comfortable pauses between thoughts. Let punctuation (especially em-dashes and short sentences) land with quiet silence and breathing room.",
+      "Dynamics: Low to medium projection, close-mic proximity. Speak like a living human conveying a warning. Do not rush or use a generic, bubbly text-reading cadence."
+    ].join("\n");
 
   return [
     "# TASK",
     "Synthesize speech for the transcript below.",
     "Speak only the transcript itself.",
     "Do not read section headings, notes, metadata, or instructions aloud.",
+    "",
+    "# AUDIO PROFILE: High-gravitas narrator",
+    "A mature, resonant, and deeply thoughtful speaker. A voice carrying the rich texture and quiet authority of long experience. Speaks directly to a single listener in a highly personal, intimate conversation.",
+    "",
+    "# THE SCENE:",
+    "A quiet, highly insulated recording studio with close-mic intimacy. The voice is up-close, warm, and clear, with no background noise or artificial echo.",
     "",
     "# DIRECTOR'S NOTES",
     directorNotes,
@@ -483,13 +493,16 @@ export async function synthesizeGeminiSpeech(
   return withRetry(
     `Gemini TTS (${voiceName})`,
     async () => {
+      const rawLanguage = options.languageCode?.trim();
+      const normalizedLanguage = rawLanguage === "en" ? "en-US" : rawLanguage;
+
       const response = await getGeminiClient().models.generateContent({
         model,
         contents: prompt,
         config: {
           responseModalities: ["AUDIO"],
           speechConfig: {
-            ...(options.languageCode?.trim() ? { languageCode: options.languageCode.trim() } : {}),
+            ...(normalizedLanguage ? { languageCode: normalizedLanguage } : {}),
             voiceConfig: {
               prebuiltVoiceConfig: {
                 voiceName,

@@ -126,7 +126,7 @@ export default function ContentNarrationStudio({ contentId }: { contentId: strin
   const [notice, setNotice] = useState<Notice | null>(null);
   const [voiceName, setVoiceName] = useState("");
   const [model, setModel] = useState("");
-  const [languageCode, setLanguageCode] = useState("en");
+  const [languageCode, setLanguageCode] = useState("en-US");
   const [stylePrompt, setStylePrompt] = useState(DEFAULT_STYLE_PROMPT);
   const [sampleText, setSampleText] = useState(DEFAULT_SAMPLE_TEXT);
   const [samplePreview, setSamplePreview] = useState<{ audioDataUrl: string; voiceName: string; durationMs: number } | null>(null);

@@ -86,6 +86,7 @@ interface NarrationSummaryResponse {
       spineHref: string;
       status: string;
       durationMs: number | null;
+      audioUrl?: string | null;
     }>;
   }>;
 }
@@ -174,8 +175,10 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
   const [selectedVoiceNames, setSelectedVoiceNames] = useState<string[]>([]);
   const [preferredDefaultVoiceName, setPreferredDefaultVoiceName] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
-  const [languageCode, setLanguageCode] = useState("en");
+  const [languageCode, setLanguageCode] = useState("en-US");
   const [stylePrompt, setStylePrompt] = useState(DEFAULT_STYLE_PROMPT);
+  const [expandedNarrationId, setExpandedNarrationId] = useState<string | null>(null);
+  const [regeneratingChapterKey, setRegeneratingChapterKey] = useState<string | null>(null);
   const [chaptersToGenerate, setChaptersToGenerate] = useState("");
   const [sampleText, setSampleText] = useState(DEFAULT_SAMPLE_TEXT);
   const [samplePreview, setSamplePreview] = useState<{
@@ -534,6 +537,112 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
     } finally {
       setRetryingNarrationId(null);
     }
+  };
+
+  const handleRegenerateChapter = async (voiceName: string, chapterIndex: number, narrationId: string) => {
+    const chapterKey = `${narrationId}-${chapterIndex}`;
+    setRegeneratingChapterKey(chapterKey);
+    setNotice(null);
+    setError(null);
+    setSamplePreview(null);
+
+    try {
+      const response = await fetch(`/api/admin/books/${bookId}/narration`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "generate",
+          voiceName,
+          model: selectedModel,
+          languageCode: languageCode.trim() || null,
+          stylePrompt: stylePrompt.trim() || null,
+          chapterIndexes: [chapterIndex],
+        }),
+      });
+
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.details || payload.error || `Failed to regenerate chapter ${chapterIndex + 1}.`);
+      }
+
+      setNotice({
+        type: "success",
+        message: `Regeneration queued for Chapter ${chapterIndex + 1} using voice "${voiceName}" with current studio configurations.`,
+      });
+      await loadSummary({ quiet: true });
+    } catch (generationError) {
+      setNotice({
+        type: "error",
+        message: generationError instanceof Error ? generationError.message : "Regeneration failed.",
+      });
+    } finally {
+      setRegeneratingChapterKey(null);
+    }
+  };
+
+  const renderChapterList = (narration: NarrationSummaryItem) => {
+    const isExpanded = expandedNarrationId === narration.id;
+
+    if (!isExpanded) {
+      return null;
+    }
+
+    return (
+      <div className="mt-4 border-t border-landing-border/30 pt-4 space-y-2 max-h-[300px] overflow-y-auto pr-1">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-landing-text-muted mb-2">Chapters</p>
+        {narration.chapters.map((chapter) => {
+          const isRegenerating = regeneratingChapterKey === `${narration.id}-${chapter.chapterIndex}`;
+          return (
+            <div key={chapter.id} className="flex flex-col gap-2 rounded-xl bg-white p-3 ring-1 ring-landing-border/20 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-landing-text">#{chapter.chapterIndex + 1}</span>
+                <span className="text-sm text-landing-text truncate max-w-[180px] sm:max-w-[240px]" title={chapter.title || "Untitled Chapter"}>
+                  {chapter.title || "Untitled Chapter"}
+                </span>
+                <span className={["inline-flex rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider", getStatusClasses(chapter.status as NarrationStatus, false)].join(" ")}>
+                  {chapter.status}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 justify-between sm:justify-end">
+                {chapter.durationMs ? (
+                  <span className="text-xs text-landing-text-muted">{formatDuration(chapter.durationMs)}</span>
+                ) : null}
+                
+                {chapter.status === "READY" && chapter.audioUrl ? (
+                  <audio
+                    src={chapter.audioUrl}
+                    controls
+                    controlsList="nodownload"
+                    onContextMenu={(e) => e.preventDefault()}
+                    className="h-8 w-full max-w-[200px] rounded bg-landing-surface-muted"
+                  />
+                ) : null}
+
+                <button
+                  type="button"
+                  disabled={isRegenerating || isGenerating}
+                  onClick={() => void handleRegenerateChapter(narration.voice.name, chapter.chapterIndex, narration.id)}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-landing-accent hover:text-landing-accent/80 disabled:opacity-40 transition-colors"
+                >
+                  {isRegenerating ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Queuing...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCcw className="h-3 w-3" />
+                      Regenerate
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   const canGenerate = Boolean(summary?.generation.canGenerate && selectedVoiceNames.length > 0);
@@ -1136,6 +1245,17 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
                           </button>
                         )}
                       </div>
+                      <div className="mt-3 flex items-center justify-between border-t border-landing-border/20 pt-3">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedNarrationId(current => current === narration.id ? null : narration.id)}
+                          className="flex items-center gap-1.5 text-xs font-semibold text-landing-accent hover:text-landing-accent/85 transition-colors"
+                        >
+                          <Headphones className="h-3.5 w-3.5" />
+                          {expandedNarrationId === narration.id ? "Hide chapters" : "Review chapters"}
+                        </button>
+                      </div>
+                      {renderChapterList(narration)}
                     </article>
                   )) : (
                     <div className="rounded-2xl bg-white/80 px-4 py-4 text-sm text-landing-text-muted ring-1 ring-white/65">
@@ -1230,6 +1350,18 @@ export default function NarrationStudio({ bookId }: NarrationStudioProps) {
                             </span>
                           ) : null}
                         </div>
+
+                        <div className="mt-3 flex items-center justify-between border-t border-landing-border/20 pt-3">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedNarrationId(current => current === narration.id ? null : narration.id)}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-landing-accent hover:text-landing-accent/85 transition-colors"
+                          >
+                            <Headphones className="h-3.5 w-3.5" />
+                            {expandedNarrationId === narration.id ? "Hide chapters" : "Review chapters"}
+                          </button>
+                        </div>
+                        {renderChapterList(narration)}
 
                         {narration.status === "FAILED" && chapterCounts.failed > 0 ? (
                           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-landing-border/40 pt-4">

@@ -16,7 +16,12 @@ import {
   synthesizeGeminiSpeech,
 } from "@/lib/gemini-tts";
 import { toNarrationObjectStorageProvider } from "@/lib/narration";
-import { getNarrationStorageConfig, getNarrationStorageProvider, getNarrationStorageProviderLabel } from "@/lib/narration-storage";
+import {
+  createPresignedNarrationObjectUrl,
+  getNarrationStorageConfig,
+  getNarrationStorageProvider,
+  getNarrationStorageProviderLabel,
+} from "@/lib/narration-storage";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import type { Session } from "next-auth";
@@ -98,6 +103,7 @@ const adminNarrationSelect = {
       spineHref: true,
       status: true,
       durationMs: true,
+      audioObjectKey: true,
     },
   },
 } as const;
@@ -106,7 +112,7 @@ function isAdminSession(session: Session | null) {
   return Boolean(session?.user && "role" in session.user && session.user.role === "ADMIN");
 }
 
-function formatNarrationForAdmin(
+async function formatNarrationForAdmin(
   narration: {
     id: string;
     status: string;
@@ -133,18 +139,34 @@ function formatNarrationForAdmin(
       spineHref: string;
       status: string;
       durationMs: number | null;
+      audioObjectKey: string | null;
     }>;
   }
 ) {
   const optionName = getGeminiVoiceOptionName(narration.voice.name) || narration.voice.name;
+  const resolvedProvider = toNarrationObjectStorageProvider(
+    narration.storageProvider as "S3" | "R2" | "B2" | "LOCAL"
+  );
+
+  const formattedChapters = await Promise.all(
+    narration.chapters.map(async (chapter) => ({
+      id: chapter.id,
+      chapterIndex: chapter.chapterIndex,
+      title: chapter.title,
+      spineHref: chapter.spineHref,
+      status: chapter.status,
+      durationMs: chapter.durationMs,
+      audioUrl: chapter.status === "READY" && chapter.audioObjectKey
+        ? await createPresignedNarrationObjectUrl(chapter.audioObjectKey, resolvedProvider)
+        : null,
+    }))
+  );
 
   return {
     id: narration.id,
     status: narration.status,
     active: narration.active,
-    storageProvider: toNarrationObjectStorageProvider(
-      narration.storageProvider as "S3" | "R2" | "B2" | "LOCAL"
-    ),
+    storageProvider: resolvedProvider,
     totalDurationMs: narration.totalDurationMs,
     totalChapters: narration.totalChapters,
     readyAt: narration.readyAt?.toISOString() || null,
@@ -157,14 +179,7 @@ function formatNarrationForAdmin(
       optionName,
       model: getGeminiModelFromProvider(narration.voice.provider),
     },
-    chapters: narration.chapters.map((chapter) => ({
-      id: chapter.id,
-      chapterIndex: chapter.chapterIndex,
-      title: chapter.title,
-      spineHref: chapter.spineHref,
-      status: chapter.status,
-      durationMs: chapter.durationMs,
-    })),
+    chapters: formattedChapters,
   };
 }
 
@@ -259,7 +274,7 @@ export async function GET(
       canGenerate: missingRequirements.length === 0,
       missingRequirements,
     },
-    narrations: book.narrations.map(formatNarrationForAdmin),
+    narrations: await Promise.all(book.narrations.map(formatNarrationForAdmin)),
   });
 }
 
@@ -364,7 +379,7 @@ export async function POST(
 
       return NextResponse.json({
         message: `${getGeminiVoiceOptionName(finalNarration.voice.name) || finalNarration.voice.name} is now the default narration voice for “${book.title}”.`,
-        narration: formatNarrationForAdmin(finalNarration),
+        narration: await formatNarrationForAdmin(finalNarration),
       });
     }
 
