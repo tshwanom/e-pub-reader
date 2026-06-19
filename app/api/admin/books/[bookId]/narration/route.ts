@@ -15,7 +15,7 @@ import {
   isGeminiTtsConfigured,
   synthesizeGeminiSpeech,
 } from "@/lib/gemini-tts";
-import { toNarrationObjectStorageProvider } from "@/lib/narration";
+import { toNarrationObjectStorageProvider, PersistedNarrationStorageProvider } from "@/lib/narration";
 import {
   createPresignedNarrationObjectUrl,
   getNarrationStorageConfig,
@@ -145,7 +145,7 @@ async function formatNarrationForAdmin(
 ) {
   const optionName = getGeminiVoiceOptionName(narration.voice.name) || narration.voice.name;
   const resolvedProvider = toNarrationObjectStorageProvider(
-    narration.storageProvider as "S3" | "R2" | "B2" | "LOCAL"
+    narration.storageProvider as PersistedNarrationStorageProvider
   );
 
   const formattedChapters = await Promise.all(
@@ -234,8 +234,8 @@ export async function GET(
     return NextResponse.json({ error: "Book not found" }, { status: 404 });
   }
 
-  const storageProvider = getNarrationStorageProvider();
-  const storageConfigured = Boolean(getNarrationStorageConfig(storageProvider));
+  const storageProvider = await getNarrationStorageProvider();
+  const storageConfigured = Boolean(await getNarrationStorageConfig(storageProvider));
   const geminiConfigured = isGeminiTtsConfigured();
   const missingRequirements = buildBookNarrationGenerationRequirements({
     hasEpubFile: Boolean(book.epubFile?.fileUrl),
@@ -289,8 +289,8 @@ export async function POST(
   }
 
   const { bookId } = await params;
-  const storageProvider = getNarrationStorageProvider();
-  const storageConfigured = Boolean(getNarrationStorageConfig(storageProvider));
+  const storageProvider = await getNarrationStorageProvider();
+  const storageConfigured = Boolean(await getNarrationStorageConfig(storageProvider));
   const geminiConfigured = isGeminiTtsConfigured();
 
   try {

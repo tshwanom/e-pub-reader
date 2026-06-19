@@ -300,9 +300,11 @@ model NarrationCue {
 }
 
 model SiteSettings {
-  id          String   @id @default(cuid())
-  socialLinks Json?
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  socialLinks     Json?
+  storageProvider String   @default("local")
+  storageSettings String?
+  updatedAt       DateTime @updatedAt
 }
 
 model SupplementaryContent {
@@ -412,6 +414,7 @@ enum NarrationStorageProvider {
   R2
   B2
   LOCAL
+  HYBRID
 }
 
 enum DonationStatus {

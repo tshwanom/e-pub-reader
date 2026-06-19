@@ -55,9 +55,9 @@ export default async function AdminBooksPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">
               Catalog control
             </p>
-            <h1 className="mt-2 font-playfair text-3xl text-landing-text sm:text-4xl">Manage books and donor narration</h1>
+            <h1 className="mt-2 font-playfair text-3xl text-landing-text sm:text-4xl">Manage books and narration</h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-landing-text-muted sm:text-[15px]">
-              Keep metadata tidy, verify donor access, and jump straight into narration generation from each title’s editor.
+              Keep metadata tidy, verify supporter access, and jump straight into narration generation from each title’s editor.
             </p>
 
             <div className="mt-5">
@@ -74,7 +74,7 @@ export default async function AdminBooksPage() {
               <p className="mt-2 text-sm text-landing-text-muted">Draft and published titles across the catalog.</p>
             </div>
             <div className="surface-muted p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-text-muted">Donor-only</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-text-muted">Supporter-only</p>
               <p className="mt-3 text-3xl font-semibold text-landing-text">{donorOnlyCount}</p>
               <p className="mt-2 text-sm text-landing-text-muted">Books currently reserved for supporters.</p>
             </div>

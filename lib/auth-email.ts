@@ -48,8 +48,8 @@ export function buildMagicLoginEmail({
     '<div style="font-family:Inter,Segoe UI,Arial,sans-serif;background:#f4f6f7;padding:24px;color:#111827;">',
     '<div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #d8e0e4;border-radius:20px;padding:32px;box-shadow:0 8px 30px rgba(17,24,39,0.06);">',
     '<p style="margin:0 0 12px;font-size:12px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#3D737A;">Passwordless sign-in</p>',
-    '<h1 style="margin:0 0 16px;font-family:Georgia,serif;font-size:30px;line-height:1.2;color:#111827;">Use your donor email to sign in</h1>',
-    `<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#5f6b76;">We found a sign-in request for <strong style="color:#111827;">${safeEmail}</strong>. Open the magic link below, or type the 6-digit code on the login screen. Once you sign in with the same email you donated with, your donor benefits can follow you home.</p>`,
+    '<h1 style="margin:0 0 16px;font-family:Georgia,serif;font-size:30px;line-height:1.2;color:#111827;">Sign in to One Man Revolution</h1>',
+    `<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#5f6b76;">We found a sign-in request for <strong style="color:#111827;">${safeEmail}</strong>. Open the magic link below, or type the 6-digit code on the login screen. Once you sign in with the same email you used to support the mission, your access benefits will follow you home.</p>`,
     `<div style="margin:24px 0;"><a href="${url}" style="display:inline-block;border-radius:14px;background:#3D737A;color:#ffffff;text-decoration:none;padding:14px 22px;font-weight:700;">Sign in instantly</a></div>`,
     '<div style="margin:24px 0;padding:18px 20px;border-radius:16px;background:#edf2f4;border:1px solid #d8e0e4;">',
     '<p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#5f6b76;">Your 6-digit code</p>',
@@ -60,7 +60,7 @@ export function buildMagicLoginEmail({
     '</div>',
   ].join('');
   const text = [
-    'Use your donor email to sign in to One Man Revolution.',
+    'Sign in to your One Man Revolution account.',
     '',
     `Magic link: ${url}`,
     `6-digit code: ${token}`,

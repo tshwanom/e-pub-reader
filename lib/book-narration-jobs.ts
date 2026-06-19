@@ -62,7 +62,7 @@ type ClaimedBookNarration = {
     language: string;
   };
   stylePrompt: string | null;
-  storageProvider: "S3" | "R2" | "B2" | "LOCAL";
+  storageProvider: "S3" | "R2" | "B2" | "LOCAL" | "HYBRID";
   active: boolean;
   jobKey: string | null;
 };
@@ -105,9 +105,9 @@ async function runGloballySerialized<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-function buildNarrationObjectKeys(bookId: string, narrationId: string, chapterIndex: number) {
-  const storageProvider = getNarrationStorageProvider();
-  const storageConfig = getNarrationStorageConfig(storageProvider);
+async function buildNarrationObjectKeys(bookId: string, narrationId: string, chapterIndex: number) {
+  const storageProvider = await getNarrationStorageProvider();
+  const storageConfig = await getNarrationStorageConfig(storageProvider);
   const prefix = storageConfig?.narrationPrefix || "narration";
   const chapterKey = `${prefix}/${bookId}/${narrationId}/chapters/${String(chapterIndex).padStart(3, "0")}.wav`;
   const manifestKey = `${prefix}/${bookId}/${narrationId}/manifest.json`;
@@ -119,8 +119,8 @@ function buildNarrationObjectKeys(bookId: string, narrationId: string, chapterIn
 }
 
 async function uploadNarrationObject(objectKey: string, body: Buffer, contentType: string) {
-  const storageProvider = getNarrationStorageProvider();
-  const storageConfig = getNarrationStorageConfig(storageProvider);
+  const storageProvider = await getNarrationStorageProvider();
+  const storageConfig = await getNarrationStorageConfig(storageProvider);
 
   if (!storageConfig) {
     throw new Error(
@@ -423,8 +423,8 @@ async function finalizeNarration(params: {
     return;
   }
 
-  const { manifestKey } = buildNarrationObjectKeys(bookId, narration.id, 0);
-  const storageProvider = getNarrationStorageProvider();
+  const { manifestKey } = await buildNarrationObjectKeys(bookId, narration.id, 0);
+  const storageProvider = await getNarrationStorageProvider();
   const manifest = buildNarrationManifest(
     bookId,
     {
@@ -567,7 +567,7 @@ async function processNarration(params: {
         }
 
         const merged = mergeGeminiPcmAudio(chunkAudio);
-        const { chapterKey: key } = buildNarrationObjectKeys(
+        const { chapterKey: key } = await buildNarrationObjectKeys(
           narration.bookId,
           narration.id,
           claimedChapter.chapterIndex
@@ -704,8 +704,8 @@ export function ensureBookNarrationBackgroundProcessing(bookId: string) {
 export async function queueBookNarrationGeneration(
   params: QueueBookNarrationGenerationParams
 ) {
-  const storageProvider = getNarrationStorageProvider();
-  const storageConfigured = Boolean(getNarrationStorageConfig(storageProvider));
+  const storageProvider = await getNarrationStorageProvider();
+  const storageConfigured = Boolean(await getNarrationStorageConfig(storageProvider));
   const geminiConfigured = isGeminiTtsConfigured();
 
   const book = await prisma.book.findUnique({

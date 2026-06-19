@@ -14,17 +14,17 @@ export const BOOK_DONOR_ACCESS_LEVEL_OPTIONS = [
   {
     id: 'PUBLIC',
     label: 'Public',
-    description: 'Anyone can open this book without donating.',
+    description: 'Anyone can open this book without contributing.',
   },
   {
     id: 'ALL_DONORS',
-    label: 'All donors',
-    description: 'Any completed donation unlocks this book.',
+    label: 'All supporters',
+    description: 'Any completed once-off contribution unlocks this book.',
   },
   {
     id: 'RECURRING_DONORS',
-    label: 'Recurring donors',
-    description: 'Only readers with an active monthly donation can open this book.',
+    label: 'Sustainers',
+    description: 'Only readers with an active monthly contribution can open this book.',
   },
 ] as const satisfies ReadonlyArray<{
   id: BookDonorAccessLevel;
@@ -73,9 +73,9 @@ export function hasBookAccessForDonorTier(level: BookDonorAccessLevel, donorTier
 export function formatBookDonorAccessLevel(level: BookDonorAccessLevel) {
   switch (level) {
     case 'ALL_DONORS':
-      return 'All donors';
+      return 'All supporters';
     case 'RECURRING_DONORS':
-      return 'Recurring donors';
+      return 'Sustainers';
     case 'PUBLIC':
     default:
       return 'Public';
@@ -85,9 +85,9 @@ export function formatBookDonorAccessLevel(level: BookDonorAccessLevel) {
 export function getBookAccessBadgeLabel(level: BookDonorAccessLevel, hasAccess: boolean) {
   switch (level) {
     case 'ALL_DONORS':
-      return hasAccess ? 'Donor Access' : 'All Donors';
+      return hasAccess ? 'Supporter Access' : 'Supporters';
     case 'RECURRING_DONORS':
-      return hasAccess ? 'Recurring Access' : 'Recurring Donors';
+      return hasAccess ? 'Sustainer Access' : 'Sustainers';
     case 'PUBLIC':
     default:
       return 'Public';
@@ -97,9 +97,9 @@ export function getBookAccessBadgeLabel(level: BookDonorAccessLevel, hasAccess: 
 export function getBookLockedAudienceLabel(level: BookDonorAccessLevel) {
   switch (level) {
     case 'ALL_DONORS':
-      return 'donors';
+      return 'supporters';
     case 'RECURRING_DONORS':
-      return 'recurring donors';
+      return 'sustainers';
     case 'PUBLIC':
     default:
       return 'everyone';
@@ -109,23 +109,23 @@ export function getBookLockedAudienceLabel(level: BookDonorAccessLevel) {
 export function getBookDonorRequirementText(level: BookDonorAccessLevel) {
   switch (level) {
     case 'ALL_DONORS':
-      return 'at least one completed donation';
+      return 'a once-off contribution';
     case 'RECURRING_DONORS':
-      return 'an active monthly donation';
+      return 'an active monthly contribution';
     case 'PUBLIC':
     default:
-      return 'no donation';
+      return 'no contribution';
   }
 }
 
 export function getBookSupportCallToAction(level: BookDonorAccessLevel) {
   switch (level) {
     case 'ALL_DONORS':
-      return 'Donate to unlock';
+      return 'Support to unlock';
     case 'RECURRING_DONORS':
-      return 'Donate monthly to unlock';
+      return 'Sustain monthly to unlock';
     case 'PUBLIC':
     default:
-      return 'Open donation';
+      return 'Support the work';
   }
 }

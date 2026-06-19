@@ -29,6 +29,7 @@ export default async function Footer() {
               <Link href="/blog" className="text-landing-text-muted transition-colors hover:text-landing-accent">Blog</Link>
               <Link href="/videos" className="text-landing-text-muted transition-colors hover:text-landing-accent">Videos</Link>
               <Link href="/poems" className="text-landing-text-muted transition-colors hover:text-landing-accent">Poems</Link>
+              <Link href="/support" className="text-landing-text-muted transition-colors hover:text-landing-accent">Support</Link>
             </nav>
           </div>
 

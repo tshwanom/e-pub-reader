@@ -95,37 +95,30 @@ export default async function LandingPage() {
         )}
       </section>
 
-      {/* Donation Section */}
+      {/* Support Section */}
       <section
-        id="donate"
+        id="support"
         className="page-container py-16"
       >
         <div className="surface-card px-8 py-12 text-center sm:px-12">
           <h2 className="font-playfair text-4xl font-semibold text-landing-text md:text-5xl">
-            Support the Work
+            Support the Mission
           </h2>
           <div className="mx-auto mb-8 mt-6 max-w-3xl space-y-6 text-lg leading-relaxed text-landing-text-muted">
             <p>
-              We provide most of our books for free, with some reserved for our donors to keep the One Man Revolution alive.
+              Knowledge that can help awaken, empower, and liberate human beings should not be hidden behind a paywall. That is why the majority of our library is available free of charge.
             </p>
-            <p>
-              We need to convert our books to audiobooks, as well as dubbing and translating them into other languages. Furthermore, the servers that host this library cost money to maintain.
-            </p>
-            <p>
-              If it resonates, you may choose to support its continuation. Your contribution preserves our independence and makes this expansion possible. If you cannot donate, we encourage you to at least share our work to help spread the word.
+            <p className="font-semibold text-landing-text">
+              Support is not payment for information. Support is participation in the mission.
             </p>
           </div>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <DonationSection
-              bookTitle="One Man Revolution"
-              currentUserEmail={session?.user?.email ?? null}
-              triggerVariant="button"
-              triggerLabel="Support the Revolution"
-              triggerClassName="brand-button min-w-[15rem] px-8 py-4 text-base shadow-md shadow-landing-accent/20 ring-1 ring-landing-accent/15 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-landing-accent/20"
-              modalBadgeLabel="Reader-supported"
-              modalTitle="Support the Work"
-              modalDescription="Keep the library independent, expand narration, and help the writings travel further. Choose one-time or monthly support in the currency and checkout flow that suits you."
-            />
+            <Link
+              href="/support"
+              className="brand-button min-w-[15rem] px-8 py-4 text-base shadow-md shadow-landing-accent/20 ring-1 ring-landing-accent/15 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-landing-accent/20"
+            >
+              Read the Funding Declaration
+            </Link>
             <Link
               href="/library"
               className="ghost-button min-w-[15rem] bg-white/80 px-8 py-4 text-base"

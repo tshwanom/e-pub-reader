@@ -3069,7 +3069,7 @@ export default function Reader({
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-landing-accent">Narrated mode</p>
               </div>
               <h3 className="text-base font-semibold text-landing-text">
-                {narrationAccess.hasAccess ? 'Donor narration status' : 'Narrated mode is reserved for donors'}
+                {narrationAccess.hasAccess ? 'Narration status' : 'Narrated mode is reserved for supporters'}
               </h3>
             </div>
 
@@ -3078,8 +3078,8 @@ export default function Reader({
                 <>
                   <p className="text-sm leading-relaxed text-landing-text-muted">
                     {narrationAccess.isSignedIn
-                      ? 'Due to the cost of running narration, this feature is reserved for donors only. Make one completed donation to unlock it on your account.'
-                      : 'Due to the cost of running narration, this feature is reserved for donors only. Sign in to unlock it with your donation.'}
+                      ? 'Due to the cost of running narration, this feature is reserved for supporters only. Support the mission with a once-off contribution to unlock it on your account.'
+                      : 'Due to the cost of running narration, this feature is reserved for supporters only. Sign in to unlock it with your support.'}
                   </p>
 
                   <div className="mt-4 flex gap-2">
@@ -3093,7 +3093,7 @@ export default function Reader({
                       href={narrationAccess.manageHref}
                       className="brand-button flex-1 px-4 py-2.5 text-center text-sm"
                     >
-                      {narrationAccess.isSignedIn ? 'Donate to unlock' : 'Sign in to unlock'}
+                      {narrationAccess.isSignedIn ? 'Support to unlock' : 'Sign in to unlock'}
                     </a>
                   </div>
                 </>
@@ -3102,7 +3102,7 @@ export default function Reader({
                   <div className="rounded-2xl border border-landing-border bg-landing-surface-muted px-4 py-4">
                     <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]">
                       <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-700">
-                        {narrationHasReadyPlayer ? 'Ready to stream' : 'Donor unlocked'}
+                        {narrationHasReadyPlayer ? 'Ready to stream' : 'Supporter unlocked'}
                       </span>
                       <span className="rounded-full border border-landing-border bg-white px-2.5 py-1 text-landing-text-muted">
                         {(narrationStatus?.storageProvider || 'signed').toUpperCase()} delivery

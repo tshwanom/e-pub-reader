@@ -28,9 +28,10 @@ jest.mock('@/lib/prisma', () => ({
 
 jest.mock('@/lib/narration-storage', () => ({
   createPresignedNarrationObjectUrl: jest.fn(),
-  getNarrationStorageProvider: jest.fn(() => 's3'),
-  getNarrationStorageProviderLabel: jest.fn(() => 'S3'),
-  isNarrationStorageConfigured: jest.fn(() => true),
+  getNarrationStorageProvider: jest.fn(async () => 'r2'),
+  getNarrationStorageProviderLabel: jest.fn(() => 'R2'),
+  isNarrationStorageConfigured: jest.fn(async () => true),
+  getNarrationStorageConfig: jest.fn(async () => ({ provider: 'r2' })),
 }));
 
 jest.mock('@/lib/content-narration-sync', () => ({
@@ -63,7 +64,7 @@ const publishedContent = {
       id: 'narration-1',
       status: 'READY',
       active: true,
-      storageProvider: 'S3',
+      storageProvider: 'R2',
       audioObjectKey: 'narration/content-1/classic/track.mp3',
       audioMimeType: 'audio/mpeg',
       durationMs: 91000,
@@ -168,7 +169,7 @@ describe('content narration route', () => {
     });
     expect(mockCreatePresignedNarrationObjectUrl).toHaveBeenCalledWith(
       'narration/content-1/classic/track.mp3',
-      's3'
+      'r2'
     );
   });
 

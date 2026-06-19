@@ -77,7 +77,7 @@ async function chooseCurrencyWithSearch(user: ReturnType<typeof userEvent.setup>
 }
 
 async function openDonationModal(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('button', { name: /Open donation|Donate to unlock/i }));
+  await user.click(screen.getByRole('button', { name: /Support the work|Support to unlock/i }));
 
   await waitFor(() => {
     expect(screen.getByRole('dialog', { name: /Support “Test Book”/i })).toBeInTheDocument();
@@ -135,7 +135,7 @@ describe('DonationSection', () => {
 
     const { container } = render(<DonationSection bookId="book-1" bookTitle="Test Book" />);
 
-    expect(screen.getByRole('button', { name: /Open donation/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Support the work/i })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Amount in USD/i)).not.toBeInTheDocument();
 

@@ -27,7 +27,7 @@ export async function GET(
 ) {
   const session = await getServerSession(authOptions);
   const { bookId } = await params;
-  const activeStorageProvider = getNarrationStorageProvider();
+  const activeStorageProvider = await getNarrationStorageProvider();
 
   const book = await prisma.book.findUnique({
     where: { id: bookId },
@@ -300,7 +300,7 @@ export async function POST(
   { params }: { params: Promise<{ bookId: string }> }
 ) {
   const session = await getServerSession(authOptions);
-  const activeStorageProvider = getNarrationStorageProvider();
+  const activeStorageProvider = await getNarrationStorageProvider();
 
   if (!session || session.user.role !== "ADMIN") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

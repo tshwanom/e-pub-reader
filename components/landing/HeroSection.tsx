@@ -64,7 +64,7 @@ export default function HeroSection() {
             Explore Library
           </Link>
           <Link
-            href="#donate"
+            href="/support"
             className="ghost-button min-w-[10rem]"
           >
             Support the Revolution

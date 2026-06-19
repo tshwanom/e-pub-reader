@@ -58,6 +58,7 @@ interface DonationSectionProps {
   modalTitle?: string;
   modalDescription?: string;
   modalBadgeLabel?: string;
+  initialFrequency?: DonationFrequency;
 }
 
 type DonationPresetOptionsResponse = DonationPresetOptions & {
@@ -78,6 +79,7 @@ export default function DonationSection({
   modalBadgeLabel,
   modalTitle,
   modalDescription,
+  initialFrequency,
 }: DonationSectionProps) {
   const normalizedBookId = typeof bookId === 'string' && bookId.trim().length > 0
     ? bookId.trim()
@@ -101,7 +103,7 @@ export default function DonationSection({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   const [frequency, setFrequency] = useState<DonationFrequency>(
-    requiresRecurringUnlock ? 'MONTHLY' : DEFAULT_DONATION_FREQUENCY
+    initialFrequency ?? (requiresRecurringUnlock ? 'MONTHLY' : DEFAULT_DONATION_FREQUENCY)
   );
   const [gateway, setGateway] = useState<DonationGateway>(DEFAULT_DONATION_GATEWAY);
   const [donorEmail, setDonorEmail] = useState(currentUserEmail ?? '');
@@ -190,7 +192,7 @@ export default function DonationSection({
     ? `Start monthly support with ${selectedGateway.label}`
     : `Continue to ${selectedGateway.label}`;
   const minimumEquivalentError = quote && quote.baseAmount < 1
-    ? 'Minimum donation is the equivalent of USD 1.00.'
+    ? 'Minimum contribution is the equivalent of USD 1.00.'
     : null;
   const donationModalBadge = modalBadgeLabel
     ?? (hasBookContext ? 'Secure checkout' : 'Reader-supported');
@@ -556,7 +558,7 @@ export default function DonationSection({
               {requiresRecurringUnlock
                 ? 'This title is reserved for recurring supporters, so the unlock checkout is monthly only.'
                 : requiresDonorUnlock
-                  ? 'Any completed donation unlocks donor-only books on this signed-in account — or on the same email when you sign in later.'
+                  ? 'Any completed contribution unlocks supporter-exclusive books on this signed-in account — or on the same email when you sign in later.'
                   : hasBookContext
                     ? 'Choose one-time or monthly support for this title.'
                     : 'Choose one-time or monthly support for the work.'}
@@ -645,7 +647,7 @@ export default function DonationSection({
                 placeholder="you@example.com"
               />
               <p className="mt-2 text-xs leading-5 text-landing-text-muted">
-                Your donation silently creates a password-free reader account, allowing you to access premium benefits automatically.
+                Your contribution silently creates a password-free reader account, allowing you to access premium benefits automatically.
               </p>
             </div>
           ) : null}

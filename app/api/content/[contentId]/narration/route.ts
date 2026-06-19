@@ -19,11 +19,10 @@ function toObjectStorageProvider(provider: string) {
       return "local" as const;
     case "R2":
       return "r2" as const;
-    case "B2":
-      return "b2" as const;
-    case "S3":
+    case "HYBRID":
+      return "hybrid" as const;
     default:
-      return "s3" as const;
+      return "local" as const;
   }
 }
 
@@ -32,7 +31,7 @@ export async function GET(
   { params }: { params: Promise<{ contentId: string }> }
 ) {
   const { contentId } = await params;
-  const activeStorageProvider = getNarrationStorageProvider();
+  const activeStorageProvider = await getNarrationStorageProvider();
 
   const content = await prisma.supplementaryContent.findUnique({
     where: { id: contentId },

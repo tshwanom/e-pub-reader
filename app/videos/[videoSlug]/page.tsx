@@ -236,7 +236,7 @@ export default async function VideoWatchPage({ params }: VideoPageParams) {
   const badgeClasses = getAccessBadgeClasses(videoAccess.hasAccess, videoAccess.contentDonorAccessLevel);
   const supportHref = video.book
     ? `/books/${video.book.slug || video.book.id}#support-this-book`
-    : '/#donate';
+    : '/support';
   const loginHref = `/login?callbackUrl=${encodeURIComponent(getVideoWatchPath(video))}`;
   const posterUrl = video.sourceThumbnailUrl;
   const publishedLabel = new Intl.DateTimeFormat('en', {
@@ -393,7 +393,7 @@ export default async function VideoWatchPage({ params }: VideoPageParams) {
                   supportLabel={video.book ? getBookSupportCallToAction(videoAccess.contentDonorAccessLevel) : 'Support the Revolution'}
                   secondaryHref={video.book ? `/books/${video.book.slug || video.book.id}` : '/videos'}
                   secondaryLabel={video.book ? 'Open related book' : 'Browse videos'}
-                  title="Donor-only video"
+                  title="Supporter-only video"
                   message="This screening opens on its own watch page, but playback stays locked until the required support is active on your account."
                   className="mt-6"
                 />
@@ -413,7 +413,7 @@ export default async function VideoWatchPage({ params }: VideoPageParams) {
               </section>
             ) : (
               <section className="surface-muted p-4 sm:p-5 text-sm leading-7 text-landing-text-muted">
-                This screening does not have a written description yet, but the watch page is ready for playback, donor access, and suggested videos.
+                This screening does not have a written description yet, but the watch page is ready for playback, supporter access, and suggested videos.
               </section>
             )}
 

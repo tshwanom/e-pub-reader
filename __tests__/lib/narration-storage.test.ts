@@ -1,15 +1,25 @@
 jest.mock('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn().mockImplementation((config) => ({ config })),
   GetObjectCommand: jest.fn().mockImplementation((input) => ({ input })),
+  PutObjectCommand: jest.fn().mockImplementation((input) => ({ input })),
 }));
 
 jest.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: jest.fn(),
 }));
 
+jest.mock('@/lib/prisma', () => ({
+  prisma: {
+    siteSettings: {
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
+  },
+}));
+
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import { prisma } from '@/lib/prisma';
 
 import {
   createPresignedNarrationObjectUrl,
@@ -44,12 +54,6 @@ describe('narration storage adapter', () => {
     delete process.env.NARRATION_STORAGE_PREFIX;
     delete process.env.NARRATION_STORAGE_SIGNED_URL_TTL_SECONDS;
     delete process.env.NARRATION_STORAGE_LOCAL_DIR;
-    delete process.env.AWS_REGION;
-    delete process.env.AWS_ACCESS_KEY_ID;
-    delete process.env.AWS_SECRET_ACCESS_KEY;
-    delete process.env.S3_BUCKET_NAME;
-    delete process.env.S3_NARRATION_PREFIX;
-    delete process.env.S3_SIGNED_URL_TTL_SECONDS;
     delete process.env.R2_ACCOUNT_ID;
     delete process.env.R2_REGION;
     delete process.env.R2_ENDPOINT;
@@ -57,42 +61,27 @@ describe('narration storage adapter', () => {
     delete process.env.R2_SECRET_ACCESS_KEY;
     delete process.env.R2_BUCKET_NAME;
     delete process.env.R2_FORCE_PATH_STYLE;
-    delete process.env.B2_REGION;
-    delete process.env.B2_ENDPOINT;
-    delete process.env.B2_ACCESS_KEY_ID;
-    delete process.env.B2_KEY_ID;
-    delete process.env.B2_SECRET_ACCESS_KEY;
-    delete process.env.B2_APPLICATION_KEY;
-    delete process.env.B2_BUCKET_NAME;
-    delete process.env.B2_FORCE_PATH_STYLE;
+    
+    (prisma.siteSettings.findFirst as jest.Mock).mockResolvedValue(null);
   });
 
   afterAll(() => {
     process.env = originalEnv;
   });
 
-  it('defaults to legacy S3 envs when no provider override is set', () => {
-    process.env.AWS_REGION = 'us-east-1';
-    process.env.AWS_ACCESS_KEY_ID = 'aws-key';
-    process.env.AWS_SECRET_ACCESS_KEY = 'aws-secret';
-    process.env.S3_BUCKET_NAME = 'reader-audio';
-
-    expect(getNarrationStorageProvider()).toBe('s3');
-    expect(getNarrationStorageConfig()).toEqual({
-      provider: 's3',
-      region: 'us-east-1',
-      accessKeyId: 'aws-key',
-      secretAccessKey: 'aws-secret',
-      bucketName: 'reader-audio',
+  it('defaults to local provider when env is empty and no DB settings exist', async () => {
+    await expect(getNarrationStorageProvider()).resolves.toBe('local');
+    const config = await getNarrationStorageConfig();
+    expect(config).toMatchObject({
+      provider: 'local',
+      localBaseDir: expect.any(String),
       narrationPrefix: 'narration',
       signedUrlTtlSeconds: 900,
-      endpoint: undefined,
-      forcePathStyle: false,
     });
-    expect(isNarrationStorageConfigured()).toBe(true);
+    await expect(isNarrationStorageConfigured()).resolves.toBe(true);
   });
 
-  it('builds an R2 config from provider-specific env vars', () => {
+  it('builds an R2 config from provider-specific env vars', async () => {
     process.env.NARRATION_STORAGE_PROVIDER = 'r2';
     process.env.R2_ACCOUNT_ID = 'account-123';
     process.env.R2_ACCESS_KEY_ID = 'r2-key';
@@ -101,7 +90,9 @@ describe('narration storage adapter', () => {
     process.env.NARRATION_STORAGE_PREFIX = 'donor-narration';
     process.env.NARRATION_STORAGE_SIGNED_URL_TTL_SECONDS = '1800';
 
-    expect(getNarrationStorageConfig()).toEqual({
+    await expect(getNarrationStorageProvider()).resolves.toBe('r2');
+    const config = await getNarrationStorageConfig();
+    expect(config).toEqual({
       provider: 'r2',
       region: 'auto',
       endpoint: 'https://account-123.r2.cloudflarestorage.com',
@@ -114,32 +105,13 @@ describe('narration storage adapter', () => {
     });
   });
 
-  it('builds a B2 config and derives the endpoint from the region', () => {
-    process.env.NARRATION_STORAGE_PROVIDER = 'b2';
-    process.env.B2_REGION = 'us-west-004';
-    process.env.B2_KEY_ID = 'b2-key';
-    process.env.B2_APPLICATION_KEY = 'b2-secret';
-    process.env.B2_BUCKET_NAME = 'reader-audio';
-
-    expect(getNarrationStorageConfig()).toEqual({
-      provider: 'b2',
-      region: 'us-west-004',
-      endpoint: 'https://s3.us-west-004.backblazeb2.com',
-      accessKeyId: 'b2-key',
-      secretAccessKey: 'b2-secret',
-      bucketName: 'reader-audio',
-      narrationPrefix: 'narration',
-      signedUrlTtlSeconds: 900,
-      forcePathStyle: false,
-    });
-  });
-
   it('builds a local config and returns protected local asset URLs', async () => {
     process.env.NARRATION_STORAGE_PROVIDER = 'local';
     process.env.NARRATION_STORAGE_LOCAL_DIR = 'storage';
 
-    expect(getNarrationStorageProvider()).toBe('local');
-    expect(getNarrationStorageConfig()).toEqual({
+    await expect(getNarrationStorageProvider()).resolves.toBe('local');
+    const config = await getNarrationStorageConfig();
+    expect(config).toEqual({
       provider: 'local',
       localBaseDir: 'storage',
       narrationPrefix: 'narration',
@@ -183,33 +155,37 @@ describe('narration storage adapter', () => {
     );
   });
 
-  it('supports explicit provider overrides when signing narration objects', async () => {
-    process.env.AWS_REGION = 'us-east-1';
-    process.env.AWS_ACCESS_KEY_ID = 'aws-key';
-    process.env.AWS_SECRET_ACCESS_KEY = 'aws-secret';
-    process.env.S3_BUCKET_NAME = 'aws-audio';
+  it('supports hybrid provider and fallback to local', async () => {
+    process.env.NARRATION_STORAGE_PROVIDER = 'hybrid';
     process.env.R2_ACCOUNT_ID = 'account-123';
     process.env.R2_ACCESS_KEY_ID = 'r2-key';
     process.env.R2_SECRET_ACCESS_KEY = 'r2-secret';
-    process.env.R2_BUCKET_NAME = 'r2-audio';
-    getSignedUrl.mockResolvedValueOnce('https://signed.example/r2-audio.mp3');
+    process.env.R2_BUCKET_NAME = 'reader-audio';
+    process.env.NARRATION_STORAGE_LOCAL_DIR = 'storage';
 
-    await expect(
-      createPresignedNarrationObjectUrl(' chapters/audio.mp3 ', 'r2')
-    ).resolves.toBe('https://signed.example/r2-audio.mp3');
-
-    expect(S3Client).toHaveBeenCalledWith({
-      region: 'auto',
-      endpoint: 'https://account-123.r2.cloudflarestorage.com',
-      credentials: {
-        accessKeyId: 'r2-key',
-        secretAccessKey: 'r2-secret',
+    await expect(getNarrationStorageProvider()).resolves.toBe('hybrid');
+    const config = await getNarrationStorageConfig();
+    expect(config).toMatchObject({
+      provider: 'hybrid',
+      localConfig: {
+        provider: 'local',
+        localBaseDir: 'storage',
+      },
+      r2Config: {
+        provider: 'r2',
+        bucketName: 'reader-audio',
       },
     });
-    expect(GetObjectCommand).toHaveBeenCalledWith({
-      Bucket: 'r2-audio',
-      Key: 'chapters/audio.mp3',
-    });
+
+    // Test presigned URL generation (primary R2)
+    getSignedUrl.mockResolvedValueOnce('https://signed.example/hybrid.mp3');
+    await expect(createPresignedNarrationObjectUrl(' chapters/audio.mp3 ')).resolves.toBe('https://signed.example/hybrid.mp3');
+
+    // Test presigned URL generation fallback to local on R2 error
+    getSignedUrl.mockRejectedValueOnce(new Error('R2 Network Error'));
+    await expect(createPresignedNarrationObjectUrl(' chapters/audio.mp3 ')).resolves.toBe(
+      '/api/narration/object?provider=local&key=chapters%2Faudio.mp3'
+    );
   });
 
   it('writes narration objects to the configured local filesystem root', async () => {
@@ -225,7 +201,7 @@ describe('narration storage adapter', () => {
         'audio/wav'
       );
 
-      const storedPath = resolveLocalNarrationObjectFilePath(
+      const storedPath = await resolveLocalNarrationObjectFilePath(
         'narration/book-123/voice/chapters/000.wav',
         'local'
       );

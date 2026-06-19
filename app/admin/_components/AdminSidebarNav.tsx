@@ -8,6 +8,7 @@ import {
   Newspaper,
   LayoutDashboard,
   UploadCloud,
+  Settings,
 } from "lucide-react";
 
 const navigationItems = [
@@ -20,7 +21,7 @@ const navigationItems = [
   {
     href: "/admin/books",
     label: "Books",
-    description: "Metadata, donor access, and narration control",
+    description: "Metadata, supporter access, and narration control",
     icon: BookCopy,
   },
   {
@@ -34,6 +35,12 @@ const navigationItems = [
     label: "Upload",
     description: "Add a new EPUB and extract its metadata",
     icon: UploadCloud,
+  },
+  {
+    href: "/admin/settings",
+    label: "Settings",
+    description: "Nominate hybrid R2/local storage and encrypt keys",
+    icon: Settings,
   },
 ] as const;
 
@@ -54,7 +61,7 @@ export default function AdminSidebarNav({
 
   if (compact) {
     return (
-      <div className={["grid gap-3 sm:grid-cols-2 xl:grid-cols-4", className].filter(Boolean).join(" ")}>
+      <div className={["grid gap-3 sm:grid-cols-2 xl:grid-cols-5", className].filter(Boolean).join(" ")}>
         {navigationItems.map((item) => {
           const Icon = item.icon;
           const active = isCurrentPath(pathname, item.href);
@@ -95,14 +102,14 @@ export default function AdminSidebarNav({
           );
         })}
 
-        <div className="rounded-2xl bg-landing-accent/8 p-4 ring-1 ring-landing-accent/10 sm:col-span-2 xl:col-span-4">
+        <div className="rounded-2xl bg-landing-accent/8 p-4 ring-1 ring-landing-accent/10 sm:col-span-2 xl:col-span-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">
                 Reader-facing app
               </p>
               <p className="mt-2 text-sm text-landing-text-muted">
-                Jump back to the public library to verify donor access, playback, and live book pages.
+                Jump back to the public library to verify supporter access, playback, and live book pages.
               </p>
             </div>
             <Link
@@ -169,7 +176,7 @@ export default function AdminSidebarNav({
           Reader-facing app
         </p>
         <p className="mt-2 text-sm text-landing-text-muted">
-          Hop back to the public library to verify donor access, reader playback, and the polished book pages.
+          Hop back to the public library to verify supporter access, reader playback, and the polished book pages.
         </p>
         <Link
           href="/"

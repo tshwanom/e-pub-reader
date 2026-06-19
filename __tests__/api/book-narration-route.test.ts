@@ -23,9 +23,10 @@ jest.mock('@/lib/book-narration-jobs', () => ({
 
 jest.mock('@/lib/narration-storage', () => ({
   createPresignedNarrationObjectUrl: jest.fn(),
-  getNarrationStorageProvider: jest.fn(() => 's3'),
-  getNarrationStorageProviderLabel: jest.fn(() => 'S3'),
-  isNarrationStorageConfigured: jest.fn(() => true),
+  getNarrationStorageProvider: jest.fn(async () => 'r2'),
+  getNarrationStorageProviderLabel: jest.fn(() => 'R2'),
+  isNarrationStorageConfigured: jest.fn(async () => true),
+  getNarrationStorageConfig: jest.fn(async () => ({ provider: 'r2' })),
 }));
 
 jest.mock('@/lib/prisma', () => ({

@@ -27,16 +27,16 @@ import {
 } from "@/lib/narration-storage";
 import { prisma } from "@/lib/prisma";
 
-function buildContentNarrationObjectKey(contentId: string, narrationId: string) {
-  const storageProvider = getNarrationStorageProvider();
-  const storageConfig = getNarrationStorageConfig(storageProvider);
+async function buildContentNarrationObjectKey(contentId: string, narrationId: string) {
+  const storageProvider = await getNarrationStorageProvider();
+  const storageConfig = await getNarrationStorageConfig(storageProvider);
   const prefix = storageConfig?.narrationPrefix || "narration";
   return `${prefix}/content/${contentId}/${narrationId}/audio.wav`;
 }
 
 async function uploadNarrationObject(objectKey: string, body: Buffer, contentType: string) {
-  const storageProvider = getNarrationStorageProvider();
-  const storageConfig = getNarrationStorageConfig(storageProvider);
+  const storageProvider = await getNarrationStorageProvider();
+  const storageConfig = await getNarrationStorageConfig(storageProvider);
 
   if (!storageConfig) {
     throw new Error(
@@ -185,7 +185,7 @@ async function runContentNarrationJob(params: {
         data: {
           status: "READY",
           ...(shouldActivateAsDefault ? { active: true } : {}),
-          storageProvider: toPersistedNarrationStorageProvider(getNarrationStorageProvider()),
+          storageProvider: toPersistedNarrationStorageProvider(await getNarrationStorageProvider()),
           sourceHash,
           stylePrompt,
           audioObjectKey,
@@ -245,8 +245,8 @@ export async function queueContentNarrationGeneration(params: {
   activateAsDefault?: boolean;
   ensureNarrationEnabled?: boolean;
 }) {
-  const storageProvider = getNarrationStorageProvider();
-  const storageConfigured = Boolean(getNarrationStorageConfig(storageProvider));
+  const storageProvider = await getNarrationStorageProvider();
+  const storageConfigured = Boolean(await getNarrationStorageConfig(storageProvider));
   const geminiConfigured = isGeminiTtsConfigured();
 
   const content = await prisma.supplementaryContent.findUnique({
@@ -355,7 +355,7 @@ export async function queueContentNarrationGeneration(params: {
   const shouldActivateAsDefault = Boolean(
     params.activateAsDefault || !currentActiveNarration || currentActiveNarration.id === draftNarration.id
   );
-  const audioObjectKey = buildContentNarrationObjectKey(content.id, draftNarration.id);
+  const audioObjectKey = await buildContentNarrationObjectKey(content.id, draftNarration.id);
 
   void runContentNarrationJob({
     content: {

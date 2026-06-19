@@ -10,6 +10,7 @@ export default async function Header() {
     { href: '/blog', label: 'Blog' },
     { href: '/videos', label: 'Videos' },
     { href: '/poems', label: 'Poems' },
+    { href: '/support', label: 'Support' },
     ...(session?.user?.role === 'ADMIN' ? [{ href: '/admin', label: 'Admin' }] : []),
   ];
 

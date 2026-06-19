@@ -2,9 +2,11 @@ import fs from "fs/promises";
 import path from "path";
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { prisma } from "@/lib/prisma";
+import { decrypt } from "@/lib/crypto";
 
-export type RemoteNarrationStorageProvider = "s3" | "r2" | "b2";
-export type NarrationStorageProvider = RemoteNarrationStorageProvider | "local";
+export type RemoteNarrationStorageProvider = "r2";
+export type NarrationStorageProvider = RemoteNarrationStorageProvider | "local" | "hybrid";
 
 type BaseNarrationStorageConfig = {
   provider: NarrationStorageProvider;
@@ -27,7 +29,13 @@ export type LocalNarrationStorageConfig = BaseNarrationStorageConfig & {
   localBaseDir: string;
 };
 
-export type NarrationStorageConfig = RemoteNarrationStorageConfig | LocalNarrationStorageConfig;
+export type HybridNarrationStorageConfig = BaseNarrationStorageConfig & {
+  provider: "hybrid";
+  localConfig: LocalNarrationStorageConfig;
+  r2Config: RemoteNarrationStorageConfig;
+};
+
+export type NarrationStorageConfig = RemoteNarrationStorageConfig | LocalNarrationStorageConfig | HybridNarrationStorageConfig;
 
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 900;
 const DEFAULT_NARRATION_PREFIX = "narration";
@@ -43,7 +51,7 @@ function cleanEnvValue(value?: string | null) {
   return trimmed ? trimmed : undefined;
 }
 
-function parseSignedUrlTtlSeconds(value?: string) {
+function parseSignedUrlTtlSeconds(value?: string | number) {
   const parsed = Number(value);
 
   if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -53,7 +61,8 @@ function parseSignedUrlTtlSeconds(value?: string) {
   return Math.floor(parsed);
 }
 
-function parseBooleanEnv(value?: string) {
+function parseBooleanEnv(value?: string | boolean) {
+  if (typeof value === "boolean") return value;
   if (!value) {
     return false;
   }
@@ -63,14 +72,12 @@ function parseBooleanEnv(value?: string) {
 
 function parseNarrationStorageProvider(value?: string): NarrationStorageProvider | null {
   switch (value?.trim().toLowerCase()) {
-    case "s3":
-      return "s3";
     case "r2":
       return "r2";
-    case "b2":
-      return "b2";
     case "local":
       return "local";
+    case "hybrid":
+      return "hybrid";
     default:
       return null;
   }
@@ -89,20 +96,6 @@ function getSignedUrlTtlSeconds() {
   );
 }
 
-function deriveB2RegionFromEndpoint(endpoint?: string) {
-  if (!endpoint) {
-    return undefined;
-  }
-
-  try {
-    const { hostname } = new URL(endpoint);
-    const match = hostname.match(/^s3\.([^.]+)\.backblazeb2\.com$/i);
-    return match?.[1];
-  } catch {
-    return undefined;
-  }
-}
-
 function createNarrationStorageConfig(
   provider: RemoteNarrationStorageProvider,
   region: string | undefined,
@@ -111,7 +104,7 @@ function createNarrationStorageConfig(
   secretAccessKey: string | undefined,
   bucketName: string | undefined,
   forcePathStyle: boolean
-): NarrationStorageConfig | null {
+): RemoteNarrationStorageConfig | null {
   if (!region || !accessKeyId || !secretAccessKey || !bucketName) {
     return null;
   }
@@ -138,25 +131,6 @@ function getLocalNarrationStorageConfig(): LocalNarrationStorageConfig {
   };
 }
 
-function getS3NarrationStorageConfig() {
-  return createNarrationStorageConfig(
-    "s3",
-    cleanEnvValue(process.env.NARRATION_STORAGE_REGION)
-      ?? cleanEnvValue(process.env.AWS_REGION),
-    cleanEnvValue(process.env.NARRATION_STORAGE_ENDPOINT),
-    cleanEnvValue(process.env.NARRATION_STORAGE_ACCESS_KEY_ID)
-      ?? cleanEnvValue(process.env.AWS_ACCESS_KEY_ID),
-    cleanEnvValue(process.env.NARRATION_STORAGE_SECRET_ACCESS_KEY)
-      ?? cleanEnvValue(process.env.AWS_SECRET_ACCESS_KEY),
-    cleanEnvValue(process.env.NARRATION_STORAGE_BUCKET_NAME)
-      ?? cleanEnvValue(process.env.S3_BUCKET_NAME),
-    parseBooleanEnv(
-      cleanEnvValue(process.env.NARRATION_STORAGE_FORCE_PATH_STYLE)
-        ?? cleanEnvValue(process.env.AWS_S3_FORCE_PATH_STYLE)
-    )
-  );
-}
-
 function getR2NarrationStorageConfig() {
   const accountId = cleanEnvValue(process.env.R2_ACCOUNT_ID);
 
@@ -181,34 +155,35 @@ function getR2NarrationStorageConfig() {
   );
 }
 
-function getB2NarrationStorageConfig() {
-  const explicitEndpoint = cleanEnvValue(process.env.NARRATION_STORAGE_ENDPOINT)
-    ?? cleanEnvValue(process.env.B2_ENDPOINT);
-  const region = cleanEnvValue(process.env.NARRATION_STORAGE_REGION)
-    ?? cleanEnvValue(process.env.B2_REGION)
-    ?? deriveB2RegionFromEndpoint(explicitEndpoint);
-  const endpoint = explicitEndpoint ?? (region ? `https://s3.${region}.backblazeb2.com` : undefined);
-
-  return createNarrationStorageConfig(
-    "b2",
-    region,
-    endpoint,
-    cleanEnvValue(process.env.NARRATION_STORAGE_ACCESS_KEY_ID)
-      ?? cleanEnvValue(process.env.B2_ACCESS_KEY_ID)
-      ?? cleanEnvValue(process.env.B2_KEY_ID),
-    cleanEnvValue(process.env.NARRATION_STORAGE_SECRET_ACCESS_KEY)
-      ?? cleanEnvValue(process.env.B2_SECRET_ACCESS_KEY)
-      ?? cleanEnvValue(process.env.B2_APPLICATION_KEY),
-    cleanEnvValue(process.env.NARRATION_STORAGE_BUCKET_NAME)
-      ?? cleanEnvValue(process.env.B2_BUCKET_NAME),
-    parseBooleanEnv(
-      cleanEnvValue(process.env.NARRATION_STORAGE_FORCE_PATH_STYLE)
-        ?? cleanEnvValue(process.env.B2_FORCE_PATH_STYLE)
-    )
-  );
+export async function getDbSettings() {
+  try {
+    const settings = await prisma.siteSettings.findFirst();
+    if (!settings) return null;
+    
+    let decryptedSettings: any = {};
+    if (settings.storageSettings) {
+      const decryptedStr = decrypt(settings.storageSettings);
+      if (decryptedStr) {
+        decryptedSettings = JSON.parse(decryptedStr);
+      }
+    }
+    
+    return {
+      storageProvider: settings.storageProvider || "local",
+      storageSettings: decryptedSettings
+    };
+  } catch (error) {
+    console.error("Error reading storage settings from database:", error);
+    return null;
+  }
 }
 
-export function getNarrationStorageProvider(): NarrationStorageProvider {
+export async function getNarrationStorageProvider(): Promise<NarrationStorageProvider> {
+  const dbSettings = await getDbSettings();
+  if (dbSettings?.storageProvider) {
+    return dbSettings.storageProvider as NarrationStorageProvider;
+  }
+
   const explicitProvider = parseNarrationStorageProvider(
     cleanEnvValue(process.env.NARRATION_STORAGE_PROVIDER)
   );
@@ -225,63 +200,116 @@ export function getNarrationStorageProvider(): NarrationStorageProvider {
     return "r2";
   }
 
-  if (
-    cleanEnvValue(process.env.B2_ENDPOINT)
-    || cleanEnvValue(process.env.B2_ACCESS_KEY_ID)
-    || cleanEnvValue(process.env.B2_KEY_ID)
-    || cleanEnvValue(process.env.B2_APPLICATION_KEY)
-    || cleanEnvValue(process.env.B2_BUCKET_NAME)
-  ) {
-    return "b2";
-  }
-
-  return "s3";
+  return "local";
 }
 
 export function isRemoteNarrationStorageProvider(
   provider: NarrationStorageProvider
 ): provider is RemoteNarrationStorageProvider {
-  return provider !== "local";
+  return provider === "r2";
 }
 
 export function isRemoteNarrationStorageConfig(
   config: NarrationStorageConfig
 ): config is RemoteNarrationStorageConfig {
-  return config.provider !== "local";
+  return config.provider === "r2";
 }
 
 export function getNarrationStorageProviderLabel(
-  provider: NarrationStorageProvider = getNarrationStorageProvider()
+  provider: NarrationStorageProvider
 ) {
   return provider.toUpperCase();
 }
 
-function resolveNarrationStorageProvider(
-  provider: NarrationStorageProvider = getNarrationStorageProvider()
-) {
-  return provider;
-}
+export async function getNarrationStorageConfig(
+  provider?: NarrationStorageProvider
+): Promise<NarrationStorageConfig | null> {
+  const resolvedProvider = provider ?? (await getNarrationStorageProvider());
+  const dbSettings = await getDbSettings();
 
-export function getNarrationStorageConfig(
-  provider: NarrationStorageProvider = getNarrationStorageProvider()
-): NarrationStorageConfig | null {
-  switch (resolveNarrationStorageProvider(provider)) {
+  // Try db settings first
+  if (dbSettings && dbSettings.storageSettings) {
+    const config = dbSettings.storageSettings[resolvedProvider];
+    if (config) {
+      if (resolvedProvider === "hybrid") {
+        return {
+          provider: "hybrid",
+          narrationPrefix: config.narrationPrefix || getNarrationPrefix(),
+          signedUrlTtlSeconds: parseSignedUrlTtlSeconds(config.signedUrlTtlSeconds),
+          localConfig: {
+            provider: "local",
+            localBaseDir: config.localConfig?.localBaseDir || DEFAULT_LOCAL_STORAGE_DIR,
+            narrationPrefix: config.narrationPrefix || getNarrationPrefix(),
+            signedUrlTtlSeconds: parseSignedUrlTtlSeconds(config.signedUrlTtlSeconds),
+          },
+          r2Config: {
+            provider: "r2",
+            region: config.r2Config?.region || "auto",
+            endpoint: config.r2Config?.endpoint,
+            accessKeyId: config.r2Config?.accessKeyId || "",
+            secretAccessKey: config.r2Config?.secretAccessKey || "",
+            bucketName: config.r2Config?.bucketName || "",
+            forcePathStyle: !!config.r2Config?.forcePathStyle,
+            narrationPrefix: config.narrationPrefix || getNarrationPrefix(),
+            signedUrlTtlSeconds: parseSignedUrlTtlSeconds(config.signedUrlTtlSeconds),
+          }
+        };
+      } else if (resolvedProvider === "local") {
+        return {
+          provider: "local",
+          localBaseDir: config.localBaseDir || DEFAULT_LOCAL_STORAGE_DIR,
+          narrationPrefix: config.narrationPrefix || getNarrationPrefix(),
+          signedUrlTtlSeconds: parseSignedUrlTtlSeconds(config.signedUrlTtlSeconds),
+        };
+      } else if (resolvedProvider === "r2") {
+        return {
+          provider: "r2",
+          region: config.region || "auto",
+          endpoint: config.endpoint,
+          accessKeyId: config.accessKeyId || "",
+          secretAccessKey: config.secretAccessKey || "",
+          bucketName: config.bucketName || "",
+          forcePathStyle: !!config.forcePathStyle,
+          narrationPrefix: config.narrationPrefix || getNarrationPrefix(),
+          signedUrlTtlSeconds: parseSignedUrlTtlSeconds(config.signedUrlTtlSeconds),
+        };
+      }
+    }
+  }
+
+  // Fallback to env-based config
+  switch (resolvedProvider) {
     case "local":
       return getLocalNarrationStorageConfig();
     case "r2":
       return getR2NarrationStorageConfig();
-    case "b2":
-      return getB2NarrationStorageConfig();
-    case "s3":
+    case "hybrid": {
+      const localCfg = getLocalNarrationStorageConfig();
+      const r2Cfg = getR2NarrationStorageConfig();
+      if (!r2Cfg) return null;
+      return {
+        provider: "hybrid",
+        narrationPrefix: getNarrationPrefix(),
+        signedUrlTtlSeconds: getSignedUrlTtlSeconds(),
+        localConfig: localCfg,
+        r2Config: r2Cfg,
+      };
+    }
     default:
-      return getS3NarrationStorageConfig();
+      return null;
   }
 }
 
-export function isNarrationStorageConfigured(
-  provider: NarrationStorageProvider = getNarrationStorageProvider()
-) {
-  return getNarrationStorageConfig(provider) !== null;
+export async function isNarrationStorageConfigured(
+  provider?: NarrationStorageProvider
+): Promise<boolean> {
+  const resolvedProvider = provider ?? (await getNarrationStorageProvider());
+  const config = await getNarrationStorageConfig(resolvedProvider);
+  if (!config) return false;
+  if (config.provider === "hybrid") {
+    return !!config.r2Config && !!config.localConfig;
+  }
+  return true;
 }
 
 function getNarrationStorageClientCacheKey(config: RemoteNarrationStorageConfig) {
@@ -296,33 +324,38 @@ function getNarrationStorageClientCacheKey(config: RemoteNarrationStorageConfig)
   ].join(":");
 }
 
-export function getNarrationStorageClient(
-  provider: NarrationStorageProvider = getNarrationStorageProvider()
-) {
-  const resolvedProvider = resolveNarrationStorageProvider(provider);
-  const config = getNarrationStorageConfig(resolvedProvider);
+export async function getNarrationStorageClient(
+  provider?: NarrationStorageProvider
+): Promise<S3Client> {
+  const resolvedProvider = provider ?? (await getNarrationStorageProvider());
+  const config = await getNarrationStorageConfig(resolvedProvider);
 
   if (!config) {
     throw new Error(
-      `${getNarrationStorageProviderLabel(resolvedProvider)} narration storage is not configured.`
+      `${resolvedProvider.toUpperCase()} narration storage is not configured.`
     );
   }
 
-  if (!isRemoteNarrationStorageConfig(config)) {
+  let targetConfig: RemoteNarrationStorageConfig;
+  if (config.provider === "hybrid") {
+    targetConfig = config.r2Config;
+  } else if (isRemoteNarrationStorageConfig(config)) {
+    targetConfig = config;
+  } else {
     throw new Error("Local narration storage does not use an S3 client.");
   }
 
-  const cacheKey = getNarrationStorageClientCacheKey(config);
+  const cacheKey = getNarrationStorageClientCacheKey(targetConfig);
 
   if (!narrationStorageClientCache || narrationStorageClientCache.cacheKey !== cacheKey) {
     const clientConfig = {
-      region: config.region,
+      region: targetConfig.region,
       credentials: {
-        accessKeyId: config.accessKeyId,
-        secretAccessKey: config.secretAccessKey,
+        accessKeyId: targetConfig.accessKeyId,
+        secretAccessKey: targetConfig.secretAccessKey,
       },
-      ...(config.endpoint ? { endpoint: config.endpoint } : {}),
-      ...(config.forcePathStyle ? { forcePathStyle: true } : {}),
+      ...(targetConfig.endpoint ? { endpoint: targetConfig.endpoint } : {}),
+      ...(targetConfig.forcePathStyle ? { forcePathStyle: true } : {}),
     };
 
     narrationStorageClientCache = {
@@ -363,11 +396,12 @@ function createLocalNarrationObjectAccessUrl(objectKey: string) {
   return `/api/narration/object?provider=local&key=${encodeURIComponent(objectKey)}`;
 }
 
-export function extractNarrationBookIdFromObjectKey(
+export async function extractNarrationBookIdFromObjectKey(
   objectKey: string,
-  provider: NarrationStorageProvider = getNarrationStorageProvider()
-) {
-  const config = getNarrationStorageConfig(provider);
+  provider?: NarrationStorageProvider
+): Promise<string | null> {
+  const resolvedProvider = provider ?? (await getNarrationStorageProvider());
+  const config = await getNarrationStorageConfig(resolvedProvider);
 
   if (!config) {
     return null;
@@ -386,19 +420,28 @@ export function extractNarrationBookIdFromObjectKey(
   return objectSegments[prefixSegments.length] ?? null;
 }
 
-export function resolveLocalNarrationObjectFilePath(
+export async function resolveLocalNarrationObjectFilePath(
   objectKey: string,
-  provider: NarrationStorageProvider = getNarrationStorageProvider()
-) {
-  const resolvedProvider = resolveNarrationStorageProvider(provider);
-  const config = getNarrationStorageConfig(resolvedProvider);
+  provider?: NarrationStorageProvider
+): Promise<string> {
+  const resolvedProvider = provider ?? (await getNarrationStorageProvider());
+  const config = await getNarrationStorageConfig(resolvedProvider);
 
-  if (!config || config.provider !== "local") {
+  if (!config) {
     throw new Error("Local narration storage is not configured.");
   }
 
+  let localBaseDir = "";
+  if (config.provider === "local") {
+    localBaseDir = config.localBaseDir;
+  } else if (config.provider === "hybrid") {
+    localBaseDir = config.localConfig.localBaseDir;
+  } else {
+    throw new Error("R2 narration storage does not use local filepath.");
+  }
+
   const normalizedObjectKey = normalizeNarrationObjectKey(objectKey);
-  const absoluteBaseDir = path.resolve(config.localBaseDir);
+  const absoluteBaseDir = path.resolve(localBaseDir);
   const absoluteObjectPath = path.resolve(absoluteBaseDir, normalizedObjectKey);
   const relativeObjectPath = path.relative(absoluteBaseDir, absoluteObjectPath);
 
@@ -413,28 +456,47 @@ export async function writeNarrationObject(
   objectKey: string,
   body: Buffer,
   contentType: string,
-  provider: NarrationStorageProvider = getNarrationStorageProvider()
+  provider?: NarrationStorageProvider
 ) {
-  const resolvedProvider = resolveNarrationStorageProvider(provider);
-  const config = getNarrationStorageConfig(resolvedProvider);
+  const resolvedProvider = provider ?? (await getNarrationStorageProvider());
+  const config = await getNarrationStorageConfig(resolvedProvider);
 
   if (!config) {
     throw new Error(
-      `${getNarrationStorageProviderLabel(resolvedProvider)} narration storage is not configured.`
+      `${resolvedProvider.toUpperCase()} narration storage is not configured.`
     );
   }
 
   const normalizedObjectKey = normalizeNarrationObjectKey(objectKey);
 
   if (config.provider === "local") {
-    const absoluteObjectPath = resolveLocalNarrationObjectFilePath(normalizedObjectKey, resolvedProvider);
+    const absoluteObjectPath = await resolveLocalNarrationObjectFilePath(normalizedObjectKey, resolvedProvider);
 
     await fs.mkdir(path.dirname(absoluteObjectPath), { recursive: true });
     await fs.writeFile(absoluteObjectPath, body);
     return;
   }
 
-  await getNarrationStorageClient(resolvedProvider).send(
+  if (config.provider === "hybrid") {
+    const absoluteObjectPath = await resolveLocalNarrationObjectFilePath(normalizedObjectKey, "local");
+    await fs.mkdir(path.dirname(absoluteObjectPath), { recursive: true });
+    await fs.writeFile(absoluteObjectPath, body);
+
+    const client = await getNarrationStorageClient("r2");
+    await client.send(
+      new PutObjectCommand({
+        Bucket: config.r2Config.bucketName,
+        Key: normalizedObjectKey,
+        Body: body,
+        ContentType: contentType,
+        CacheControl: "private, max-age=300",
+      })
+    );
+    return;
+  }
+
+  const client = await getNarrationStorageClient(resolvedProvider);
+  await client.send(
     new PutObjectCommand({
       Bucket: config.bucketName,
       Key: normalizedObjectKey,
@@ -447,14 +509,14 @@ export async function writeNarrationObject(
 
 export async function createPresignedNarrationObjectUrl(
   objectKey: string,
-  provider: NarrationStorageProvider = getNarrationStorageProvider()
-) {
-  const resolvedProvider = resolveNarrationStorageProvider(provider);
-  const config = getNarrationStorageConfig(resolvedProvider);
+  provider?: NarrationStorageProvider
+): Promise<string> {
+  const resolvedProvider = provider ?? (await getNarrationStorageProvider());
+  const config = await getNarrationStorageConfig(resolvedProvider);
 
   if (!config) {
     throw new Error(
-      `${getNarrationStorageProviderLabel(resolvedProvider)} narration storage is not configured.`
+      `${resolvedProvider.toUpperCase()} narration storage is not configured.`
     );
   }
 
@@ -464,8 +526,28 @@ export async function createPresignedNarrationObjectUrl(
     return createLocalNarrationObjectAccessUrl(normalizedObjectKey);
   }
 
+  if (config.provider === "hybrid") {
+    try {
+      const client = await getNarrationStorageClient("r2");
+      return await getSignedUrl(
+        client,
+        new GetObjectCommand({
+          Bucket: config.r2Config.bucketName,
+          Key: normalizedObjectKey,
+        }),
+        {
+          expiresIn: config.signedUrlTtlSeconds,
+        }
+      );
+    } catch (error) {
+      console.error("Hybrid: Failed to create presigned URL from R2, falling back to local:", error);
+      return createLocalNarrationObjectAccessUrl(normalizedObjectKey);
+    }
+  }
+
+  const client = await getNarrationStorageClient(resolvedProvider);
   return getSignedUrl(
-    getNarrationStorageClient(resolvedProvider),
+    client,
     new GetObjectCommand({
       Bucket: config.bucketName,
       Key: normalizedObjectKey,

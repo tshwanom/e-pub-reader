@@ -218,26 +218,26 @@ export default async function BookDetailsPage({
   const accessBadgeLabel = getBookAccessBadgeLabel(access.bookDonorAccessLevel, access.hasAccess);
   const lockedSupportMessage = session
     ? bookRequiresRecurringSupport
-      ? 'Start or keep an active monthly donation to unlock this book and future recurring-supporter releases.'
-      : 'Make one completed donation to unlock this book and future donor releases.'
+      ? 'Start or keep an active monthly contribution to unlock this book and future sustainer releases.'
+      : 'Support the mission with a once-off contribution to unlock this book and future supporter releases.'
     : bookRequiresRecurringSupport
-      ? 'Sign in first, then start monthly support to unlock this book and the recurring-supporter library.'
-      : 'Sign in first, then donate to unlock this book and the donor library.';
+      ? 'Sign in first, then start monthly support to unlock this book and the sustainer library.'
+      : 'Sign in first, then support the mission to unlock this book and the supporter library.';
   const defaultUnlockMessage = bookRequiresRecurringSupport
-    ? 'Start or keep an active monthly donation to unlock this recurring-donor title and future recurring-supporter releases on your account.'
-    : 'Make any completed donation to unlock this book and future donor releases on your account.';
+    ? 'Start or keep an active monthly contribution to unlock this sustainer title and future sustainer releases on your account.'
+    : 'Make any once-off contribution to unlock this book and future supporter releases on your account.';
   const defaultNarrationUnlockMessage = bookRequiresRecurringSupport
-    ? 'Start or keep an active monthly donation to unlock donor narration for this title on your account.'
-    : 'Support the work once to unlock donor narration for this title on your account.';
+    ? 'Start or keep an active monthly contribution to unlock narrated mode for this title on your account.'
+    : 'Support the work once to unlock narrated mode for this title on your account.';
   const donorNarrationMessage = !book.narrationEnabled || !donorFeatureAccess
     ? null
     : donorFeatureAccess.hasAccess
-      ? 'Donor narration is unlocked on your account and will appear inside the reader whenever the signed audio is ready.'
+      ? 'Supporter narration is unlocked on your account and will appear inside the reader whenever the signed audio is ready.'
       : bookRequiresRecurringSupport
-        ? 'Narrated mode follows this title’s recurring-supporter access. Start or keep an active monthly donation to unlock the narration player.'
+        ? 'Narrated mode follows this title’s sustainer access. Start or keep an active monthly contribution to unlock the narration player.'
         : bookRequiresDonation
-          ? 'Narrated mode follows this title’s donor access, so the narration player unlocks with the same support requirement.'
-          : 'Narrated mode is reserved for donors. Support the work once to unlock the narration player on your account.';
+          ? 'Narrated mode follows this title’s supporter access, so the narration player unlocks with the same support requirement.'
+          : 'Narrated mode is reserved for supporters. Support the work once to unlock the narration player on your account.';
   const contentViewerAccess = {
     donorTier: access.donorTier,
     isPrivileged: access.isPrivileged,
@@ -372,17 +372,17 @@ export default async function BookDetailsPage({
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-landing-accent">
                     {access.hasAccess
                       ? bookRequiresRecurringSupport
-                        ? 'Recurring support active'
-                        : 'Donor access active'
+                        ? 'Sustainer support active'
+                        : 'Supporter access active'
                       : bookRequiresRecurringSupport
-                        ? 'Recurring-supporter title'
-                        : 'Donor title'}
+                        ? 'Sustainer title'
+                        : 'Supporter title'}
                   </p>
                   <p className="mt-2 text-sm leading-relaxed text-landing-text-muted">
                     {access.hasAccess
                       ? bookRequiresRecurringSupport
-                        ? 'Thanks for sustaining the work monthly — this recurring-supporter release is unlocked on your account.'
-                        : 'Thanks for supporting the work — this donor release is unlocked on your account.'
+                        ? 'Thanks for sustaining the work monthly — this sustainer release is unlocked on your account.'
+                        : 'Thanks for supporting the work — this supporter release is unlocked on your account.'
                       : lockedSupportMessage}
                   </p>
                 </div>
@@ -441,7 +441,7 @@ export default async function BookDetailsPage({
           <div className="space-y-6 lg:col-span-2 min-w-0">
             {donationStatus === 'success' && (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 px-5 py-4 text-sm text-emerald-800">
-                Donation received successfully. {bookRequiresDonation ? 'This title is now unlocked on your account.' : 'Thank you for supporting the work.'}
+                Support contribution received successfully. {bookRequiresDonation ? 'This title is now unlocked on your account.' : 'Thank you for supporting the work.'}
               </div>
             )}
 

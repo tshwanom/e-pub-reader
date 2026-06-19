@@ -20,7 +20,7 @@ import {
   isGeminiTtsConfigured,
   synthesizeGeminiSpeech,
 } from "@/lib/gemini-tts";
-import { toNarrationObjectStorageProvider } from "@/lib/narration";
+import { toNarrationObjectStorageProvider, PersistedNarrationStorageProvider } from "@/lib/narration";
 import { getNarrationStorageConfig, getNarrationStorageProvider, getNarrationStorageProviderLabel } from "@/lib/narration-storage";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
@@ -117,7 +117,7 @@ function formatNarrationForAdmin(narration: {
     status: narration.status,
     active: narration.active,
     storageProvider: toNarrationObjectStorageProvider(
-      narration.storageProvider as "S3" | "R2" | "B2" | "LOCAL"
+      narration.storageProvider as PersistedNarrationStorageProvider
     ),
     audioObjectKey: narration.audioObjectKey,
     audioMimeType: narration.audioMimeType,
@@ -176,8 +176,8 @@ export async function GET(
     return NextResponse.json({ error: "Content not found" }, { status: 404 });
   }
 
-  const storageProvider = getNarrationStorageProvider();
-  const storageConfigured = Boolean(getNarrationStorageConfig(storageProvider));
+  const storageProvider = await getNarrationStorageProvider();
+  const storageConfigured = Boolean(await getNarrationStorageConfig(storageProvider));
   const geminiConfigured = isGeminiTtsConfigured();
   const transcript = getContentNarrationTranscript(content);
   const isVideoContent = content.type === "VIDEO";
@@ -244,8 +244,8 @@ export async function POST(
   }
 
   const { contentId } = await params;
-  const storageProvider = getNarrationStorageProvider();
-  const storageConfigured = Boolean(getNarrationStorageConfig(storageProvider));
+  const storageProvider = await getNarrationStorageProvider();
+  const storageConfigured = Boolean(await getNarrationStorageConfig(storageProvider));
   const geminiConfigured = isGeminiTtsConfigured();
 
   try {

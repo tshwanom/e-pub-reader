@@ -82,7 +82,7 @@ export default async function BlogPage() {
             const articleAccess = getContentAccessStateForViewer(article, viewerAccess);
             const supportHref = article.book
               ? `/books/${article.book.slug || article.bookId || article.id}#support-this-book`
-              : '/#donate';
+              : '/support';
             const badgeLabel = getBookAccessBadgeLabel(articleAccess.contentDonorAccessLevel, articleAccess.hasAccess);
             const badgeClasses = articleAccess.hasAccess
               ? 'bg-emerald-100 text-emerald-700'
@@ -135,8 +135,8 @@ export default async function BlogPage() {
                       supportLabel={article.book ? getBookSupportCallToAction(articleAccess.contentDonorAccessLevel) : 'Support the Revolution'}
                       secondaryHref={article.book ? `/books/${article.book.slug || article.bookId || article.id}` : '/library'}
                       secondaryLabel={article.book ? 'Open related book' : 'Browse library'}
-                      title="Donor-only article"
-                      message="This article is reserved for supporters. Unlock it on your account to read the full piece and any donor narration that comes with it."
+                      title="Supporter-only article"
+                      message="This article is reserved for supporters. Unlock it on your account to read the full piece and any supporter narration that comes with it."
                       className="mt-4"
                     />
                   ) : null}

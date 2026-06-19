@@ -280,7 +280,7 @@ export default async function VideosPage() {
                 <Link href="/library" className="brand-button min-w-[12rem]">
                   Explore the library
                 </Link>
-                <Link href="/#donate" className="ghost-button min-w-[12rem]">
+                <Link href="/support" className="ghost-button min-w-[12rem]">
                   Support the work
                 </Link>
               </div>

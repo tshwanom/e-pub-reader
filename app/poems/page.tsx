@@ -67,7 +67,7 @@ export default async function PoemsPage() {
             const poemAccess = getContentAccessStateForViewer(poem, viewerAccess);
             const supportHref = poem.book
               ? `/books/${poem.book.slug || poem.bookId}#support-this-book`
-              : '/#donate';
+              : '/support';
             const badgeLabel = getBookAccessBadgeLabel(poemAccess.contentDonorAccessLevel, poemAccess.hasAccess);
             const badgeClasses = poemAccess.hasAccess
               ? 'bg-emerald-100 text-emerald-700'
@@ -109,8 +109,8 @@ export default async function PoemsPage() {
                     supportLabel={poem.book ? getBookSupportCallToAction(poemAccess.contentDonorAccessLevel) : 'Support the Revolution'}
                     secondaryHref={poem.book ? `/books/${poem.book.slug || poem.bookId}` : '/library'}
                     secondaryLabel={poem.book ? 'Open related book' : 'Browse library'}
-                    title="Donor-only poem"
-                    message="This poem is reserved for supporters. Unlock it on your account to reveal the full piece and any donor narration attached to it."
+                    title="Supporter-only poem"
+                    message="This poem is reserved for supporters. Unlock it on your account to reveal the full piece and any supporter narration attached to it."
                     className="mx-auto mt-6 max-w-2xl"
                   />
                 )}

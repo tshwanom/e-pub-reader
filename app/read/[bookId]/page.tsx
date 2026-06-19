@@ -90,7 +90,7 @@ export default async function ReadBookPage({ params }: ReadBookPageParams) {
       <main className="flex min-h-screen items-center justify-center bg-landing-bg px-4 py-12">
         <div className="surface-card max-w-xl p-8 text-center sm:p-10">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">
-            Donor Library
+            Supporter Library
           </p>
           <h1 className="mt-4 font-playfair text-3xl font-semibold text-landing-text sm:text-4xl">
             “{book.title}” is reserved for {lockedAudienceLabel}

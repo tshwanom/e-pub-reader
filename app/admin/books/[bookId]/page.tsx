@@ -243,7 +243,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
                 </span>
               </div>
               <p className="mt-4 max-w-3xl text-sm leading-6 text-landing-text-muted sm:text-[15px]">
-                Update the catalog metadata, refine the donor access settings, and launch Gemini narration generation from one place.
+                Update the catalog metadata, refine the supporter access settings, and launch Gemini narration generation from one place.
               </p>
             </div>
           </div>
@@ -393,10 +393,10 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
                   />
                   <div>
                     <label className="block text-sm font-semibold text-landing-text">
-                      Enable donor narration
+                      Enable supporter narration
                     </label>
                     <p className="mt-2 text-sm leading-6 text-landing-text-muted">
-                      Show the narration headphones icon and allow donors to stream AI-generated audio once the signed narration assets are ready. Non-donors will still see narrated mode as locked.
+                      Show the narration headphones icon and allow supporters to stream AI-generated audio once the signed narration assets are ready. Non-supporters will still see narrated mode as locked.
                     </p>
                   </div>
                 </div>
@@ -533,13 +533,13 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
                   <h2 className="mt-2 text-xl font-semibold text-landing-text">Reader-facing impact</h2>
                   <p className="mt-2 text-sm leading-6 text-landing-text-muted">
                     {!isRestrictedBook
-                      ? 'This book is currently public, so readers can open the EPUB without donating, but narrated mode stays reserved for donors.'
+                      ? 'This book is currently public, so readers can open the EPUB without contributing, but narrated mode stays reserved for supporters.'
                       : requiresRecurringSupport
                         ? `This book will require ${getBookDonorRequirementText(donorAccessLevel)} before readers can open it or access the narrated mode.`
                         : `This book will require ${getBookDonorRequirementText(donorAccessLevel)} before readers can open it or access the narrated mode.`}
                   </p>
                   <p className="mt-4 text-sm text-landing-text-muted">
-                    After saving, open the reader and donor journey from the public side to verify access and playback exactly as a supporter would see it.
+                    After saving, open the reader and supporter journey from the public side to verify access and playback exactly as a supporter would see it.
                   </p>
                   <div className="mt-5">
                     <Link href={getBookPath({ id: bookId, slug: bookSlug })} className="ghost-button gap-2">
@@ -556,7 +556,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
           <div>
             <p className="text-sm font-semibold text-landing-text">Save catalog changes</p>
             <p className="mt-1 text-sm text-landing-text-muted">
-              Metadata, donor access, donation messaging, and print links are all saved together.
+              Metadata, supporter access, support messaging, and print links are all saved together.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">

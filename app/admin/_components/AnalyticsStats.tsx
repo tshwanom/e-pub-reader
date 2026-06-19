@@ -49,7 +49,7 @@ export default function AnalyticsStats({
       icon: BookCopy,
     },
     {
-      label: "Donor-only books",
+      label: "Supporter-only books",
       value: donorOnlyBooks.toLocaleString(),
       hint: "Premium access titles",
       icon: LockKeyhole,

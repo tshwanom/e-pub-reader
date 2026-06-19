@@ -179,7 +179,7 @@ function LoginPageContent() {
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-landing-accent">Passwordless sign-in & registration</p>
               <h3 className="mt-2 text-xl font-semibold text-landing-text">Sign in or create an account</h3>
               <p className="mt-2 text-sm leading-6 text-landing-text-muted">
-                Enter your email to sign in instantly or create a new free account. If you donated, please use your donor email to unlock premium benefits automatically.
+                Enter your email to sign in instantly or create a new free account. If you have supported the mission, please use the email you supported with to unlock your benefits automatically.
               </p>
             </div>
 

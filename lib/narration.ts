@@ -11,8 +11,8 @@ export type NarrationFeatureReason =
   | "book-access-required"
   | "catalog-unavailable";
 
-export type NarrationObjectStorageProvider = "s3" | "r2" | "b2" | "local";
-export type PersistedNarrationStorageProvider = "S3" | "R2" | "B2" | "LOCAL";
+export type NarrationObjectStorageProvider = "s3" | "r2" | "b2" | "local" | "hybrid";
+export type PersistedNarrationStorageProvider = "S3" | "R2" | "B2" | "LOCAL" | "HYBRID";
 
 const objectToPersistedNarrationStorageProviderMap: Record<
   NarrationObjectStorageProvider,
@@ -22,6 +22,7 @@ const objectToPersistedNarrationStorageProviderMap: Record<
   r2: "R2",
   b2: "B2",
   local: "LOCAL",
+  hybrid: "HYBRID",
 };
 
 const persistedToObjectNarrationStorageProviderMap: Record<
@@ -32,6 +33,7 @@ const persistedToObjectNarrationStorageProviderMap: Record<
   R2: "r2",
   B2: "b2",
   LOCAL: "local",
+  HYBRID: "hybrid",
 };
 
 export interface NarrationManifestCue {
@@ -116,7 +118,7 @@ const nullableTrimmedStringSchema = z.preprocess(
   z.string().nullable()
 );
 
-const persistedNarrationStorageProviderSchema = z.enum(["S3", "R2", "B2", "LOCAL"]);
+const persistedNarrationStorageProviderSchema = z.enum(["S3", "R2", "B2", "LOCAL", "HYBRID"]);
 
 const narrationStorageProviderInputSchema = z.preprocess((value) => {
   if (typeof value !== "string") {
@@ -134,6 +136,8 @@ const narrationStorageProviderInputSchema = z.preprocess((value) => {
       return "B2";
     case "local":
       return "LOCAL";
+    case "hybrid":
+      return "HYBRID";
     default:
       return value;
   }
