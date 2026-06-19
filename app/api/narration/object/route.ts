@@ -255,7 +255,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const filePath = resolveLocalNarrationObjectFilePath(objectKey, "local");
+    const filePath = await resolveLocalNarrationObjectFilePath(objectKey, "local");
     return await createFileResponse(filePath, narrationObject.contentType, req.headers.get("range"));
   } catch (error) {
     const errorCode = typeof error === "object" && error && "code" in error

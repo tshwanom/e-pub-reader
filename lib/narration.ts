@@ -11,16 +11,14 @@ export type NarrationFeatureReason =
   | "book-access-required"
   | "catalog-unavailable";
 
-export type NarrationObjectStorageProvider = "s3" | "r2" | "b2" | "local" | "hybrid";
+export type NarrationObjectStorageProvider = "r2" | "local" | "hybrid";
 export type PersistedNarrationStorageProvider = "S3" | "R2" | "B2" | "LOCAL" | "HYBRID";
 
 const objectToPersistedNarrationStorageProviderMap: Record<
   NarrationObjectStorageProvider,
   PersistedNarrationStorageProvider
 > = {
-  s3: "S3",
   r2: "R2",
-  b2: "B2",
   local: "LOCAL",
   hybrid: "HYBRID",
 };
@@ -29,9 +27,9 @@ const persistedToObjectNarrationStorageProviderMap: Record<
   PersistedNarrationStorageProvider,
   NarrationObjectStorageProvider
 > = {
-  S3: "s3",
+  S3: "local",
   R2: "r2",
-  B2: "b2",
+  B2: "local",
   LOCAL: "local",
   HYBRID: "hybrid",
 };
@@ -332,7 +330,7 @@ export function createNarrationFeatureResponse(
   return {
     feature: "narration",
     donorOnly: true,
-    storageProvider: input.storageProvider ?? "s3",
+    storageProvider: input.storageProvider ?? "local",
     ...input,
     defaultVoiceSlug: input.defaultVoiceSlug
       ?? input.manifest?.voice.slug
@@ -349,7 +347,7 @@ export function parseNarrationUpsertPayload(payload: unknown): NarrationUpsertPa
 export function buildNarrationManifest(
   bookId: string,
   narration: NarrationManifestSource,
-  storageProvider: NarrationObjectStorageProvider = "s3"
+  storageProvider: NarrationObjectStorageProvider = "local"
 ): NarrationManifest {
   return {
     version: 1,

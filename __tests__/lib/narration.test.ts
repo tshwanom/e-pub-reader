@@ -193,12 +193,14 @@ describe('narration contract helpers', () => {
   });
 
   it('maps persisted and runtime storage provider formats', () => {
-    expect(toPersistedNarrationStorageProvider('s3')).toBe('S3');
     expect(toPersistedNarrationStorageProvider('r2')).toBe('R2');
     expect(toPersistedNarrationStorageProvider('local')).toBe('LOCAL');
-    expect(toNarrationObjectStorageProvider('B2')).toBe('b2');
+    expect(toPersistedNarrationStorageProvider('hybrid')).toBe('HYBRID');
+    expect(toNarrationObjectStorageProvider('B2')).toBe('local');
+    expect(toNarrationObjectStorageProvider('S3')).toBe('local');
+    expect(toNarrationObjectStorageProvider('R2')).toBe('r2');
     expect(toNarrationObjectStorageProvider('LOCAL')).toBe('local');
-    expect(toNarrationObjectStorageProvider('s3')).toBe('s3');
+    expect(toNarrationObjectStorageProvider('HYBRID')).toBe('hybrid');
   });
 
   it('parses and normalizes narration upsert payloads', () => {
