@@ -78,7 +78,7 @@ export default async function SupportPage() {
                 Because freedom is free. But distributing it is not.
               </p>
               <ul className="space-y-2 border-l border-landing-border pl-4">
-                <li>• <strong>Every book</strong> requires research, writing, editing, formatting, publishing, hosting, and maintenance.</li>
+                <li>• <strong>Every book</strong> requires writing, editing, formatting, publishing, hosting, and maintenance.</li>
                 <li>• <strong>Every audiobook</strong> requires narration, processing, storage, bandwidth, and ongoing platform resources.</li>
                 <li>• <strong>Every video, documentary, article, and resource</strong> requires time, effort, and infrastructure.</li>
               </ul>
