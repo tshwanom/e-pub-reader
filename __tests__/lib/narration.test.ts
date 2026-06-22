@@ -53,7 +53,7 @@ describe('narration contract helpers', () => {
       totalDurationMs: 482000,
       chapterCount: 1,
       storage: {
-        provider: 's3',
+        provider: 'local',
         manifestObjectKey: 'narration/book_123/voice_classic/manifest.json',
       },
       voice: {
@@ -108,7 +108,7 @@ describe('narration contract helpers', () => {
       available: false,
       reason: 'processing',
       message: 'Narration is being generated.',
-      storageProvider: 's3',
+      storageProvider: 'local',
       defaultVoiceSlug: null,
       voices: [],
       manifest: null,

@@ -17,6 +17,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const [form, setForm] = useState({
     storageProvider: "local",
@@ -71,6 +73,44 @@ export default function SettingsPage() {
     }));
     setSuccess(false);
     setError(null);
+    setTestResult(null);
+  };
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    setTestResult(null);
+
+    try {
+      const response = await fetch("/api/admin/settings/test-r2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          r2Region: form.r2Region,
+          r2Endpoint: form.r2Endpoint,
+          r2AccessKeyId: form.r2AccessKeyId,
+          r2SecretAccessKey: form.r2SecretAccessKey,
+          r2BucketName: form.r2BucketName,
+          r2ForcePathStyle: form.r2ForcePathStyle,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Connection test failed.");
+      }
+
+      setTestResult({
+        success: true,
+        message: data.message || "Successfully connected to Cloudflare R2!",
+      });
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        message: err.message,
+      });
+    } finally {
+      setTestingConnection(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -368,6 +408,50 @@ export default function SettingsPage() {
                     Bypass virtual-hosted bucket naming convention (recommended for standard R2 configurations: off).
                   </span>
                 </label>
+              </div>
+
+              <div className="sm:col-span-2 border-t border-landing-border/50 pt-6 flex flex-col gap-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-xs text-landing-text-muted">
+                    Test connection credentials and bucket accessibility.
+                  </span>
+                  <button
+                    type="button"
+                    disabled={testingConnection}
+                    onClick={handleTestConnection}
+                    className="brand-button bg-white text-landing-text-secondary border border-landing-border hover:bg-landing-accent/5 hover:text-landing-accent hover:border-landing-accent/30 gap-2 px-4 py-2 text-xs flex items-center justify-center"
+                  >
+                    {testingConnection ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Testing connection...
+                      </>
+                    ) : (
+                      <>
+                        <Settings className="h-3.5 w-3.5" />
+                        Test Connection
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {testResult && (
+                  <div
+                    className={[
+                      "flex items-start gap-3 rounded-2xl p-4 text-xs ring-1 animate-fadeIn",
+                      testResult.success
+                        ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                        : "bg-rose-50 text-rose-700 ring-rose-200",
+                    ].join(" ")}
+                  >
+                    {testResult.success ? (
+                      <ShieldCheck className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                    ) : (
+                      <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                    )}
+                    <div>{testResult.message}</div>
+                  </div>
+                )}
               </div>
             </div>
           </section>
