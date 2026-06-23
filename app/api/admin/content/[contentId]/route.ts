@@ -15,6 +15,7 @@ import {
 import { buildContentNarrationSourceHash } from "@/lib/content-narration-sync";
 import { prisma } from "@/lib/prisma";
 import { resolveVideoCoverUrl } from "@/lib/video-source";
+import { deleteNarrationFolder } from "@/lib/narration-storage";
 import { getServerSession } from "next-auth";
 import type { Session } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
@@ -249,6 +250,10 @@ export async function DELETE(
   const { contentId } = await params;
 
   try {
+    // 1. Delete narration files from storage (local, R2, or hybrid)
+    await deleteNarrationFolder(`content/${contentId}`);
+
+    // 2. Delete the record from the database
     await prisma.supplementaryContent.delete({ where: { id: contentId } });
     return NextResponse.json({ message: "Content deleted" });
   } catch (error) {

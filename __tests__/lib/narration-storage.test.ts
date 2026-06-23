@@ -1,7 +1,14 @@
+const mockS3Send = jest.fn();
+
 jest.mock('@aws-sdk/client-s3', () => ({
-  S3Client: jest.fn().mockImplementation((config) => ({ config })),
+  S3Client: jest.fn().mockImplementation((config) => ({
+    config,
+    send: mockS3Send,
+  })),
   GetObjectCommand: jest.fn().mockImplementation((input) => ({ input })),
   PutObjectCommand: jest.fn().mockImplementation((input) => ({ input })),
+  ListObjectsV2Command: jest.fn().mockImplementation((input) => ({ input })),
+  DeleteObjectsCommand: jest.fn().mockImplementation((input) => ({ input })),
 }));
 
 jest.mock('@aws-sdk/s3-request-presigner', () => ({
@@ -23,6 +30,7 @@ import { prisma } from '@/lib/prisma';
 
 import {
   createPresignedNarrationObjectUrl,
+  deleteNarrationFolder,
   getNarrationStorageConfig,
   getNarrationStorageProvider,
   isNarrationStorageConfigured,
@@ -31,9 +39,11 @@ import {
 } from '@/lib/narration-storage';
 
 const originalEnv = { ...process.env };
-const { S3Client, GetObjectCommand } = jest.requireMock('@aws-sdk/client-s3') as {
+const { S3Client, GetObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } = jest.requireMock('@aws-sdk/client-s3') as {
   S3Client: jest.Mock;
   GetObjectCommand: jest.Mock;
+  ListObjectsV2Command: jest.Mock;
+  DeleteObjectsCommand: jest.Mock;
 };
 const { getSignedUrl } = jest.requireMock('@aws-sdk/s3-request-presigner') as {
   getSignedUrl: jest.Mock;
@@ -61,6 +71,8 @@ describe('narration storage adapter', () => {
     delete process.env.R2_SECRET_ACCESS_KEY;
     delete process.env.R2_BUCKET_NAME;
     delete process.env.R2_FORCE_PATH_STYLE;
+    delete process.env.NARRATION_STORAGE_PUBLIC_DOMAIN;
+    delete process.env.R2_PUBLIC_DOMAIN;
     
     (prisma.siteSettings.findFirst as jest.Mock).mockResolvedValue(null);
   });
@@ -155,6 +167,40 @@ describe('narration storage adapter', () => {
     );
   });
 
+  it('builds an R2 config with publicDomain from env vars', async () => {
+    process.env.NARRATION_STORAGE_PROVIDER = 'r2';
+    process.env.R2_ACCOUNT_ID = 'account-123';
+    process.env.R2_ACCESS_KEY_ID = 'r2-key';
+    process.env.R2_SECRET_ACCESS_KEY = 'r2-secret';
+    process.env.R2_BUCKET_NAME = 'reader-audio';
+    process.env.R2_PUBLIC_DOMAIN = 'data.1manrevolution.com';
+
+    const config = await getNarrationStorageConfig();
+    expect(config).toMatchObject({
+      provider: 'r2',
+      publicDomain: 'data.1manrevolution.com',
+    });
+  });
+
+  it('generates direct custom domain URLs instead of presigned URLs when publicDomain is set', async () => {
+    process.env.NARRATION_STORAGE_PROVIDER = 'r2';
+    process.env.R2_ACCOUNT_ID = 'account-123';
+    process.env.R2_ACCESS_KEY_ID = 'r2-key';
+    process.env.R2_SECRET_ACCESS_KEY = 'r2-secret';
+    process.env.R2_BUCKET_NAME = 'reader-audio';
+    process.env.R2_PUBLIC_DOMAIN = 'data.1manrevolution.com';
+
+    await expect(createPresignedNarrationObjectUrl(' chapters/audio.mp3 ')).resolves.toBe(
+      'https://data.1manrevolution.com/chapters/audio.mp3'
+    );
+
+    // Verify it works with protocol prefix already in environment variable
+    process.env.R2_PUBLIC_DOMAIN = 'https://custom.cdn.com/';
+    await expect(createPresignedNarrationObjectUrl(' chapters/audio.mp3 ')).resolves.toBe(
+      'https://custom.cdn.com/chapters/audio.mp3'
+    );
+  });
+
   it('supports hybrid provider and fallback to local', async () => {
     process.env.NARRATION_STORAGE_PROVIDER = 'hybrid';
     process.env.R2_ACCOUNT_ID = 'account-123';
@@ -210,5 +256,98 @@ describe('narration storage adapter', () => {
     } finally {
       await fs.rm(tempRoot, { recursive: true, force: true });
     }
+  });
+
+  describe('deleteNarrationFolder', () => {
+    it('deletes a local narration folder recursively', async () => {
+      const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'narration-delete-'));
+      try {
+        process.env.NARRATION_STORAGE_PROVIDER = 'local';
+        process.env.NARRATION_STORAGE_LOCAL_DIR = tempRoot;
+
+        const bookFolder = path.join(tempRoot, 'narration', 'book-123');
+        await fs.mkdir(bookFolder, { recursive: true });
+        await fs.writeFile(path.join(bookFolder, 'manifest.json'), '{}');
+
+        await expect(fs.access(bookFolder)).resolves.toBeUndefined();
+
+        await deleteNarrationFolder('book-123');
+
+        await expect(fs.access(bookFolder)).rejects.toThrow();
+      } finally {
+        await fs.rm(tempRoot, { recursive: true, force: true });
+      }
+    });
+
+    it('deletes a remote narration folder recursively by listing and deleting objects', async () => {
+      process.env.NARRATION_STORAGE_PROVIDER = 'r2';
+      process.env.R2_ACCOUNT_ID = 'account-123';
+      process.env.R2_ACCESS_KEY_ID = 'r2-key';
+      process.env.R2_SECRET_ACCESS_KEY = 'r2-secret';
+      process.env.R2_BUCKET_NAME = 'reader-audio';
+
+      mockS3Send.mockResolvedValueOnce({
+        Contents: [
+          { Key: 'narration/book-123/manifest.json' },
+          { Key: 'narration/book-123/chapters/000.wav' },
+        ],
+        NextContinuationToken: undefined,
+      }).mockResolvedValueOnce({
+        Deleted: [
+          { Key: 'narration/book-123/manifest.json' },
+          { Key: 'narration/book-123/chapters/000.wav' },
+        ],
+      });
+
+      await deleteNarrationFolder('book-123');
+
+      expect(ListObjectsV2Command).toHaveBeenCalledWith({
+        Bucket: 'reader-audio',
+        Prefix: 'narration/book-123/',
+        ContinuationToken: undefined,
+      });
+
+      expect(DeleteObjectsCommand).toHaveBeenCalledWith({
+        Bucket: 'reader-audio',
+        Delete: {
+          Objects: [
+            { Key: 'narration/book-123/manifest.json' },
+            { Key: 'narration/book-123/chapters/000.wav' },
+          ],
+        },
+      });
+    });
+
+    it('deletes from both local and remote storage in hybrid mode', async () => {
+      const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'narration-hybrid-'));
+      try {
+        process.env.NARRATION_STORAGE_PROVIDER = 'hybrid';
+        process.env.NARRATION_STORAGE_LOCAL_DIR = tempRoot;
+        process.env.R2_ACCOUNT_ID = 'account-123';
+        process.env.R2_ACCESS_KEY_ID = 'r2-key';
+        process.env.R2_SECRET_ACCESS_KEY = 'r2-secret';
+        process.env.R2_BUCKET_NAME = 'reader-audio';
+
+        const bookFolder = path.join(tempRoot, 'narration', 'book-123');
+        await fs.mkdir(bookFolder, { recursive: true });
+        await fs.writeFile(path.join(bookFolder, 'manifest.json'), '{}');
+
+        mockS3Send.mockResolvedValueOnce({
+          Contents: [{ Key: 'narration/book-123/manifest.json' }],
+        }).mockResolvedValueOnce({});
+
+        await deleteNarrationFolder('book-123');
+
+        await expect(fs.access(bookFolder)).rejects.toThrow();
+
+        expect(ListObjectsV2Command).toHaveBeenCalledWith({
+          Bucket: 'reader-audio',
+          Prefix: 'narration/book-123/',
+          ContinuationToken: undefined,
+        });
+      } finally {
+        await fs.rm(tempRoot, { recursive: true, force: true });
+      }
+    });
   });
 });

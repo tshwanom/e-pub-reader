@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth';
 import { isBookDonorAccessLevel } from '@/lib/book-access-config';
 import { CONTENT_FEATURE_UNAVAILABLE_MESSAGE, isContentFeatureUnavailableError } from '@/lib/content';
 import { prisma } from '@/lib/prisma';
+import { deleteNarrationFolder } from '@/lib/narration-storage';
 
 function createContentFeatureUnavailableResponse() {
   return NextResponse.json({ error: CONTENT_FEATURE_UNAVAILABLE_MESSAGE }, { status: 503 });
@@ -194,13 +195,34 @@ export async function DELETE(
   const { bookId } = await params;
 
   try {
-    // Prisma will cascade delete related records
+    // 1. Get all supplementary contents associated with the book to clean up their narrations
+    const supplementaryContents = await prisma.supplementaryContent.findMany({
+      where: { bookId },
+      select: { id: true },
+    });
+
+    // 2. Delete the book's own narration files from storage
+    await deleteNarrationFolder(bookId);
+
+    // 3. Delete narration files for each associated supplementary content
+    for (const content of supplementaryContents) {
+      await deleteNarrationFolder(`content/${content.id}`);
+    }
+
+    // 4. Delete supplementary contents from the database
+    // (This will cascade delete ContentNarration and ContentComment in DB)
+    await prisma.supplementaryContent.deleteMany({
+      where: { bookId },
+    });
+
+    // 5. Prisma will cascade delete other related records (BookNarration, BookFile, etc.)
     await prisma.book.delete({
       where: { id: bookId },
     });
 
     return NextResponse.json({ message: 'Book deleted' });
   } catch (error) {
+    console.error('Failed to delete book:', error);
     return NextResponse.json({ error: 'Failed to delete book' }, { status: 500 });
   }
 }

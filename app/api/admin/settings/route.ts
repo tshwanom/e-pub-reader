@@ -18,6 +18,7 @@ const settingsSchema = z.object({
   r2SecretAccessKey: z.string().optional().or(z.literal("")),
   r2BucketName: z.string().optional().or(z.literal("")),
   r2ForcePathStyle: z.boolean().default(false),
+  r2PublicDomain: z.string().optional().or(z.literal("")),
 });
 
 function isAdminSession(session: any) {
@@ -58,9 +59,11 @@ export async function GET() {
       r2Region: r2Settings.region ?? "auto",
       r2Endpoint: r2Settings.endpoint ?? "",
       r2AccessKeyId: r2Settings.accessKeyId ?? "",
-      r2SecretAccessKey: r2Settings.secretAccessKey ? "••••••••••••••••••••" : "",
+      r2SecretAccessKey: "",
+      hasR2SecretAccessKey: !!r2Settings.secretAccessKey,
       r2BucketName: r2Settings.bucketName ?? "",
       r2ForcePathStyle: r2Settings.forcePathStyle ?? false,
+      r2PublicDomain: r2Settings.publicDomain ?? "",
     });
   } catch (error) {
     console.error("GET admin settings error:", error);
@@ -124,6 +127,7 @@ export async function POST(req: Request) {
         secretAccessKey,
         bucketName: body.r2BucketName || "",
         forcePathStyle: body.r2ForcePathStyle,
+        publicDomain: body.r2PublicDomain || undefined,
       },
       hybrid: {
         narrationPrefix: body.narrationPrefix,
@@ -140,6 +144,7 @@ export async function POST(req: Request) {
           secretAccessKey,
           bucketName: body.r2BucketName || "",
           forcePathStyle: body.r2ForcePathStyle,
+          publicDomain: body.r2PublicDomain || undefined,
         }
       }
     };

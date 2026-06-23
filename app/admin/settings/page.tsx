@@ -19,6 +19,7 @@ export default function SettingsPage() {
   const [success, setSuccess] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [hasR2SecretAccessKey, setHasR2SecretAccessKey] = useState(false);
 
   const [form, setForm] = useState({
     storageProvider: "local",
@@ -31,6 +32,7 @@ export default function SettingsPage() {
     r2SecretAccessKey: "",
     r2BucketName: "",
     r2ForcePathStyle: false,
+    r2PublicDomain: "",
   });
 
   useEffect(() => {
@@ -41,6 +43,7 @@ export default function SettingsPage() {
           throw new Error("Failed to load settings");
         }
         const data = await response.json();
+        setHasR2SecretAccessKey(data.hasR2SecretAccessKey ?? false);
         setForm({
           storageProvider: data.storageProvider ?? "local",
           signedUrlTtlSeconds: data.signedUrlTtlSeconds ?? 900,
@@ -52,6 +55,7 @@ export default function SettingsPage() {
           r2SecretAccessKey: data.r2SecretAccessKey ?? "",
           r2BucketName: data.r2BucketName ?? "",
           r2ForcePathStyle: data.r2ForcePathStyle ?? false,
+          r2PublicDomain: data.r2PublicDomain ?? "",
         });
       } catch (err: any) {
         setError(err.message);
@@ -132,11 +136,11 @@ export default function SettingsPage() {
       }
 
       setSuccess(true);
-      // If secretAccessKey was updated, keep it masked in the form
-      if (form.r2SecretAccessKey && form.r2SecretAccessKey !== "••••••••••••••••••••") {
+      if (form.r2SecretAccessKey) {
+        setHasR2SecretAccessKey(true);
         setForm((prev) => ({
           ...prev,
-          r2SecretAccessKey: "••••••••••••••••••••",
+          r2SecretAccessKey: "",
         }));
       }
     } catch (err: any) {
@@ -367,6 +371,22 @@ export default function SettingsPage() {
                 </span>
               </div>
 
+              <div className="sm:col-span-2">
+                <label className="block text-sm text-landing-text-muted">
+                  <span className="mb-2 block font-medium text-landing-text">R2 Public custom domain (optional)</span>
+                  <input
+                    type="text"
+                    value={form.r2PublicDomain}
+                    onChange={(e) => handleChange("r2PublicDomain", e.target.value)}
+                    placeholder="e.g. data.1manrevolution.com"
+                    className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+                  />
+                </label>
+                <span className="mt-2 block text-xs text-landing-text-muted leading-relaxed">
+                  Provide this if you want the public audio file URLs to use a custom domain bound to your R2 bucket instead of presigned R2 URLs.
+                </span>
+              </div>
+
               <div>
                 <label className="block text-sm text-landing-text-muted">
                   <span className="mb-2 block font-medium text-landing-text">R2 Access key ID</span>
@@ -387,8 +407,8 @@ export default function SettingsPage() {
                     type="password"
                     value={form.r2SecretAccessKey}
                     onChange={(e) => handleChange("r2SecretAccessKey", e.target.value)}
-                    required={(form.storageProvider === "r2" || form.storageProvider === "hybrid") && !form.r2SecretAccessKey}
-                    placeholder={form.r2SecretAccessKey ? "••••••••••••••••••••" : "Enter secret key"}
+                    required={(form.storageProvider === "r2" || form.storageProvider === "hybrid") && !hasR2SecretAccessKey && !form.r2SecretAccessKey}
+                    placeholder={hasR2SecretAccessKey ? "••••••••••••••••••••" : "Enter secret key"}
                     className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
                   />
                 </label>

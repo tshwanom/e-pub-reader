@@ -1,6 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, S3Client, ListObjectsV2Command, DeleteObjectsCommand, ListObjectsV2CommandOutput } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
@@ -22,6 +22,7 @@ export type RemoteNarrationStorageConfig = BaseNarrationStorageConfig & {
   secretAccessKey: string;
   bucketName: string;
   forcePathStyle: boolean;
+  publicDomain?: string;
 };
 
 export type LocalNarrationStorageConfig = BaseNarrationStorageConfig & {
@@ -103,7 +104,8 @@ function createNarrationStorageConfig(
   accessKeyId: string | undefined,
   secretAccessKey: string | undefined,
   bucketName: string | undefined,
-  forcePathStyle: boolean
+  forcePathStyle: boolean,
+  publicDomain?: string | undefined
 ): RemoteNarrationStorageConfig | null {
   if (!region || !accessKeyId || !secretAccessKey || !bucketName) {
     return null;
@@ -119,6 +121,7 @@ function createNarrationStorageConfig(
     narrationPrefix: getNarrationPrefix(),
     signedUrlTtlSeconds: getSignedUrlTtlSeconds(),
     forcePathStyle,
+    publicDomain,
   };
 }
 
@@ -151,7 +154,9 @@ function getR2NarrationStorageConfig() {
     parseBooleanEnv(
       cleanEnvValue(process.env.NARRATION_STORAGE_FORCE_PATH_STYLE)
         ?? cleanEnvValue(process.env.R2_FORCE_PATH_STYLE)
-    )
+    ),
+    cleanEnvValue(process.env.NARRATION_STORAGE_PUBLIC_DOMAIN)
+      ?? cleanEnvValue(process.env.R2_PUBLIC_DOMAIN)
   );
 }
 
@@ -250,6 +255,7 @@ export async function getNarrationStorageConfig(
             secretAccessKey: config.r2Config?.secretAccessKey || "",
             bucketName: config.r2Config?.bucketName || "",
             forcePathStyle: !!config.r2Config?.forcePathStyle,
+            publicDomain: config.r2Config?.publicDomain,
             narrationPrefix: config.narrationPrefix || getNarrationPrefix(),
             signedUrlTtlSeconds: parseSignedUrlTtlSeconds(config.signedUrlTtlSeconds),
           }
@@ -270,6 +276,7 @@ export async function getNarrationStorageConfig(
           secretAccessKey: config.secretAccessKey || "",
           bucketName: config.bucketName || "",
           forcePathStyle: !!config.forcePathStyle,
+          publicDomain: config.publicDomain,
           narrationPrefix: config.narrationPrefix || getNarrationPrefix(),
           signedUrlTtlSeconds: parseSignedUrlTtlSeconds(config.signedUrlTtlSeconds),
         };
@@ -526,7 +533,24 @@ export async function createPresignedNarrationObjectUrl(
     return createLocalNarrationObjectAccessUrl(normalizedObjectKey);
   }
 
+  const getPublicCustomDomainUrl = (r2Config: RemoteNarrationStorageConfig): string | null => {
+    if (r2Config.publicDomain) {
+      let domain = r2Config.publicDomain.trim();
+      if (!/^https?:\/\//i.test(domain)) {
+        domain = `https://${domain}`;
+      }
+      domain = domain.replace(/\/+$/, "");
+      return `${domain}/${normalizedObjectKey}`;
+    }
+    return null;
+  };
+
   if (config.provider === "hybrid") {
+    const customUrl = getPublicCustomDomainUrl(config.r2Config);
+    if (customUrl) {
+      return customUrl;
+    }
+
     try {
       const client = await getNarrationStorageClient("r2");
       return await getSignedUrl(
@@ -545,6 +569,11 @@ export async function createPresignedNarrationObjectUrl(
     }
   }
 
+  const customUrl = getPublicCustomDomainUrl(config);
+  if (customUrl) {
+    return customUrl;
+  }
+
   const client = await getNarrationStorageClient(resolvedProvider);
   return getSignedUrl(
     client,
@@ -556,4 +585,87 @@ export async function createPresignedNarrationObjectUrl(
       expiresIn: config.signedUrlTtlSeconds,
     }
   );
+}
+
+/**
+ * Deletes a narration folder from the configured storage (local, R2, or hybrid)
+ * by recursively removing files under the folder key/path.
+ * 
+ * For local storage, it deletes the directory recursively.
+ * For R2/S3 storage, it lists all objects matching the prefix and deletes them.
+ * For hybrid storage, it deletes from both local and R2.
+ * 
+ * @param folderKey The folder key path relative to the narrationPrefix (e.g. "bookId" or "content/contentId")
+ */
+export async function deleteNarrationFolder(folderKey: string): Promise<void> {
+  const provider = await getNarrationStorageProvider();
+  const config = await getNarrationStorageConfig(provider);
+
+  if (!config) {
+    return;
+  }
+
+  const prefix = config.narrationPrefix || "narration";
+  const normalizedFolderKey = folderKey.trim().replace(/\\/g, "/").split("/").filter(Boolean).join("/");
+  
+  if (!normalizedFolderKey) {
+    throw new Error("Cannot delete empty or root narration folder");
+  }
+
+  const folderPathSegment = `${prefix}/${normalizedFolderKey}`;
+
+  // 1. Delete from local storage if applicable
+  if (config.provider === "local" || config.provider === "hybrid") {
+    const localBaseDir = config.provider === "local" ? config.localBaseDir : config.localConfig.localBaseDir;
+    const absoluteBaseDir = path.resolve(localBaseDir);
+    const targetDir = path.resolve(absoluteBaseDir, folderPathSegment);
+    
+    // Safety check to prevent directory traversal
+    const relative = path.relative(absoluteBaseDir, targetDir);
+    if (!relative.startsWith("..") && !path.isAbsolute(relative)) {
+      try {
+        await fs.rm(targetDir, { recursive: true, force: true });
+      } catch (error: any) {
+        if (error.code !== "ENOENT") {
+          console.error(`Failed to delete local narration folder: ${targetDir}`, error);
+        }
+      }
+    }
+  }
+
+  // 2. Delete from R2/S3 storage if applicable
+  if (config.provider === "r2" || config.provider === "hybrid") {
+    const client = await getNarrationStorageClient(config.provider === "hybrid" ? "r2" : provider);
+    const bucketName = config.provider === "hybrid" ? config.r2Config.bucketName : config.bucketName;
+    const prefixToDelete = `${folderPathSegment}/`;
+
+    try {
+      let continuationToken: string | undefined = undefined;
+      do {
+        const listCommand = new ListObjectsV2Command({
+          Bucket: bucketName,
+          Prefix: prefixToDelete,
+          ContinuationToken: continuationToken,
+        });
+
+        const listResponse = await client.send(listCommand) as ListObjectsV2CommandOutput;
+        const contents = listResponse.Contents;
+
+        if (contents && contents.length > 0) {
+          const deleteParams = {
+            Bucket: bucketName,
+            Delete: {
+              Objects: contents.map((item) => ({ Key: item.Key! })),
+            },
+          };
+
+          await client.send(new DeleteObjectsCommand(deleteParams));
+        }
+
+        continuationToken = listResponse.NextContinuationToken;
+      } while (continuationToken);
+    } catch (error) {
+      console.error(`Failed to delete remote narration folder: ${prefixToDelete}`, error);
+    }
+  }
 }
