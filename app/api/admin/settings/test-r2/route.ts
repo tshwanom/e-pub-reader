@@ -89,6 +89,8 @@ export async function POST(req: Request) {
     
     if (error.name === "NoSuchBucket") {
       friendlyMessage = "The bucket does not exist. Please check the bucket name.";
+    } else if (error.name === "NoSuchKey" || error.message?.includes("The specified key does not exist")) {
+      friendlyMessage = "The specified key does not exist. This can occur if the R2 Custom Endpoint URL incorrectly includes the bucket name at the end (e.g. /bucket-name). The endpoint URL should only be 'https://<account-id>.r2.cloudflarestorage.com' without any bucket path.";
     } else if (error.name === "InvalidAccessKeyId" || error.message?.includes("AccessKeyId")) {
       friendlyMessage = "Invalid Access Key ID. Please verify your credentials.";
     } else if (error.name === "SignatureDoesNotMatch" || error.message?.includes("Signature")) {
