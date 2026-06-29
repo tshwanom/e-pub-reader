@@ -124,35 +124,49 @@ export default async function ReadBookPage({ params }: ReadBookPageParams) {
   const loginHref = `/login?callbackUrl=${encodeURIComponent(canonicalBookPath)}`;
   const narrationManageHref = sessionUserId ? `${canonicalBookPath}#support-this-book` : loginHref;
 
-  // TODO: Fetch saved progress if user is logged in
   let initialLocation = null;
   let progressSaveEndpoint: string | null = null;
   let initialNarrationPlayerExpanded: boolean | null = null;
   let canSyncNarrationPlayerPreference = false;
 
-  if (sessionUserId) {
-    const [progress, user] = await Promise.all([
-      prisma.readingProgress.findUnique({
-        where: {
-          userId_bookId: {
-            userId: sessionUserId,
-            bookId: book.id
+  const [progress, user, translations] = await Promise.all([
+    sessionUserId
+      ? prisma.readingProgress.findUnique({
+          where: {
+            userId_bookId: {
+              userId: sessionUserId,
+              bookId: book.id
+            }
           }
-        }
-      }),
-      prisma.user.findUnique({
-        where: { id: sessionUserId },
-        select: { readerPreferences: true },
-      }),
-    ]);
+        })
+      : null,
+    sessionUserId
+      ? prisma.user.findUnique({
+          where: { id: sessionUserId },
+          select: { readerPreferences: true },
+        })
+      : null,
+    book.translationGroupId
+      ? prisma.book.findMany({
+          where: {
+            translationGroupId: book.translationGroupId,
+            status: 'PUBLISHED',
+          },
+          select: {
+            id: true,
+            slug: true,
+            language: true,
+          },
+        })
+      : Promise.resolve([]),
+  ]);
 
-    if (progress) initialLocation = progress.cfi;
-    initialNarrationPlayerExpanded = normalizeReaderPreferences(user?.readerPreferences).narrationPlayerExpanded ?? null;
+  if (progress) initialLocation = progress.cfi;
+  initialNarrationPlayerExpanded = normalizeReaderPreferences(user?.readerPreferences).narrationPlayerExpanded ?? null;
 
-    if (user) {
-      progressSaveEndpoint = '/api/progress';
-      canSyncNarrationPlayerPreference = true;
-    }
+  if (user) {
+    progressSaveEndpoint = '/api/progress';
+    canSyncNarrationPlayerPreference = true;
   }
 
   return (
@@ -163,6 +177,7 @@ export default async function ReadBookPage({ params }: ReadBookPageParams) {
             initialLocation={initialLocation}
             bookId={book.id}
             title={book.title}
+            translations={translations}
             progressSaveEndpoint={progressSaveEndpoint}
             initialNarrationPlayerExpanded={initialNarrationPlayerExpanded}
             narrationPlayerPreferenceEndpoint={canSyncNarrationPlayerPreference ? '/api/reader/preferences' : null}

@@ -10,6 +10,7 @@ import DonorAccessLock from '@/components/DonorAccessLock';
 import Header from '@/components/landing/Header';
 import Footer from '@/components/landing/Footer';
 import ContentNarrationPlayer from '@/components/ContentNarrationPlayer';
+import { getLocale, getTranslations } from '@/lib/i18n-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,11 +30,17 @@ function truncatePreview(text: string | null | undefined, maxLength = 260) {
 export default async function PoemsPage() {
   const session = await getServerSession(authOptions);
   const viewerAccess = await getDonorAccessState(session?.user);
+  const locale = await getLocale();
+  const { t } = await getTranslations();
+
   const poems = await withContentFeatureFallback(
     () => prisma.supplementaryContent.findMany({
       where: {
         type: 'POEM',
         status: 'PUBLISHED',
+        ...(locale === 'en'
+          ? { OR: [{ language: 'en' }, { language: null }] }
+          : { language: locale }),
       },
       include: {
         book: {
@@ -58,7 +65,7 @@ export default async function PoemsPage() {
 
       <div className="mx-auto w-full max-w-4xl px-5 py-14 sm:px-8 sm:py-16">
         <div className="mb-14 text-center">
-          <h1 className="font-playfair text-5xl font-semibold italic text-landing-text">Poetry Collection</h1>
+          <h1 className="font-playfair text-5xl font-semibold italic text-landing-text">{t('poetryTitle')}</h1>
           <div className="mx-auto mt-5 h-1 w-24 rounded-full bg-landing-accent/30"></div>
         </div>
 
@@ -109,8 +116,8 @@ export default async function PoemsPage() {
                     supportLabel={poem.book ? getBookSupportCallToAction(poemAccess.contentDonorAccessLevel) : 'Support the Revolution'}
                     secondaryHref={poem.book ? `/books/${poem.book.slug || poem.bookId}` : '/library'}
                     secondaryLabel={poem.book ? 'Open related book' : 'Browse library'}
-                    title="Supporter-only poem"
-                    message="This poem is reserved for supporters. Unlock it on your account to reveal the full piece and any supporter narration attached to it."
+                    title={t('supporterOnlyPoem')}
+                    message={t('supporterOnlyPoemMsg')}
                     className="mx-auto mt-6 max-w-2xl"
                   />
                 )}
@@ -121,10 +128,10 @@ export default async function PoemsPage() {
                       href={`/books/${poem.book.slug || poem.bookId}`}
                       className="inline-block border-b border-transparent pb-1 text-xs uppercase tracking-[0.16em] text-landing-text-muted transition-colors hover:border-landing-accent/40 hover:text-landing-accent"
                     >
-                      From: {poem.book.title}
+                      {t('fromBook')} {poem.book.title}
                     </Link>
                   ) : (
-                    <span className="text-xs uppercase tracking-[0.16em] text-landing-text-muted">Standalone poem</span>
+                    <span className="text-xs uppercase tracking-[0.16em] text-landing-text-muted">{t('standalonePoem')}</span>
                   )}
                 </div>
               </article>
@@ -134,7 +141,7 @@ export default async function PoemsPage() {
 
         {poems.length === 0 && (
           <div className="surface-card py-20 text-center">
-            <p className="font-serif text-lg italic text-landing-text-muted">Silence matches the empty page...</p>
+            <p className="font-serif text-lg italic text-landing-text-muted">{t('emptyPoemPage')}</p>
           </div>
         )}
       </div>

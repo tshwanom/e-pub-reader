@@ -32,6 +32,8 @@ type ContentFormState = {
   bookId: string;
   narrationEnabled: boolean;
   order: number;
+  language: string;
+  translationGroupId: string;
 };
 
 type InitialContent = {
@@ -49,6 +51,8 @@ type InitialContent = {
   bookId?: string | null;
   narrationEnabled?: boolean | null;
   order?: number | null;
+  language?: string | null;
+  translationGroupId?: string | null;
 };
 
 type ContentEditorFormProps = {
@@ -71,6 +75,8 @@ const emptyContent: ContentFormState = {
   bookId: "",
   narrationEnabled: false,
   order: 0,
+  language: "en",
+  translationGroupId: "",
 };
 
 function toFormState(initialContent?: InitialContent | null): ContentFormState {
@@ -92,6 +98,8 @@ function toFormState(initialContent?: InitialContent | null): ContentFormState {
     bookId: initialContent.bookId || "",
     narrationEnabled: Boolean(initialContent.narrationEnabled),
     order: Number(initialContent.order || 0),
+    language: initialContent.language || "en",
+    translationGroupId: initialContent.translationGroupId || "",
   };
 }
 
@@ -140,6 +148,89 @@ export default function ContentEditorForm({ mode, initialContent, books }: Conte
 
   const updateField = <K extends keyof ContentFormState>(key: K, value: ContentFormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const [detectingLanguage, setDetectingLanguage] = useState(false);
+  const [translating, setTranslating] = useState(false);
+
+  const detectLanguage = async () => {
+    const textToAnalyze = `${form.title}\n\n${form.content || ''}\n\n${form.summary || ''}`;
+    if (!textToAnalyze.trim()) {
+      alert("Please enter a title, content, or summary first.");
+      return;
+    }
+
+    setDetectingLanguage(true);
+    try {
+      const res = await fetch("/api/admin/detect-language", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: textToAnalyze }),
+      });
+      if (!res.ok) throw new Error("Detection failed");
+      const { language } = await res.json();
+      updateField("language", language);
+      alert(`Detected language: ${language.toUpperCase()}. The dropdown has been updated, please confirm by saving.`);
+    } catch (err) {
+      alert("Failed to detect language");
+    } finally {
+      setDetectingLanguage(false);
+    }
+  };
+
+  const handleTranslate = async () => {
+    const title = form.title;
+    const content = form.content;
+    const summary = form.summary;
+    const targetLanguage = form.language;
+
+    if (!title && !content && !summary) {
+      alert("Please enter a title, content, or summary first.");
+      return;
+    }
+
+    if (
+      confirm(
+        `This will use Gemini AI to translate the Title, Content, and Summary to "${targetLanguage.toUpperCase()}". Existing form values will be overwritten. Proceed?`
+      )
+    ) {
+      setTranslating(true);
+      try {
+        const [titleRes, contentRes, summaryRes] = await Promise.all([
+          title
+            ? fetch("/api/admin/translate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: title, targetLanguage, type: "title" }),
+              }).then((r) => r.json())
+            : { translation: "" },
+          content
+            ? fetch("/api/admin/translate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: content, targetLanguage, type: form.type === "POEM" ? "poem" : "content" }),
+              }).then((r) => r.json())
+            : { translation: "" },
+          summary
+            ? fetch("/api/admin/translate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: summary, targetLanguage, type: "summary" }),
+              }).then((r) => r.json())
+            : { translation: "" },
+        ]);
+
+        if (titleRes.translation) updateField("title", titleRes.translation);
+        if (contentRes.translation) updateField("content", contentRes.translation);
+        if (summaryRes.translation) updateField("summary", summaryRes.translation);
+
+        alert("Translation complete! Form fields have been updated.");
+      } catch (err) {
+        alert("Translation failed");
+      } finally {
+        setTranslating(false);
+      }
+    }
   };
 
   useEffect(() => {
@@ -258,6 +349,54 @@ export default function ContentEditorForm({ mode, initialContent, books }: Conte
                   <option value="ARCHIVED">Archived</option>
                 </select>
               </label>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="text-sm font-medium text-landing-text">Language</label>
+                  <button
+                    type="button"
+                    onClick={detectLanguage}
+                    disabled={detectingLanguage}
+                    className="text-xs font-semibold text-landing-accent hover:underline disabled:opacity-50"
+                  >
+                    {detectingLanguage ? "Detecting..." : "🪄 Detect Language"}
+                  </button>
+                </div>
+                <select 
+                  value={form.language}
+                  onChange={(event) => updateField("language", event.target.value)}
+                  className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+                >
+                  <option value="en">English (EN)</option>
+                  <option value="es">Spanish (ES)</option>
+                  <option value="fr">French (FR)</option>
+                  <option value="ar">Arabic (AR)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-landing-text">Translation Group ID</label>
+                <input
+                  value={form.translationGroupId}
+                  onChange={(event) => updateField("translationGroupId", event.target.value)}
+                  placeholder="e.g. article-translation-group"
+                  className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleTranslate}
+                disabled={translating}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-landing-border bg-white px-4 py-2.5 text-sm font-semibold text-landing-text transition-colors hover:border-landing-accent/40 hover:text-landing-accent disabled:opacity-50"
+              >
+                <Save className="h-4 w-4" />
+                {translating ? "Translating via Gemini..." : "AI Auto-Translate Form fields"}
+              </button>
             </div>
 
             <div>

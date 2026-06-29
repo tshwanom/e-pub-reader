@@ -82,6 +82,7 @@ model Book {
   amazonKdpUrl          String?
   publisher             String?
   language              String?                @default("en")
+  translationGroupId    String?
   isbn                  String?
   coverIsbn             String?
   subjects              String[]
@@ -98,6 +99,8 @@ model Book {
   readingProgress       ReadingProgress[]
   supplementaryContents SupplementaryContent[]
   categories            Category[]             @relation("BookToCategory")
+
+  @@index([translationGroupId])
 }
 
 model BookFile {
@@ -327,9 +330,13 @@ model SupplementaryContent {
   status              ContentStatus      @default(DRAFT)
   summary             String?
   narrationSourceHash String?
+  language            String?            @default("en")
+  translationGroupId  String?
   comments            ContentComment[]
   narrations          ContentNarration[]
   book                Book?              @relation(fields: [bookId], references: [id])
+
+  @@index([translationGroupId])
 }
 
 model ContentComment {

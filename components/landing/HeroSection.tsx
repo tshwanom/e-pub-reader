@@ -2,8 +2,10 @@
 
 import { useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useTranslation } from '@/lib/i18n-client';
 
 export default function HeroSection() {
+  const { t } = useTranslation();
   const heroRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -35,25 +37,21 @@ export default function HeroSection() {
 
       <div className="mx-auto flex w-full max-w-5xl flex-col items-center space-y-8 text-center">
         <span className="fade-in-element inline-flex items-center rounded-full border border-landing-border bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-landing-accent">
-          Decoding The Matrix.
+          {t('decodingMatrix')}
         </span>
 
         <h1 className="fade-in-element font-playfair text-5xl font-semibold leading-tight text-landing-text md:text-6xl lg:text-7xl">
-          One Man. One Soul.
+          {t('heroTitle1')}
           <br />
-          One Revolution.
+          {t('heroTitle2')}
         </h1>
 
         <p className="fade-in-element mx-auto max-w-3xl text-lg leading-relaxed text-landing-text-muted md:text-2xl md:leading-relaxed">
-          The One Man Revolution exists to dismantle the invisible systems that
-          program obedience, reclaim human purpose beyond systems, and awaken
-          inner sovereignty.
+          {t('heroDescription')}
         </p>
 
-        <p className="fade-in-element mx-auto max-w-2xl font-crimson text-lg italic text-landing-text-muted md:text-xl">
-          Not ideology — deprogramming.
-          <br />
-          No leaders. No hierarchy. No permission required.
+        <p className="fade-in-element mx-auto max-w-2xl whitespace-pre-line font-crimson text-lg italic text-landing-text-muted md:text-xl">
+          {t('heroMotto')}
         </p>
 
         <div className="fade-in-element flex flex-wrap items-center justify-center gap-3 pt-3">
@@ -61,18 +59,18 @@ export default function HeroSection() {
             href="/library"
             className="brand-button min-w-[10rem]"
           >
-            Explore Library
+            {t('exploreLibrary')}
           </Link>
           <Link
             href="/support"
             className="ghost-button min-w-[10rem]"
           >
-            Support the Revolution
+            {t('supportTitle')}
           </Link>
         </div>
 
         <p className="fade-in-element text-sm text-landing-text-muted">
-          No account required. No paywall. Read in peace.
+          {t('heroFootnote')}
         </p>
       </div>
     </section>

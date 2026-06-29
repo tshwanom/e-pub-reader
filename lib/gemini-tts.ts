@@ -198,7 +198,7 @@ export function getGeminiModelFromProvider(provider?: string | null) {
   return normalizedProvider.slice("gemini-tts:".length) || null;
 }
 
-function getGeminiClient(): GoogleGenAI {
+export function getGeminiClient(): GoogleGenAI {
   const keys = getGeminiApiKeys();
 
   if (keys.length === 0) {

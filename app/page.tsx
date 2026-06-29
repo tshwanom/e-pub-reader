@@ -9,10 +9,10 @@ import { prisma } from '@/lib/prisma';
 import Header from '@/components/landing/Header';
 import HeroSection from '@/components/landing/HeroSection';
 import BookCard from '@/components/landing/BookCard';
-import DonationSection from '@/components/DonationSection';
 import Footer from '@/components/landing/Footer';
 import Link from 'next/link';
 import { getServerSession } from 'next-auth';
+import { getLocale, getTranslations } from '@/lib/i18n-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +21,8 @@ export default async function LandingPage() {
   let isPrivileged = false;
   let donorTier: DonorTier = 'NONE';
   let books: Awaited<ReturnType<typeof prisma.book.findMany>> = [];
+  const locale = await getLocale();
+  const { t } = await getTranslations();
 
   try {
     session = await getServerSession(authOptions);
@@ -34,9 +36,14 @@ export default async function LandingPage() {
   }
 
   try {
-    // Fetch published books
+    // Fetch published books matching current language
     books = await prisma.book.findMany({
-      where: { status: 'PUBLISHED' },
+      where: {
+        status: 'PUBLISHED',
+        ...(locale === 'en'
+          ? { OR: [{ language: 'en' }, { language: null }] }
+          : { language: locale }),
+      },
       orderBy: { createdAt: 'desc' },
       take: 8, // Show max 8 books on landing page
     });
@@ -55,10 +62,10 @@ export default async function LandingPage() {
       <section className="page-container py-14 sm:py-20">
         <div className="mx-auto mb-12 max-w-3xl text-center">
           <h2 className="font-playfair text-4xl font-semibold text-landing-text md:text-5xl">
-            The Writings
+            {t('writingsTitle')}
           </h2>
           <p className="mt-6 text-lg leading-relaxed text-landing-text-muted">
-            Most of these books are free—not as a promotion, not as a tactic, but because truth should travel further than any sales funnel. Some special editions are reserved for donors who keep the work independent.
+            {t('writingsSubtitle')}
           </p>
         </div>
 
@@ -83,13 +90,13 @@ export default async function LandingPage() {
               ))}
             </div>
             <p className="mt-8 text-center italic text-landing-text-muted">
-              Read freely, and support if you want deeper access to donor releases.
+              {t('readFreely')}
             </p>
           </>
         ) : (
           <div className="surface-card py-12 text-center">
             <p className="text-landing-text-muted">
-              Books coming soon...
+              {t('booksComingSoon')}
             </p>
           </div>
         )}
@@ -102,14 +109,14 @@ export default async function LandingPage() {
       >
         <div className="surface-card px-8 py-12 text-center sm:px-12">
           <h2 className="font-playfair text-4xl font-semibold text-landing-text md:text-5xl">
-            Support the Mission
+            {t('supportTitle')}
           </h2>
           <div className="mx-auto mb-8 mt-6 max-w-3xl space-y-6 text-lg leading-relaxed text-landing-text-muted">
             <p>
-              Knowledge that can help awaken, empower, and liberate human beings should not be hidden behind a paywall. That is why the majority of our library is available free of charge.
+              {t('supportIntro1')}
             </p>
             <p className="font-semibold text-landing-text">
-              Support is not payment for information. Support is participation in the mission.
+              {t('supportIntro2')}
             </p>
           </div>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -117,17 +124,17 @@ export default async function LandingPage() {
               href="/support"
               className="brand-button min-w-[15rem] px-8 py-4 text-base shadow-md shadow-landing-accent/20 ring-1 ring-landing-accent/15 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-landing-accent/20"
             >
-              Read the Funding Declaration
+              {t('fundingDeclaration')}
             </Link>
             <Link
               href="/library"
               className="ghost-button min-w-[15rem] bg-white/80 px-8 py-4 text-base"
             >
-              Explore the Library
+              {t('exploreLibrary')}
             </Link>
           </div>
           <p className="mt-6 text-sm italic text-landing-text-muted">
-            Give only if moved. Never out of obligation.
+            {t('giveOnly')}
           </p>
         </div>
       </section>

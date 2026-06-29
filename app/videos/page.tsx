@@ -11,6 +11,7 @@ import { getServerSession } from 'next-auth';
 import { ArrowRight, Clapperboard, Play, Sparkles } from 'lucide-react';
 import Header from '@/components/landing/Header';
 import Footer from '@/components/landing/Footer';
+import { getLocale, getTranslations } from '@/lib/i18n-server';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
@@ -53,11 +54,17 @@ type VideoListItem = {
 export default async function VideosPage() {
   const session = await getServerSession(authOptions);
   const viewerAccess = await getDonorAccessState(session?.user);
+  const locale = await getLocale();
+  const { t } = await getTranslations();
+
   const videos = await withContentFeatureFallback(
     async () => prisma.supplementaryContent.findMany({
       where: {
         type: 'VIDEO',
         status: 'PUBLISHED',
+        ...(locale === 'en'
+          ? { OR: [{ language: 'en' }, { language: null }] }
+          : { language: locale }),
       },
       include: {
         book: {
@@ -106,8 +113,11 @@ export default async function VideosPage() {
               </div>
 
               <h1 className="mt-5 font-playfair text-4xl font-semibold tracking-tight text-landing-text md:text-5xl lg:text-[3.6rem]">
-                Video Library
+                {t('videosTitle')}
               </h1>
+              <p className="mt-2 text-landing-text-muted">
+                {t('videosSubtitle')}
+              </p>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[320px] lg:max-w-sm lg:flex-1">

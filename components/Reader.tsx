@@ -21,6 +21,11 @@ interface ReaderProps {
   initialNarrationPlayerExpanded?: boolean | null;
   narrationPlayerPreferenceEndpoint?: string | null;
   narrationAccess?: ReaderNarrationAccess;
+  translations?: {
+    id: string;
+    slug: string | null;
+    language: string | null;
+  }[];
 }
 
 interface ReaderNarrationAccess {
@@ -398,6 +403,7 @@ export default function Reader({
   initialNarrationPlayerExpanded = null,
   narrationPlayerPreferenceEndpoint = null,
   narrationAccess,
+  translations = [],
 }: ReaderProps) {
   const viewerRef = useRef<HTMLDivElement>(null);
   const renditionRef = useRef<Rendition | null>(null);
@@ -2441,6 +2447,31 @@ export default function Reader({
           )}
 
           <div className="mb-4 border-t border-landing-border" />
+
+          {/* Book Language Switcher */}
+          {translations.length > 1 && (
+            <>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-landing-text-muted">Book Language</p>
+              <div className="mb-5 flex flex-wrap gap-2">
+                {translations.map((t) => {
+                  const isCurrent = t.id === bookId;
+                  return (
+                    <a
+                      key={t.id}
+                      href={`/read/${t.slug || t.id}`}
+                      className={`flex-1 rounded-xl border py-2 text-center text-xs font-medium uppercase tracking-[0.08em] transition-all ${
+                        isCurrent
+                          ? 'border-landing-accent bg-landing-accent text-white font-semibold'
+                          : 'border-landing-border text-landing-text-muted hover:border-landing-accent/40 hover:text-landing-text'
+                      }`}
+                    >
+                      {t.language ? t.language.toUpperCase() : 'UNKNOWN'}
+                    </a>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
           {/* Theme */}
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-landing-text-muted">Theme</p>

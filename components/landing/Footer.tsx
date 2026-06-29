@@ -1,11 +1,14 @@
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import Image from 'next/image';
+import { getTranslations } from '@/lib/i18n-server';
+import LanguageSelector from '@/components/LanguageSelector';
 
 export default async function Footer() {
   // Fetch social links from database
   const settings = await prisma.siteSettings.findFirst();
   const socialLinks = settings?.socialLinks as Record<string, string> | null;
+  const { t } = await getTranslations();
 
   return (
     <footer className="border-t border-landing-border bg-landing-bg-secondary">
@@ -16,21 +19,26 @@ export default async function Footer() {
               <Image src="/logo.png" alt="OMR Logo" width={40} height={40} className="rounded-full" />
               <div>
                 <p className="font-playfair text-lg font-semibold text-landing-text sm:text-xl">
-                  One Man Revolution
+                  {t('logoText')}
                 </p>
                 <p className="mt-1 text-xs text-landing-text-muted sm:text-sm">
-                  A quiet space for long-form truth.
+                  {t('tagline')}
                 </p>
               </div>
             </div>
 
-            <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs sm:text-sm">
-              <Link href="/library" className="text-landing-text-muted transition-colors hover:text-landing-accent">Library</Link>
-              <Link href="/blog" className="text-landing-text-muted transition-colors hover:text-landing-accent">Blog</Link>
-              <Link href="/videos" className="text-landing-text-muted transition-colors hover:text-landing-accent">Videos</Link>
-              <Link href="/poems" className="text-landing-text-muted transition-colors hover:text-landing-accent">Poems</Link>
-              <Link href="/support" className="text-landing-text-muted transition-colors hover:text-landing-accent">Support</Link>
-            </nav>
+            <div className="flex flex-wrap items-center gap-4">
+              <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs sm:text-sm">
+                <Link href="/library" className="text-landing-text-muted transition-colors hover:text-landing-accent">{t('library')}</Link>
+                <Link href="/blog" className="text-landing-text-muted transition-colors hover:text-landing-accent">{t('blog')}</Link>
+                <Link href="/videos" className="text-landing-text-muted transition-colors hover:text-landing-accent">{t('videos')}</Link>
+                <Link href="/poems" className="text-landing-text-muted transition-colors hover:text-landing-accent">{t('poems')}</Link>
+                <Link href="/support" className="text-landing-text-muted transition-colors hover:text-landing-accent">{t('support')}</Link>
+              </nav>
+              <div className="md:border-l md:border-landing-border md:pl-4">
+                <LanguageSelector />
+              </div>
+            </div>
           </div>
 
           {socialLinks && Object.keys(socialLinks).length > 0 && (

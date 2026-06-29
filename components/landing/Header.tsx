@@ -2,16 +2,20 @@ import Link from 'next/link';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import Image from 'next/image';
+import { getTranslations } from '@/lib/i18n-server';
+import LanguageSelector from '@/components/LanguageSelector';
 
 export default async function Header() {
   const session = await getServerSession(authOptions);
+  const { t } = await getTranslations();
+
   const navLinks = [
-    { href: '/library', label: 'Library' },
-    { href: '/blog', label: 'Blog' },
-    { href: '/videos', label: 'Videos' },
-    { href: '/poems', label: 'Poems' },
-    { href: '/support', label: 'Support' },
-    ...(session?.user?.role === 'ADMIN' ? [{ href: '/admin', label: 'Admin' }] : []),
+    { href: '/library', label: t('library') },
+    { href: '/blog', label: t('blog') },
+    { href: '/videos', label: t('videos') },
+    { href: '/poems', label: t('poems') },
+    { href: '/support', label: t('support') },
+    ...(session?.user?.role === 'ADMIN' ? [{ href: '/admin', label: t('admin') }] : []),
   ];
 
   return (
@@ -23,7 +27,7 @@ export default async function Header() {
         >
           <Image src="/logo.png" alt="OMR Logo" width={36} height={36} className="rounded-full shadow-sm" />
           <span className="font-playfair text-base sm:text-lg font-semibold text-landing-text transition-colors group-hover:text-landing-accent">
-            One Man Revolution
+            {t('logoText')}
           </span>
         </Link>
 
@@ -39,20 +43,21 @@ export default async function Header() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <LanguageSelector />
           {session ? (
             <Link
               href="/api/auth/signout"
               className="ghost-button px-4 py-2"
             >
-              Sign Out
+              {t('signOut')}
             </Link>
           ) : (
             <Link
               href="/api/auth/signin"
               className="brand-button px-4 py-2"
             >
-              Sign In
+              {t('signIn')}
             </Link>
           )}
         </div>

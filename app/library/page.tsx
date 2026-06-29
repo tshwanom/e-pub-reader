@@ -13,6 +13,7 @@ import Header from "@/components/landing/Header";
 import BookCard from "@/components/landing/BookCard";
 import Footer from "@/components/landing/Footer";
 import PaystackSubscriptionManager from '@/components/PaystackSubscriptionManager';
+import { getLocale, getTranslations } from "@/lib/i18n-server";
 
 export const dynamic = 'force-dynamic';
 
@@ -29,8 +30,16 @@ export default async function LibraryPage({
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const paystackSubscription = session?.user ? await getUserActivePaystackSubscription(session.user) : null;
   
+  const locale = await getLocale();
+  const { t } = await getTranslations();
+
   const books = await prisma.book.findMany({
-    where: privileged ? undefined : { status: { in: ['PUBLISHED', 'COMING_SOON', 'PRE_RELEASE'] } },
+    where: {
+      ...(privileged ? {} : { status: { in: ['PUBLISHED', 'COMING_SOON', 'PRE_RELEASE'] } }),
+      ...(locale === 'en'
+        ? { OR: [{ language: 'en' }, { language: null }] }
+        : { language: locale }),
+    },
     orderBy: { createdAt: "desc" },
     include: {
       epubFile: true,
@@ -50,11 +59,10 @@ export default async function LibraryPage({
       <div className="page-container py-14 sm:py-16">
         <div className="mb-12 max-w-3xl">
           <h1 className="font-playfair text-4xl font-semibold text-landing-text md:text-5xl">
-            Library
+            {t('catalogTitle')}
           </h1>
           <p className="mt-4 text-lg leading-relaxed text-landing-text-muted">
-            Browse the full catalog in one calm, distraction-free reading space.
-            Some titles are marked for sustaining donors.
+            {t('catalogSubtitle')}
           </p>
         </div>
 
@@ -71,14 +79,14 @@ export default async function LibraryPage({
         {books.length === 0 ? (
           <div className="surface-card py-20 text-center">
             <h2 className="text-xl text-landing-text-muted mb-4">
-              No books available yet.
+              {t('noBooks')}
             </h2>
             {session?.user.role === 'ADMIN' && (
               <Link 
                 href="/admin/books/upload" 
                 className="brand-button"
               >
-                Upload your first book
+                {t('uploadFirst')}
               </Link>
             )}
           </div>

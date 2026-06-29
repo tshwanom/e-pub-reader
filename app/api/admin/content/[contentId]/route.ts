@@ -37,6 +37,8 @@ const contentPayloadSchema = z.object({
   donorAccessLevel: z.enum(BOOK_DONOR_ACCESS_LEVEL_VALUES).optional().default("PUBLIC"),
   narrationEnabled: z.boolean().optional().default(false),
   order: z.coerce.number().int().optional().default(0),
+  language: z.string().optional().default("en"),
+  translationGroupId: z.preprocess(normalizeNullableText, z.string().nullable()).optional().default(null),
 });
 
 function isAdmin(session: Session | null) {
@@ -205,6 +207,8 @@ export async function PATCH(
         narrationSourceHash: nextNarrationSourceHash,
         order: payload.order,
         publishedAt,
+        language: payload.language,
+        translationGroupId: payload.translationGroupId,
       },
     });
 

@@ -47,6 +47,8 @@ interface BookForm {
   amazonKdpUrl?: string;
   printLinks: PrintLink[];
   supplementaryContents: SupplementaryContent[];
+  language: string;
+  translationGroupId?: string;
 }
 
 export default function EditBookPage({ params }: { params: Promise<{ bookId: string }> }) {
@@ -58,12 +60,17 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
   const [coverUrl, setCoverUrl] = useState<string>('');
   const [extractingCover, setExtractingCover] = useState(false);
   
+  const [detectingLanguage, setDetectingLanguage] = useState(false);
+  const [translating, setTranslating] = useState(false);
+  
   const { register, handleSubmit, reset, control, watch } = useForm<BookForm>({
     defaultValues: {
       donorAccessLevel: 'PUBLIC',
       narrationEnabled: false,
       printLinks: [],
       supplementaryContents: [],
+      language: 'en',
+      translationGroupId: '',
     },
   });
 
@@ -101,6 +108,8 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
         amazonKdpUrl: data.amazonKdpUrl || '',
         printLinks: data.printLinks || [],
         supplementaryContents: data.supplementaryContents || [],
+        language: data.language || 'en',
+        translationGroupId: data.translationGroupId || '',
       });
       setBookSlug(data.slug || null);
       setCoverUrl(data.coverUrl);
@@ -110,6 +119,82 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
       setLoading(false);
     }
   }, [reset]);
+
+  const detectLanguage = async () => {
+    const textToAnalyze = `${watch('title') || ''}\n\n${watch('description') || ''}`;
+    if (!textToAnalyze.trim()) {
+      alert('Please enter a title or description first.');
+      return;
+    }
+
+    setDetectingLanguage(true);
+    try {
+      const res = await fetch('/api/admin/detect-language', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: textToAnalyze }),
+      });
+      if (!res.ok) throw new Error('Detection failed');
+      const { language } = await res.json();
+      reset({
+        ...watch(),
+        language,
+      });
+      alert(`Detected language: ${language.toUpperCase()}. The dropdown has been updated, please confirm by saving.`);
+    } catch (err) {
+      alert('Failed to detect language');
+    } finally {
+      setDetectingLanguage(false);
+    }
+  };
+
+  const handleTranslate = async () => {
+    const title = watch('title');
+    const description = watch('description');
+    const donationMessage = watch('donationMessage');
+    const targetLanguage = watch('language');
+
+    if (!title && !description) {
+      alert('Please enter a title or description first.');
+      return;
+    }
+
+    if (confirm(`This will use Gemini AI to translate the Title, Description, and Donation Message to "${targetLanguage.toUpperCase()}". Existing form values will be overwritten. Proceed?`)) {
+      setTranslating(true);
+      try {
+        const [titleRes, descRes, msgRes] = await Promise.all([
+          title ? fetch('/api/admin/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: title, targetLanguage, type: 'title' }),
+          }).then(r => r.json()) : { translation: '' },
+          description ? fetch('/api/admin/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: description, targetLanguage, type: 'summary' }),
+          }).then(r => r.json()) : { translation: '' },
+          donationMessage ? fetch('/api/admin/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: donationMessage, targetLanguage, type: 'summary' }),
+          }).then(r => r.json()) : { translation: '' },
+        ]);
+
+        reset({
+          ...watch(),
+          title: titleRes.translation || title,
+          description: descRes.translation || description,
+          donationMessage: msgRes.translation || donationMessage,
+        });
+
+        alert('Translation complete! Form fields have been updated.');
+      } catch (err) {
+        alert('Translation failed');
+      } finally {
+        setTranslating(false);
+      }
+    }
+  };
 
   useEffect(() => {
     let isActive = true;
@@ -334,6 +419,52 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
                   <option value="PUBLISHED">Published</option>
                   <option value="ARCHIVED">Archived</option>
                 </select>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <label className="text-sm font-medium text-landing-text">Language</label>
+                    <button
+                      type="button"
+                      onClick={detectLanguage}
+                      disabled={detectingLanguage}
+                      className="text-xs font-semibold text-landing-accent hover:underline disabled:opacity-50"
+                    >
+                      {detectingLanguage ? 'Detecting...' : '🪄 Detect Language'}
+                    </button>
+                  </div>
+                  <select 
+                    {...register('language')}
+                    className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+                  >
+                    <option value="en">English (EN)</option>
+                    <option value="es">Spanish (ES)</option>
+                    <option value="fr">French (FR)</option>
+                    <option value="ar">Arabic (AR)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-landing-text">Translation Group ID</label>
+                  <input
+                    {...register('translationGroupId')}
+                    placeholder="e.g. book-of-revolution"
+                    className="w-full rounded-2xl border border-landing-border bg-white px-4 py-3 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleTranslate}
+                  disabled={translating}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-landing-border bg-white px-4 py-2.5 text-sm font-semibold text-landing-text transition-colors hover:border-landing-accent/40 hover:text-landing-accent disabled:opacity-50"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  {translating ? 'Translating via Gemini...' : 'AI Auto-Translate Form fields'}
+                </button>
               </div>
             </section>
 

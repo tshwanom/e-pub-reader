@@ -11,6 +11,7 @@ import DonorAccessLock from '@/components/DonorAccessLock';
 import Header from '@/components/landing/Header';
 import Footer from '@/components/landing/Footer';
 import ContentNarrationPlayer from '@/components/ContentNarrationPlayer';
+import { getLocale, getTranslations } from '@/lib/i18n-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,11 +42,17 @@ type ArticleListItem = {
 export default async function BlogPage() {
   const session = await getServerSession(authOptions);
   const viewerAccess = await getDonorAccessState(session?.user);
+  const locale = await getLocale();
+  const { t } = await getTranslations();
+
   const articles = await withContentFeatureFallback(
     async () => prisma.supplementaryContent.findMany({
       where: {
         type: 'ARTICLE',
         status: 'PUBLISHED',
+        ...(locale === 'en'
+          ? { OR: [{ language: 'en' }, { language: null }] }
+          : { language: locale }),
       },
       include: {
         book: {
@@ -71,9 +78,9 @@ export default async function BlogPage() {
 
       <div className="page-container py-14 sm:py-16">
         <div className="mb-12 max-w-3xl">
-          <h1 className="font-playfair text-4xl font-semibold text-landing-text md:text-5xl">Latest Articles</h1>
+          <h1 className="font-playfair text-4xl font-semibold text-landing-text md:text-5xl">{t('latestArticles')}</h1>
           <p className="mt-4 text-lg leading-relaxed text-landing-text-muted">
-            Explore articles, essays, and supplementary readings from our book collection.
+            {t('blogSubtitle')}
           </p>
         </div>
 
@@ -135,15 +142,15 @@ export default async function BlogPage() {
                       supportLabel={article.book ? getBookSupportCallToAction(articleAccess.contentDonorAccessLevel) : 'Support the Revolution'}
                       secondaryHref={article.book ? `/books/${article.book.slug || article.bookId || article.id}` : '/library'}
                       secondaryLabel={article.book ? 'Open related book' : 'Browse library'}
-                      title="Supporter-only article"
-                      message="This article is reserved for supporters. Unlock it on your account to read the full piece and any supporter narration that comes with it."
+                      title={t('supporterOnlyArticle')}
+                      message={t('supporterOnlyArticleMsg')}
                       className="mt-4"
                     />
                   ) : null}
                   
                   {articleAccess.hasAccess && article.url ? (
                     <a href={article.url} target="_blank" rel="noopener noreferrer" className="mb-2 mt-4 inline-flex items-center gap-1 text-sm font-medium text-landing-accent hover:text-landing-accent-secondary">
-                      Read full article <span aria-hidden="true">&rarr;</span>
+                      {t('readFullArticle')} <span aria-hidden="true">&rarr;</span>
                     </a>
                   ) : null}
                 </div>

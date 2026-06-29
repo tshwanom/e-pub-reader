@@ -25,6 +25,7 @@ import { getVideoWatchPath } from '@/lib/video-source';
 import { getBookPath } from '@/lib/book-paths';
 import { getAbsoluteSiteAssetUrl, getSiteUrl } from '@/lib/site';
 import { ArrowRight, Play } from 'lucide-react';
+import { getTranslations } from '@/lib/i18n-server';
 
 type BookPageSearchParams = Record<string, string | string[] | undefined>;
 
@@ -176,6 +177,22 @@ export default async function BookDetailsPage({
   if (!book) {
     notFound();
   }
+
+  const { t } = await getTranslations();
+
+  const translations = book.translationGroupId
+    ? await prisma.book.findMany({
+        where: {
+          translationGroupId: book.translationGroupId,
+          status: 'PUBLISHED',
+        },
+        select: {
+          id: true,
+          slug: true,
+          language: true,
+        },
+      })
+    : [];
 
   const access = await getBookAccessState(book, session?.user);
   const donorFeatureAccess = book.narrationEnabled
@@ -519,6 +536,32 @@ export default async function BookDetailsPage({
                     {book.language.toUpperCase()}
                   </span>
                 )}
+              </div>
+
+              {translations.length > 1 && (
+                <div className="mb-6 rounded-2xl border border-landing-border bg-landing-surface-muted/50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-landing-text-muted">
+                    {t('availableIn')}
+                  </p>
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    {translations.map((tBook) => (
+                      <Link
+                        key={tBook.id}
+                        href={`/books/${tBook.slug || tBook.id}`}
+                        className={`rounded-xl px-3.5 py-2 text-xs font-semibold uppercase tracking-wide transition-colors ${
+                          tBook.id === book.id
+                            ? 'bg-landing-accent text-white shadow-sm'
+                            : 'border border-landing-border bg-white text-landing-text-muted hover:border-landing-accent/40 hover:text-landing-accent'
+                        }`}
+                      >
+                        {tBook.language ? tBook.language.toUpperCase() : 'UNKNOWN'}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="mb-6 flex flex-wrap gap-2">
                 {book.publisher && (
                   <span className="rounded-full bg-landing-surface-muted px-3 py-1 text-xs text-landing-text-muted">
                     {book.publisher}

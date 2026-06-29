@@ -50,16 +50,26 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+import { cookies } from "next/headers";
+import { LanguageProvider } from "@/lib/i18n-client";
+import { Locale } from "@/lib/i18n-translations";
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const locale = (cookieStore.get("NEXT_LOCALE")?.value || "en") as Locale;
+  const isRtl = locale === "ar";
+
   return (
-    <html lang="en">
+    <html lang={locale} dir={isRtl ? "rtl" : "ltr"}>
       <body className={`${inter.variable} ${playfair.variable} ${crimson.variable} ${inter.className} overflow-x-hidden`}>
-        <OfflineSupport />
-        {children}
+        <LanguageProvider initialLocale={locale}>
+          <OfflineSupport />
+          {children}
+        </LanguageProvider>
       </body>
     </html>
   );
