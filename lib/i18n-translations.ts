@@ -12,7 +12,7 @@ export const translations = {
     signIn: 'Sign In',
     signOut: 'Sign Out',
     logoText: 'One Man Revolution',
-    tagline: 'A quiet space for long-form truth.',
+    tagline: 'Decoding The Matrix',
     decodingMatrix: 'Decoding The Matrix.',
     heroTitle1: 'One Man. One Soul.',
     heroTitle2: 'One Revolution.',
