@@ -132,6 +132,10 @@ export async function generateMetadata({ params }: VideoPageParams): Promise<Met
   const description = video.summary || video.content || 'A curated One Man Revolution screening.';
   const coverImageUrl = getAbsoluteSiteAssetUrl(video.coverUrl || video.book?.coverUrl, '/logo.png');
 
+  const isPng = coverImageUrl.toLowerCase().endsWith('.png');
+  const isWebp = coverImageUrl.toLowerCase().endsWith('.webp');
+  const mimeType = isPng ? 'image/png' : isWebp ? 'image/webp' : 'image/jpeg';
+
   return {
     title: `${video.title} | Videos | One Man Revolution`,
     description,
@@ -139,21 +143,26 @@ export async function generateMetadata({ params }: VideoPageParams): Promise<Met
       canonical: canonicalPath,
     },
     openGraph: {
-      title: video.title,
+      title: `${video.title} | One Man Revolution`,
       description,
       url: canonicalPath,
       siteName: 'One Man Revolution',
+      locale: 'en_US',
       type: 'video.other',
       images: [
         {
           url: coverImageUrl,
+          secureUrl: coverImageUrl,
+          width: 1280,
+          height: 720,
           alt: video.title,
+          type: mimeType,
         },
       ],
     },
     twitter: {
       card: 'summary_large_image',
-      title: `${video.title} | Videos`,
+      title: `${video.title} | Videos | One Man Revolution`,
       description,
       images: [coverImageUrl],
     },

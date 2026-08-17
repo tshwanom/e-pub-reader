@@ -116,6 +116,10 @@ export async function generateMetadata({
     'One Man Revolution',
   ].filter((value): value is string => Boolean(value && value.trim())))];
 
+  const isPng = coverImageUrl.toLowerCase().endsWith('.png');
+  const isWebp = coverImageUrl.toLowerCase().endsWith('.webp');
+  const mimeType = isPng ? 'image/png' : isWebp ? 'image/webp' : 'image/jpeg';
+
   return {
     title: `${book.title} by ${book.author} | One Man Revolution`,
     description,
@@ -124,21 +128,26 @@ export async function generateMetadata({
     },
     keywords,
     openGraph: {
-      title: book.title,
+      title: `${book.title} | One Man Revolution`,
       description,
       url: canonicalPath,
       siteName: 'One Man Revolution',
-      type: 'website',
+      locale: 'en_US',
+      type: 'book',
       images: [
         {
           url: coverImageUrl,
+          secureUrl: coverImageUrl,
+          width: 800,
+          height: 1200,
           alt: `${book.title} cover`,
+          type: mimeType,
         },
       ],
     },
     twitter: {
       card: 'summary_large_image',
-      title: `${book.title} by ${book.author}`,
+      title: `${book.title} by ${book.author} | One Man Revolution`,
       description,
       images: [coverImageUrl],
     },

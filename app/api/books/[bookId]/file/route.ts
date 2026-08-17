@@ -27,17 +27,8 @@ export async function GET(
 
   const access = await getBookAccessState(book, session?.user);
 
-  if (!access.hasAccess) {
-    return NextResponse.json(
-      {
-        error: access.requiresRecurringDonation
-          ? 'Recurring donor access required'
-          : access.requiresDonation
-            ? 'Donor access required'
-            : 'Book not found',
-      },
-      { status: access.isPublished ? 403 : 404 }
-    );
+  if (!access.isPublished && !access.isPrivileged) {
+    return NextResponse.json({ error: "Book not found" }, { status: 404 });
   }
 
   try {

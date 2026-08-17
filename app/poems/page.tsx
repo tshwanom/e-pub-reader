@@ -16,7 +16,23 @@ export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Poems | One Man Revolution',
-  description: 'Poetry collection from our books.',
+  description: 'Original poetry and verse exploring spiritual awakening and liberation.',
+  alternates: {
+    canonical: '/poems',
+  },
+  openGraph: {
+    title: 'Poems | One Man Revolution',
+    description: 'Original poetry and verse exploring spiritual awakening and liberation.',
+    url: '/poems',
+    siteName: 'One Man Revolution',
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Poems | One Man Revolution',
+    description: 'Original poetry and verse exploring spiritual awakening and liberation.',
+  },
 };
 
 function truncatePreview(text: string | null | undefined, maxLength = 260) {

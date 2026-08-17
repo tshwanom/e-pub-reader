@@ -16,7 +16,23 @@ export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Videos | One Man Revolution',
-  description: 'Video content from our books.',
+  description: 'Visual screenings, discussions, and video content from One Man Revolution.',
+  alternates: {
+    canonical: '/videos',
+  },
+  openGraph: {
+    title: 'Videos | One Man Revolution',
+    description: 'Visual screenings, discussions, and video content from One Man Revolution.',
+    url: '/videos',
+    siteName: 'One Man Revolution',
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Videos | One Man Revolution',
+    description: 'Visual screenings, discussions, and video content from One Man Revolution.',
+  },
 };
 
 function getAccessBadgeClasses(hasAccess: boolean, donorAccessLevel: string) {

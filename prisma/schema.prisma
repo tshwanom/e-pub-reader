@@ -73,6 +73,8 @@ model Book {
   status                BookStatus             @default(DRAFT)
   donorOnly             Boolean                @default(false)
   donorAccessLevel      BookDonorAccessLevel   @default(PUBLIC)
+  previewLimitType      String?                @default("CHAPTERS")
+  previewLimitValue     Int?                   @default(2)
   publishedAt           DateTime?
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt

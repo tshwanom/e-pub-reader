@@ -106,6 +106,18 @@ export async function PATCH(
       }
     }
 
+    if ('previewLimitValue' in bookData) {
+      if (bookData.previewLimitValue === '' || bookData.previewLimitValue == null || isNaN(Number(bookData.previewLimitValue))) {
+        bookData.previewLimitValue = 2;
+      } else {
+        bookData.previewLimitValue = Math.max(1, parseInt(String(bookData.previewLimitValue), 10));
+      }
+    }
+
+    if ('previewLimitType' in bookData) {
+      bookData.previewLimitType = bookData.previewLimitType === 'PERCENTAGE' ? 'PERCENTAGE' : 'CHAPTERS';
+    }
+
     // Update book
     await prisma.book.update({
       where: { id: bookId },

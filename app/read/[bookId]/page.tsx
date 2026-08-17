@@ -85,37 +85,11 @@ export default async function ReadBookPage({ params }: ReadBookPageParams) {
     permanentRedirect(canonicalReadPath);
   }
 
-  if (!access.hasAccess) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-landing-bg px-4 py-12">
-        <div className="surface-card max-w-xl p-8 text-center sm:p-10">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-landing-accent">
-            Supporter Library
-          </p>
-          <h1 className="mt-4 font-playfair text-3xl font-semibold text-landing-text sm:text-4xl">
-            “{book.title}” is reserved for {lockedAudienceLabel}
-          </h1>
-          <p className="mt-4 text-base leading-relaxed text-landing-text-muted">
-            Access requires {donorRequirementText} on your account before this title can open.
-          </p>
-
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <Link href={canonicalBookPath} className="brand-button px-6 py-3">
-              Back to book page
-            </Link>
-            {!session && (
-              <Link
-                href={`/login?callbackUrl=${encodeURIComponent(canonicalBookPath)}`}
-                className="ghost-button px-6 py-3"
-              >
-                Sign in
-              </Link>
-            )}
-          </div>
-        </div>
-      </main>
-    );
-  }
+  const isPreviewMode = !access.hasAccess;
+  const previewLimitType = (book as any).previewLimitType === 'PERCENTAGE' ? 'PERCENTAGE' : 'CHAPTERS';
+  const previewLimitValue = typeof (book as any).previewLimitValue === 'number' && (book as any).previewLimitValue > 0
+    ? (book as any).previewLimitValue
+    : 2;
 
   const donorFeatureAccess = await getDonorFeatureAccessState(book, session?.user);
   const sessionUserId = typeof session?.user?.id === 'string' && session.user.id.trim().length > 0
@@ -164,7 +138,7 @@ export default async function ReadBookPage({ params }: ReadBookPageParams) {
   if (progress) initialLocation = progress.cfi;
   initialNarrationPlayerExpanded = normalizeReaderPreferences(user?.readerPreferences).narrationPlayerExpanded ?? null;
 
-  if (user) {
+  if (user && !isPreviewMode) {
     progressSaveEndpoint = '/api/progress';
     canSyncNarrationPlayerPreference = true;
   }
@@ -176,7 +150,10 @@ export default async function ReadBookPage({ params }: ReadBookPageParams) {
             url={`/api/books/${book.id}/file`} 
             initialLocation={initialLocation}
             bookId={book.id}
+            bookSlug={book.slug}
             title={book.title}
+            author={book.author}
+            canonicalBookPath={canonicalBookPath}
             translations={translations}
             progressSaveEndpoint={progressSaveEndpoint}
             initialNarrationPlayerExpanded={initialNarrationPlayerExpanded}
@@ -187,6 +164,16 @@ export default async function ReadBookPage({ params }: ReadBookPageParams) {
               manageHref: narrationManageHref,
               statusEndpoint: `/api/books/${book.id}/narration`,
               isEnabled: book.narrationEnabled,
+            }}
+            previewConfig={{
+              isPreviewMode,
+              limitType: previewLimitType,
+              limitValue: previewLimitValue,
+              lockedAudienceLabel,
+              donorRequirementText,
+              bookCanonicalPath: canonicalBookPath,
+              loginHref,
+              isDonor: access.hasAccess,
             }}
         />
     </div>

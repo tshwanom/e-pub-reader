@@ -13,9 +13,31 @@ import Header from "@/components/landing/Header";
 import BookCard from "@/components/landing/BookCard";
 import Footer from "@/components/landing/Footer";
 import PaystackSubscriptionManager from '@/components/PaystackSubscriptionManager';
+import { Metadata } from 'next';
 import { getLocale, getTranslations } from "@/lib/i18n-server";
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: 'Library | One Man Revolution',
+  description: 'Explore our complete library of books on spiritual awakening, philosophy, and inner sovereignty.',
+  alternates: {
+    canonical: '/library',
+  },
+  openGraph: {
+    title: 'Library | One Man Revolution',
+    description: 'Explore our complete library of books on spiritual awakening, philosophy, and inner sovereignty.',
+    url: '/library',
+    siteName: 'One Man Revolution',
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Library | One Man Revolution',
+    description: 'Explore our complete library of books on spiritual awakening, philosophy, and inner sovereignty.',
+  },
+};
 
 export default async function LibraryPage({
   searchParams,

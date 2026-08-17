@@ -40,6 +40,8 @@ interface BookForm {
   description: string;
   status: 'DRAFT' | 'COMING_SOON' | 'PRE_RELEASE' | 'PUBLISHED' | 'ARCHIVED';
   donorAccessLevel: BookDonorAccessLevel;
+  previewLimitType?: 'CHAPTERS' | 'PERCENTAGE';
+  previewLimitValue?: number;
   narrationEnabled: boolean;
   donationEnabled: boolean;
   donationMessage?: string;
@@ -66,6 +68,8 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
   const { register, handleSubmit, reset, control, watch } = useForm<BookForm>({
     defaultValues: {
       donorAccessLevel: 'PUBLIC',
+      previewLimitType: 'CHAPTERS',
+      previewLimitValue: 2,
       narrationEnabled: false,
       printLinks: [],
       supplementaryContents: [],
@@ -85,6 +89,7 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
   });
 
   const donorAccessLevel = watch('donorAccessLevel');
+  const previewLimitType = watch('previewLimitType');
   const bookTitle = watch('title');
   const bookStatus = watch('status');
   const isRestrictedBook = isDonorRestrictedBook(donorAccessLevel);
@@ -101,6 +106,8 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
         description: data.description,
         status: data.status,
         donorAccessLevel: resolveBookDonorAccessLevel(data),
+        previewLimitType: data.previewLimitType === 'PERCENTAGE' ? 'PERCENTAGE' : 'CHAPTERS',
+        previewLimitValue: typeof data.previewLimitValue === 'number' ? data.previewLimitValue : 2,
         narrationEnabled: data.narrationEnabled || false,
         donationEnabled: data.donationEnabled || false,
         donationMessage: data.donationMessage || '',
@@ -514,6 +521,45 @@ export default function EditBookPage({ params }: { params: Promise<{ bookId: str
                   );
                 })}
               </div>
+
+              {isRestrictedBook && (
+                <div className="rounded-2xl border border-landing-accent/20 bg-landing-accent/5 p-5 mt-4 space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-landing-text">Free Sample / Preview Settings</h3>
+                    <p className="mt-1 text-xs leading-5 text-landing-text-muted">
+                      Allow non-supporters to preview the beginning of this title before prompting them with the Supporter lock barrier.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold text-landing-text">
+                        Preview Limit Mode
+                      </label>
+                      <select
+                        {...register('previewLimitType')}
+                        className="w-full rounded-xl border border-landing-border bg-white px-3 py-2.5 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+                      >
+                        <option value="CHAPTERS">Chapters / Spine Sections</option>
+                        <option value="PERCENTAGE">Percentage of Book (%)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold text-landing-text">
+                        {previewLimitType === 'PERCENTAGE' ? 'Max Percentage (e.g. 10%)' : 'Max Free Chapters (e.g. 2)'}
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max={previewLimitType === 'PERCENTAGE' ? 90 : 50}
+                        {...register('previewLimitValue', { valueAsNumber: true })}
+                        className="w-full rounded-xl border border-landing-border bg-white px-3 py-2.5 text-sm text-landing-text shadow-sm focus:border-landing-accent focus:outline-none focus:ring-2 focus:ring-landing-accent/25"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="rounded-2xl bg-white/70 p-4 ring-1 ring-white/65 mt-4">
                 <div className="flex items-start gap-3">

@@ -17,7 +17,23 @@ export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Blog | One Man Revolution',
-  description: 'Articles and essays from our collection.',
+  description: 'Articles and essays on spiritual awakening and inner sovereignty.',
+  alternates: {
+    canonical: '/blog',
+  },
+  openGraph: {
+    title: 'Blog | One Man Revolution',
+    description: 'Articles and essays on spiritual awakening and inner sovereignty.',
+    url: '/blog',
+    siteName: 'One Man Revolution',
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Blog | One Man Revolution',
+    description: 'Articles and essays on spiritual awakening and inner sovereignty.',
+  },
 };
 
 type ArticleListItem = {

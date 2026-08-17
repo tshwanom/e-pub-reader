@@ -5,7 +5,30 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { HeartHandshake, BookOpen, ShieldCheck, Sparkles } from 'lucide-react';
 
+import { Metadata } from 'next';
+
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: 'Support | One Man Revolution',
+  description: 'Support our mission of open knowledge, spiritual awakening, and inner sovereignty.',
+  alternates: {
+    canonical: '/support',
+  },
+  openGraph: {
+    title: 'Support | One Man Revolution',
+    description: 'Support our mission of open knowledge, spiritual awakening, and inner sovereignty.',
+    url: '/support',
+    siteName: 'One Man Revolution',
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Support | One Man Revolution',
+    description: 'Support our mission of open knowledge, spiritual awakening, and inner sovereignty.',
+  },
+};
 
 export default async function SupportPage() {
   const session = await getServerSession(authOptions);

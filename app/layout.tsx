@@ -31,11 +31,16 @@ export const metadata: Metadata = {
     description: 'A quiet rebellion against systems that dehumanize, silence, and fracture the human spirit. Free books on spiritual awakening and inner sovereignty.',
     url: '/',
     siteName: 'One Man Revolution',
+    locale: 'en_US',
     type: 'website',
     images: [
       {
         url: '/logo.png',
+        secureUrl: '/logo.png',
+        width: 512,
+        height: 512,
         alt: 'One Man Revolution',
+        type: 'image/png',
       },
     ],
   },
